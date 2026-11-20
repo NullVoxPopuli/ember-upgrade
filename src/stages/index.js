@@ -1,3 +1,5 @@
+import composableHelpers from "./addons/composable-helpers.js";
+import emberFetch from "./addons/ember-fetch.js";
 import emberMetrics from "./addons/ember-metrics.js";
 import emberWebApp from "./addons/ember-web-app.js";
 import {
@@ -7,8 +9,10 @@ import {
   prember,
 } from "./addons/removals.js";
 import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
+import emberCli from "./ember-cli/index.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
+import packageManager from "./package-manager/index.js";
 import templateTag from "./template-tag/index.js";
 import vite from "./vite/index.js";
 
@@ -18,13 +22,18 @@ import vite from "./vite/index.js";
  * Each stage expects the project to be in the state that the stages before it leave.
  * Most addon stages run after the vite stage, because Embroider keeps v1 addons working until each one is updated.
  * The addon stages before the vite stage are for addons that break the Vite build.
+ * The package-manager stage is first, because each install after it must give a correct dependency tree.
  *
  * @type {(import('#types.js').Stage | import('#types.js').StageGroup)[]}
  */
 export const stages = [
+  packageManager,
   emberGlobals,
   emberWebApp,
   emberStyleguide,
+  emberCli,
+  emberFetch,
+  composableHelpers,
   vite,
   emberCliDeploy,
   emberCliAutoprefixer,

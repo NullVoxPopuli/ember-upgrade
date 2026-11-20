@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { addYamlListEntry, setYamlMapEntry } from "#manager-settings.js";
+import { addYamlListEntry, setYamlMapEntry, setYamlNestedMap } from "#manager-settings.js";
 
 /**
  * From TryGhost/Ghost at 6c43413, shortened.
@@ -76,4 +76,26 @@ test("adds a list entry once", () => {
 
   expect(once).toBe("onlyBuiltDependencies:\n  - esbuild\n  - ember-styleguide\n");
   expect(addYamlListEntry(once, "onlyBuiltDependencies", "ember-styleguide")).toBe(once);
+});
+
+test("adds and replaces a packageExtensions entry", () => {
+  let added = setYamlNestedMap(
+    GHOST,
+    "packageExtensions",
+    "ember-code-snippet@<3",
+    "dependencies",
+    {
+      "broccoli-plugin": "^1.3.1",
+    },
+  );
+
+  expect(added).toBe(
+    GHOST +
+      "\npackageExtensions:\n  'ember-code-snippet@<3':\n    dependencies:\n      broccoli-plugin: '^1.3.1'\n",
+  );
+  expect(
+    setYamlNestedMap(added, "packageExtensions", "ember-code-snippet@<3", "dependencies", {
+      "broccoli-plugin": "^1.3.1",
+    }),
+  ).toBe(added);
 });

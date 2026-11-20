@@ -33,21 +33,21 @@ export const apps = [
     name: "hospitalrun",
     repo: "HospitalRun/hospitalrun-frontend",
     sha: "872cd97f3bbd73ea4403396995b7769c4fa13957",
-    completed: ["ember-globals"],
+    completed: ["package-manager", "ember-globals"],
     stopsAt: { stage: "vite", message: "older than 3.28" },
   },
   {
     name: "code-corps",
     repo: "code-corps/code-corps-ember",
     sha: "bc074964adcb23e8af61c38bcb6353ecc1022a0c",
-    completed: ["ember-globals"],
+    completed: ["package-manager", "ember-globals"],
     stopsAt: { stage: "vite", message: "older than 3.28" },
   },
   {
     name: "ember-observer",
     repo: "emberobserver/client",
     sha: "94e197af754b703dee9d30df030f63f95691c4b1",
-    completed: [],
+    completed: ["package-manager"],
     stopsAt: { stage: "vite", message: "older than 3.28" },
   },
   {
@@ -89,7 +89,11 @@ export const apps = [
      * The last commit with the Ember frontend. The next commit moves crates.io to Svelte.
      */
     sha: "e7004ce2883da90028147418839881408c46ea39",
-    completed: [],
+    completed: ["ember-web-app"],
+    /**
+     * ember-vite-codemod sees the .ts files of the svelte/ workspace, and opens a tsconfig.json that does not exist.
+     */
+    stopsAt: { stage: "vite", message: "ember-vite-codemod failed" },
   },
   {
     name: "croodle",
@@ -98,5 +102,36 @@ export const apps = [
     sha: "7fca47194a90246533935b46720f502146644bd0",
     directory: "client",
     completed: [],
+    /**
+     * @embroider/vite cannot find a file from `app.import('node_modules/open-iconic/...', { destDir })`.
+     */
+    stopsAt: { stage: "vite", message: "the build fails after this stage" },
+  },
+  {
+    name: "ember-osf-web",
+    /**
+     * Archived. The last app on Ember 3.28 and yarn 1.
+     * No build: its clean-css calls util.isRegExp, which Node 23 removed.
+     */
+    repo: "CenterForOpenScience/ember-osf-web",
+    sha: "2d188e1ba4769f8064fbea2ace03b34ba6f310cc",
+    setup: [["git", "submodule", "update", "--init", "--depth", "1"]],
+    completed: ["package-manager"],
+    /**
+     * ember-vite-codemod also lists ember-fetch, ember-composable-helpers, ember-cli-mirage, and ember-css-modules.
+     */
+    stopsAt: { stage: "vite", message: "ember-cli 3.28.6 (< 4.12) was detected" },
+  },
+  {
+    name: "ghost-admin",
+    verify: true,
+    repo: "TryGhost/Ghost",
+    /**
+     * The last commit before ghost/admin moved to apps/ember-admin.
+     */
+    sha: "6c43413cdcf991d0e0cb924e1271b4ef5aa4658f",
+    directory: "ghost/admin",
+    completed: [],
+    stopsAt: { stage: "vite", message: "ember-source 3.24.0 is older than 3.28" },
   },
 ];

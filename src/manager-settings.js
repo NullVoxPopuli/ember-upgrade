@@ -123,6 +123,57 @@ export function addOverride(project, name, range) {
 }
 
 /**
+ * Sets one entry two levels down, such as `packageExtensions` > `name@range` > `dependencies`.
+ *
+ * @param {string} source
+ * @param {string} key
+ * @param {string} name
+ * @param {string} field
+ * @param {Record<string, string>} values
+ * @returns {string}
+ */
+export function setYamlNestedMap(source, key, name, field, values) {
+  let lines = [`  ${yamlScalar(name)}:`, `    ${field}:`].concat(
+    Object.entries(values).map(([k, v]) => `      ${yamlScalar(k)}: ${yamlScalar(v)}`),
+  );
+
+  return editBlock(source, key, (entries) => {
+    let start = entries.findIndex((entry) => /^ {2}\S/.test(entry) && entryName(entry) === name);
+
+    if (start === -1) return entries.concat(lines);
+
+    let end = start + 1;
+
+    while (end < entries.length && !/^ {2}\S/.test(entries[end])) end++;
+
+    return entries.slice(0, start).concat(lines, entries.slice(end));
+  });
+}
+
+/**
+ * Sets a top-level scalar, such as `strictDepBuilds: false`.
+ *
+ * @param {string} source
+ * @param {string} key
+ * @param {string | boolean} value
+ * @returns {string}
+ */
+export function setYamlScalar(source, key, value) {
+  let line = `${key}: ${typeof value === "boolean" ? value : yamlScalar(value)}`;
+  let lines = source === "" ? [] : source.replace(/\n$/, "").split("\n");
+  let index = lines.findIndex((entry) => entry.startsWith(`${key}:`));
+
+  /**
+   * A blank line separates the new key from a block, but not from another scalar.
+   */
+  let separator = lines.length > 0 && /^\s/.test(lines[lines.length - 1]) ? [""] : [];
+
+  if (index === -1) return lines.concat(separator, line).join("\n") + "\n";
+
+  return lines.map((entry, i) => (i === index ? line : entry)).join("\n") + "\n";
+}
+
+/**
  * Changes one entry of a top-level block map, and keeps the rest of the file as it is.
  *
  * @param {string} source
