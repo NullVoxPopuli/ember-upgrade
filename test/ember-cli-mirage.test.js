@@ -10,7 +10,9 @@ import {
   readModel,
   removeDiscovery,
   rewriteImports,
+  rewriteMirageImports,
   serverShape,
+  tsconfigForMirage,
 } from "#stages/addons/ember-cli-mirage.js";
 import { Project } from "#project.js";
 
@@ -34,6 +36,34 @@ export default class ContributorModel extends OsfModel.extend(Validations) {
     node!: AsyncBelongsTo<NodeModel> & NodeModel;
 
     isUnregistered = false;
+}
+`;
+
+/**
+ * Part of the tsconfig.json of ember-osf-web.
+ */
+const TSCONFIG = `{
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "ember-osf-web/tests/*": [
+        "tests/*"
+      ],
+      "ember-osf-web/mirage/*": [
+        "mirage/*"
+      ],
+      "ember-osf-web/*": [
+        "app/*"
+      ]
+    }
+  },
+  "include": [
+    "app/**/*",
+    "tests/**/*",
+    "types/**/*",
+    "mirage/**/*"
+  ]
 }
 `;
 
@@ -261,24 +291,34 @@ test("the plan writes the models, the server, the initializer, and the test help
       "mirage/models/root.js": `import { Model, belongsTo } from 'ember-cli-mirage';\n\nexport default Model.extend({\n    currentUser: belongsTo('user'),\n});\n`,
       "mirage/factories/utils.ts": `export function guid() {}\n`,
       "mirage/scenarios/default.ts": `export default function() {}\n`,
+      "tsconfig.json": TSCONFIG,
       "tests/acceptance/tokens-test.ts": `import { setupMirage } from 'ember-cli-mirage/test-support';\n`,
     }),
   );
 
   expect(result.blockers).toEqual([]);
-  expect(result.move).toBe(true);
   expect(Array.from(result.writes.keys()).sort()).toEqual([
     "app/initializers/mirage.ts",
-    "app/mirage/config.ts",
-    "app/mirage/models.ts",
-    "app/mirage/models/contributor.ts",
-    "app/mirage/models/osf-model.ts",
-    "app/mirage/models/root.js",
-    "app/mirage/servers/default.ts",
+    "mirage/config.ts",
+    "mirage/models.ts",
+    "mirage/models/contributor.ts",
+    "mirage/models/osf-model.ts",
+    "mirage/models/root.js",
+    "mirage/servers/default.ts",
     "tests/acceptance/tokens-test.ts",
     "tests/helpers/mirage.ts",
+    "tsconfig.json",
   ]);
-  expect(result.writes.get("app/mirage/models.ts"))
+  expect(result.writes.get("tests/helpers/mirage.ts")).toContain(
+    "import makeServer from '#mirage/servers/default';",
+  );
+  expect(result.writes.get("app/initializers/mirage.ts")).toContain(
+    "importSync('#mirage/servers/default')",
+  );
+  expect(result.writes.get("tsconfig.json")).toBe(
+    TSCONFIG.replace('"ember-osf-web/mirage/*"', '"#mirage/*"'),
+  );
+  expect(result.writes.get("mirage/models.ts"))
     .toBe(`import contributor from './models/contributor';
 import osfModel from './models/osf-model';
 import root from './models/root';
@@ -289,7 +329,7 @@ export default {
     root,
 };
 `);
-  expect(result.writes.get("app/mirage/servers/default.ts"))
+  expect(result.writes.get("mirage/servers/default.ts"))
     .toBe(`import { createServer } from 'miragejs';
 
 import routes from '../config';
@@ -310,19 +350,54 @@ export default function makeServer(environment: string) {
 `);
 });
 
-test("an app/mirage folder blocks the move", () => {
-  let result = plan(
-    project({
-      "package.json": JSON.stringify({
-        name: "x",
-        devDependencies: { "ember-cli-mirage": "^2.4.0" },
-      }),
-      "mirage/config.js": `export default function () {}\n`,
-      "app/mirage/x.js": "",
-    }),
+test("the app and the tests import mirage/ as #mirage", () => {
+  let source = `import { setupApplicationTest } from 'ember-qunit';
+import { draftRegisterNodeMultiple } from 'ember-osf-web/mirage/scenarios/draft-registration';
+import { Permission } from 'ember-osf-web/models/osf-model';
+import { guid } from '../../../mirage/factories/utils';
+`;
+
+  expect(
+    rewriteMirageImports(
+      source,
+      "tests/acceptance/guid-node/registrations-test.ts",
+      "ember-osf-web",
+    ).source,
+  ).toBe(`import { setupApplicationTest } from 'ember-qunit';
+import { draftRegisterNodeMultiple } from '#mirage/scenarios/draft-registration';
+import { Permission } from 'ember-osf-web/models/osf-model';
+import { guid } from '#mirage/factories/utils';
+`);
+});
+
+test("mirage/ keeps relative imports, and in-repo addons get a todo", () => {
+  expect(
+    rewriteMirageImports(
+      `import { guid } from 'ember-osf-web/mirage/factories/utils';\nimport { draftRegisterNode } from '../factories/draft-registration';\n`,
+      "mirage/scenarios/registrations.ts",
+      "ember-osf-web",
+    ).source,
+  ).toBe(
+    `import { guid } from '../factories/utils';\nimport { draftRegisterNode } from '../factories/draft-registration';\n`,
   );
 
-  expect(result.blockers.map((b) => b.title)).toEqual([
-    "app/mirage exists, and mirage/ must move there",
-  ]);
+  let result = rewriteMirageImports(
+    `import { guid } from 'ember-osf-web/mirage/factories/utils';\n`,
+    "lib/osf-components/addon/components/x/component.ts",
+    "ember-osf-web",
+  );
+
+  expect(result.leftovers).toEqual(["ember-osf-web/mirage/factories/utils"]);
+  expect(result.source).toContain("ember-osf-web/mirage/");
+});
+
+test("tsconfig include gets mirage/ when it does not cover it", () => {
+  let source = `{\n  "compilerOptions": {},\n  "include": [\n    "app/**/*",\n    "tests/**/*"\n  ]\n}\n`;
+
+  expect(tsconfigForMirage(source, "x")).toBe(
+    `{\n  "compilerOptions": {},\n  "include": [\n    "app/**/*",\n    "tests/**/*",\n    "mirage/**/*"\n  ]\n}\n`,
+  );
+  expect(tsconfigForMirage(`{ "include": ["app", "mirage/**/*"] }`, "x")).toBe(
+    `{ "include": ["app", "mirage/**/*"] }`,
+  );
 });

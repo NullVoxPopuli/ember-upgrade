@@ -38,8 +38,12 @@ export const stages = [
   emberCli,
   emberFetch,
   composableHelpers,
-  emberCliMirage,
   classicLts,
+  /**
+   * ember-auto-import does not read package.json `imports`, so `#mirage/...`
+   * resolves only after the vite stage. Production builds do not import mirage.
+   */
+  emberCliMirage,
   vite,
   emberCliDeploy,
   emberCliAutoprefixer,

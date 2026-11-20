@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 
 import { parseProgram, propertyName, walk, SKIP } from "#ast.js";
@@ -22,9 +22,15 @@ const MACROS_FALLBACK = "1.16.0";
 
 const MIGRATION = "https://github.com/bgantzler/ember-mirage/blob/main/docs/migration.md";
 const ENVIRONMENT = "config/environment.js";
+/**
+ * The app and its tests reach mirage/ through package.json `imports`, like `#app/*` in ember.nvp.
+ * mirage/ is not in app/, because an app can use mirage in tests only.
+ */
+const IMPORT_KEY = "#mirage/*";
+const IMPORT_TARGET = "./mirage/*";
 
 /**
- * The app, its tests, in-repo addons and engines, and the mirage folder before it moves.
+ * The app, its tests, in-repo addons and engines, and the mirage folder.
  */
 const SOURCES = [
   "{app,addon,addon-test-support,tests,src}/**/*.{js,ts,gjs,gts}",
@@ -121,9 +127,6 @@ export default {
       throw new Error(result.blockers.map((b) => b.title).join("\n"));
     }
 
-    if (result.move)
-      renameSync(join(project.directory, "mirage"), join(project.directory, "app/mirage"));
-
     for (let [file, contents] of result.writes) {
       mkdirSync(dirname(join(project.directory, file)), { recursive: true });
       project.write(file, contents);
@@ -147,6 +150,9 @@ export default {
       if (!project.dependency(MACROS)) {
         setDependency(pkg, MACROS, `^${published(MACROS)?.version ?? MACROS_FALLBACK}`);
       }
+
+      pkg.imports ??= {};
+      pkg.imports[IMPORT_KEY] = IMPORT_TARGET;
     });
 
     /**
@@ -164,8 +170,9 @@ export default {
       id: OLD,
       status: "replaced",
       note:
-        `${OLD} is replaced by ${NEW}. The mirage folder is now app/mirage. ` +
-        "app/mirage/servers/default makes the server, with explicit imports in place of the runtime discovery. " +
+        `${OLD} is replaced by ${NEW}. mirage/ stays next to app/ and tests/, ` +
+        `and the app and the tests import it as #mirage/... (package.json "imports"). ` +
+        "mirage/servers/default makes the server, with explicit imports in place of the runtime discovery. " +
         "The mirage models for the ember-data models are generated files now: change them when a model changes. " +
         "app/initializers/mirage starts mirage in development builds only, and reads ENV['ember-cli-mirage'] as before.",
       links: [MIGRATION, "https://mainmatter.com/blog/2026/07/14/ember-mirage/"],
@@ -188,8 +195,7 @@ export default {
  * @typedef {object} Plan
  * @property {Finding[]} blockers
  * @property {Finding[]} todo
- * @property {boolean} move the mirage folder moves to app/mirage
- * @property {Map<string, string>} writes by path after the move
+ * @property {Map<string, string>} writes by path
  * @property {boolean} addInflector ember-inflector becomes a dependency
  */
 
@@ -201,7 +207,7 @@ export default {
  */
 export function plan(project) {
   /** @type {Plan} */
-  let result = { blockers: [], todo: [], move: false, writes: new Map(), addInflector: false };
+  let result = { blockers: [], todo: [], writes: new Map(), addInflector: false };
   let configFile = ["mirage/config.js", "mirage/config.ts"].find((file) => project.has(file));
   let environment = project.has(ENVIRONMENT) ? project.read(ENVIRONMENT) : "";
 
@@ -225,10 +231,14 @@ export function plan(project) {
     });
   }
 
-  if (project.has("app/mirage")) {
+  /** @type {Record<string, string> | undefined} */
+  let imports = /** @type {any} */ (project.packageJson).imports;
+  let existingImport = imports?.[IMPORT_KEY];
+
+  if (existingImport && existingImport !== IMPORT_TARGET) {
     result.blockers.push({
-      title: "app/mirage exists, and mirage/ must move there",
-      where: ["app/mirage"],
+      title: `package.json maps ${IMPORT_KEY} to something other than ${IMPORT_TARGET}`,
+      where: ["package.json"],
     });
   }
 
@@ -263,8 +273,6 @@ export function plan(project) {
 
   if (result.blockers.length > 0) return result;
 
-  result.move = true;
-
   /**
    * ember-cli-mirage made a mirage model for each ember-data model, unless the app turned it off.
    */
@@ -275,7 +283,7 @@ export function plan(project) {
       if (["js", "ts"].some((e) => project.has(`mirage/models/${name}.${e}`))) continue;
 
       result.writes.set(
-        `app/mirage/models/${name}.${model.ext}`,
+        `mirage/models/${name}.${model.ext}`,
         printMirageModel(model.relationships, indent),
       );
     }
@@ -297,7 +305,7 @@ export function plan(project) {
           result.todo.push({
             title: `Mirage ${folder} in subfolders are not imported`,
             where: [file],
-            action: `Add them to app/mirage/${folder}.${ext}.`,
+            action: `Add them to mirage/${folder}.${ext}.`,
           });
         }
 
@@ -309,14 +317,14 @@ export function plan(project) {
 
     if (folder === "models") {
       for (let file of result.writes.keys()) {
-        if (file.startsWith("app/mirage/models/"))
-          names.add(file.slice(18).replace(/\.(js|ts)$/, ""));
+        if (file.startsWith("mirage/models/"))
+          names.add(file.slice("mirage/models/".length).replace(/\.(js|ts)$/, ""));
       }
     }
 
     if (names.size > 0) {
       present[folder] = Array.from(names).sort();
-      result.writes.set(`app/mirage/${folder}.${ext}`, printIndex(folder, present[folder], indent));
+      result.writes.set(`mirage/${folder}.${ext}`, printIndex(folder, present[folder], indent));
     }
   }
 
@@ -332,7 +340,7 @@ export function plan(project) {
   result.addInflector = inflector && !project.dependency("ember-inflector");
 
   result.writes.set(
-    `app/mirage/servers/default.${ext}`,
+    `mirage/servers/default.${ext}`,
     printServer({
       ext,
       indent,
@@ -359,8 +367,7 @@ export function plan(project) {
     );
 
   for (let file of project.files(SOURCES)) {
-    let target = file.startsWith("mirage/") ? `app/${file}` : file;
-    let source = result.writes.get(target) ?? project.read(file);
+    let source = result.writes.get(file) ?? project.read(file);
 
     if (file === configFile && shape.kind === "make-server") {
       let edited = removeDiscovery(source, file);
@@ -369,7 +376,7 @@ export function plan(project) {
         result.todo.push({
           title:
             "The mirage serializers do not get the primaryKey and attrs of the ember-data serializers",
-          where: [target],
+          where: [file],
           action: `Copy them to the mirage serializers as \`transforms\`. See step 2 of ${MIGRATION}.`,
         });
       }
@@ -385,7 +392,7 @@ export function plan(project) {
       for (let leftover of rewritten.leftovers) {
         result.todo.push({
           title: `An import from ${OLD} has no replacement`,
-          where: [`${target}: ${leftover}`],
+          where: [`${file}: ${leftover}`],
           action: `See ${MIGRATION}.`,
         });
       }
@@ -393,21 +400,30 @@ export function plan(project) {
       source = rewritten.source;
     }
 
-    if (source !== project.read(file)) result.writes.set(target, source);
+    if (source.includes("mirage")) {
+      let rewritten = rewriteMirageImports(source, file, prefix);
+
+      for (let specifier of rewritten.leftovers) {
+        result.todo.push({
+          title: "An in-repo addon or engine imports from mirage/",
+          where: [`${file}: ${specifier}`],
+          action: `#mirage/* resolves only in the app and its tests. Move the import there.`,
+        });
+      }
+
+      source = rewritten.source;
+    }
+
+    if (source !== project.read(file)) result.writes.set(file, source);
   }
 
-  result.writes.set(
-    `tests/helpers/mirage.${ext}`,
-    printTestHelper(ext, indent, prefix, usesStartMirage),
-  );
+  result.writes.set(`tests/helpers/mirage.${ext}`, printTestHelper(ext, indent, usesStartMirage));
 
-  for (let file of ["tsconfig.json", ".eslintrc.js", ".eslintrc.cjs"]) {
-    if (!project.has(file)) continue;
+  if (project.has("tsconfig.json")) {
+    let source = project.read("tsconfig.json");
+    let output = tsconfigForMirage(source, prefix);
 
-    let source = project.read(file);
-    let output = source.replace(/(["'])(\.\/)?mirage\//g, "$1$2app/mirage/");
-
-    if (output !== source) result.writes.set(file, output);
+    if (output !== source) result.writes.set("tsconfig.json", output);
   }
 
   if (ownTypes) {
@@ -1023,7 +1039,7 @@ import config from '${prefix}/config/environment';
 
 /**
  * ember-cli-mirage started the server from its own initializer, with these rules.
- * The macro keeps mirage out of production builds.
+ * The import stays in the macro branch, so production builds have no mirage code.
  */
 export function initialize() {
 ${i}if (macroCondition(isDevelopingApp())) {
@@ -1031,7 +1047,7 @@ ${i}${i}let settings${settingsType} = config['ember-cli-mirage'] ?? {};
 ${i}${i}let enabled = settings.enabled ?? (config.environment === 'development' && !settings.usingProxy);
 
 ${i}${i}if (enabled && !isTesting() && !('FastBoot' in globalThis)) {
-${i}${i}${i}let { default: makeServer } = importSync('${prefix}/mirage/servers/default')${cast};
+${i}${i}${i}let { default: makeServer } = importSync('#mirage/servers/default')${cast};
 
 ${i}${i}${i}makeServer(config.environment);
 ${i}${i}}
@@ -1045,15 +1061,14 @@ export default { initialize };
 /**
  * @param {string} ext
  * @param {string} indent
- * @param {string} prefix
  * @param {boolean} startMirage the tests imported startMirage from the ember-cli-mirage initializer
  * @returns {string}
  */
-export function printTestHelper(ext, indent, prefix, startMirage) {
+export function printTestHelper(ext, indent, startMirage) {
   let i = indent;
   let hooks = ext === "ts" ? "hooks: NestedHooks" : "hooks";
   let text = `import { setupMirage as upstreamSetupMirage } from '${NEW}/test-support';
-import makeServer from '${prefix}/mirage/servers/default';
+import makeServer from '#mirage/servers/default';
 
 /**
  * ember-cli-mirage found the server config by itself. ember-mirage takes it as an option.
@@ -1278,4 +1293,94 @@ export function rewriteImports(source, file, { prefix, ownTypes }) {
   }
 
   return { source: edits.size > 0 ? edits.apply() : source, leftovers, startMirage };
+}
+
+/**
+ * Imports of mirage/ through the module prefix or a relative path.
+ * The app and the tests get `#mirage/...`. mirage/ itself keeps relative paths.
+ * In-repo addons have their own package.json, so `#mirage/*` does not resolve there.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @param {string} prefix
+ * @returns {{ source: string, leftovers: string[] }}
+ */
+export function rewriteMirageImports(source, file, prefix) {
+  let program = parseProgram(source, file);
+  /** @type {string[]} */
+  let leftovers = [];
+
+  if (!program) return { source, leftovers };
+
+  let edits = new Edits(source);
+  let inMirage = file.startsWith("mirage/");
+
+  walk(program, (node) => {
+    let specifier =
+      node.type === "ImportDeclaration" ||
+      node.type === "ImportExpression" ||
+      ((node.type === "ExportNamedDeclaration" || node.type === "ExportAllDeclaration") &&
+        node.source)
+        ? node.source
+        : undefined;
+
+    if (specifier?.type !== "Literal" || typeof specifier.value !== "string") return;
+
+    let from = specifier.value;
+    /** @type {string | undefined} */
+    let path;
+
+    if (from.startsWith(`${prefix}/mirage/`)) path = from.slice(prefix.length + 1);
+    else if (from.startsWith(".") && !inMirage) {
+      let joined = posix.join(posix.dirname(file), from);
+
+      if (joined.startsWith("mirage/")) path = joined;
+    }
+
+    if (!path) return;
+
+    if (file.startsWith("lib/")) {
+      leftovers.push(from);
+      return;
+    }
+
+    let quote = source[specifier.start];
+    let next = inMirage
+      ? posix.relative(posix.dirname(file), path).replace(/^(?!\.)/, "./")
+      : `#${path}`;
+
+    edits.replace(specifier, `${quote}${next}${quote}`);
+  });
+
+  return { source: edits.size > 0 ? edits.apply() : source, leftovers };
+}
+
+/**
+ * TS reads `paths`, not package.json `imports`, with the old `moduleResolution: node`.
+ * So a path entry for `<prefix>/mirage/*` becomes the one for `#mirage/*`.
+ *
+ * @param {string} source tsconfig.json, which can have comments
+ * @param {string} prefix
+ * @returns {string}
+ */
+export function tsconfigForMirage(source, prefix) {
+  let escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let output = source.replace(new RegExp(`(["'])${escaped}/mirage/\\*\\1`), `$1${IMPORT_KEY}$1`);
+  let include = output.match(/(["']include["']\s*:\s*\[)([^\]]*)\]/);
+
+  if (!include) return output;
+
+  let entries = Array.from(include[2].matchAll(/["']([^"']+)["']/g), (m) => m[1]);
+
+  if (entries.some((entry) => /^(\.\/)?(mirage|\*\*)(\/|$)/.test(entry))) return output;
+
+  let body = include[2].replace(/\s+$/, "");
+  let item = body.match(/\n([ \t]+)\S/);
+  let addition = item ? `,\n${item[1]}"mirage/**/*"` : `, "mirage/**/*"`;
+
+  if (entries.length === 0) addition = `"mirage/**/*"`;
+
+  let start = (include.index ?? 0) + include[1].length;
+
+  return output.slice(0, start) + body + addition + output.slice(start + body.length);
 }
