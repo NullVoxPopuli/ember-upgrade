@@ -1,6 +1,5 @@
+import { buildFile } from "#config-files.js";
 import { runUpstream } from "#process.js";
-
-const BUILD_FILES = ["ember-cli-build.js", "ember-cli-build.cjs"];
 
 /** @type {import('#types.js').Stage} */
 export default {
@@ -11,10 +10,7 @@ export default {
     /**
      * ember.nvp apps build without @embroider/compat, so they have no ember-cli-build.
      */
-    return (
-      Boolean(project.dependency("@embroider/vite")) &&
-      BUILD_FILES.some((file) => project.has(file))
-    );
+    return Boolean(project.dependency("@embroider/vite")) && Boolean(buildFile(project));
   },
 
   async check(project) {

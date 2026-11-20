@@ -49,6 +49,9 @@ test("each stage is one commit, and a second run does nothing", async () => {
     "ember-upgrade: ember-globals",
     "init",
   ]);
+  expect(git("log", "-1", "--format=%(trailers:key=Co-Authored-By,valueonly)").trim()).toBe(
+    "NullVoxPopuli <199018+NullVoxPopuli@users.noreply.github.com>",
+  );
 
   lines.length = 0;
   await run(project, [emberGlobals], { log });

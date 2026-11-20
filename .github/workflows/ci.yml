@@ -54,8 +54,9 @@ jobs:
   trials:
     name: Trial (${{ matrix.app }})
     needs: trial-apps
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Playwright does not support Chromium on Ubuntu 26.04, and some trial apps install it.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

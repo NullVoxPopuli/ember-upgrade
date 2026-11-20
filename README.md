@@ -12,16 +12,34 @@ The package has no dependencies. The parsers run as WebAssembly inside the bundl
 
 ## Stages
 
-| Stage           | What it does                                                 | Source                                  |
-| --------------- | ------------------------------------------------------------ | --------------------------------------- |
-| `ember-globals` | Replaces `Ember.*` globals with `@ember/*` imports (RFC 176) | ember-estree, in this repo              |
-| `vite`          | Builds with Vite                                             | `ember-vite-codemod@1.9.0`              |
-| `template-tag`  | Converts `.hbs` templates to `<template>` tag                | `@embroider/template-tag-codemod@1.4.2` |
-| `ember-nvp`     | Moves to the ember.nvp layout, without `@embroider/compat`   | `ember.nvp@2.4.0`                       |
+| Stage                            | What it does                                                                                                                          | Source                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `ember-globals`                  | Replaces `Ember.*` globals with `@ember/*` imports (RFC 176)                                                                          | ember-estree, in this repo              |
+| `ember-web-app`                  | Replaces ember-web-app with `public/manifest.webmanifest`                                                                             | this repo                               |
+| `ember-styleguide`               | Installs the v2 branch of ember-styleguide from git                                                                                   | this repo                               |
+| `vite`                           | Builds with Vite. v1 addons keep working through Embroider                                                                            | `ember-vite-codemod@1.9.0`              |
+| `ember-cli-deploy`               | Removes ember-cli-deploy and its plugins                                                                                              | this repo                               |
+| `ember-cli-autoprefixer`         | Removes ember-cli-autoprefixer                                                                                                        | this repo                               |
+| `ember-test-selectors`           | Removes ember-test-selectors                                                                                                          | this repo                               |
+| `prember`                        | Removes prember. vite-ember-ssr replaces it after `ember-nvp`                                                                         | this repo                               |
+| `ember-cli-deprecation-workflow` | Updates to v4                                                                                                                         | this repo                               |
+| `ember-metrics`                  | Updates to v3, and moves the adapters to the application route                                                                        | ember-estree, in this repo              |
+| `v2-addons`                      | Updates each other v1 addon that has a v2 release (`update-<name>`), one commit each. `v1-addons` lists the rest in the progress file | this repo                               |
+| `template-tag`                   | Converts `.hbs` templates to `<template>` tag                                                                                         | `@embroider/template-tag-codemod@1.4.2` |
+| `svg-jar`                        | Replaces ember-svg-jar with `@svg-jar/plugin`                                                                                         | `@svg-jar/codemod@0.0.1`                |
+| `ember-nvp`                      | Moves to the ember.nvp layout, without `@embroider/compat`                                                                            | `ember.nvp@2.4.0`                       |
 
 A stage is done when its `detect` finds nothing more to do.
 The stages from other packages run with your package manager (`pnpm dlx`, `yarn dlx`, or `npx`).
 Each one is a stage to port to ember-estree, so that the bundle needs nothing from the network.
+
+The addon stages before `vite` are for addons that break the Vite build.
+
+### `ember-upgrade-progress.yaml`
+
+ember-upgrade writes this file in the root of the app.
+It lists each workaround to undo later, such as a git ref, and the work that a stage leaves for you.
+Each entry links the issues and pull requests to follow.
 
 ## Options
 

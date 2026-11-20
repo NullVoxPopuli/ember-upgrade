@@ -28,4 +28,15 @@
  * @property {(project: import('#project.js').Project) => Promise<Finding[]>} run returns the todo items
  */
 
+/**
+ * Stages that are known only after an install, such as one stage for each addon to update.
+ * Each stage that `expand` returns gets its own commit.
+ *
+ * @typedef {object} StageGroup
+ * @property {string} name the id for `--only` and `--from`
+ * @property {string} label
+ * @property {boolean} [needsInstall] `expand` reads node_modules
+ * @property {(project: import('#project.js').Project) => Promise<Stage[]>} expand
+ */
+
 export {};
