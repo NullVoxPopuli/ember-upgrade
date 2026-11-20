@@ -40,23 +40,62 @@ export const apps = [
     name: "code-corps",
     repo: "code-corps/code-corps-ember",
     sha: "bc074964adcb23e8af61c38bcb6353ecc1022a0c",
-    completed: ["package-manager", "ember-globals", "ember-cli", "ember-composable-helpers"],
-    stopsAt: { stage: "vite", message: "older than 3.28" },
+    completed: [
+      "package-manager",
+      "ember-globals",
+      "ember-cli",
+      "ember-composable-helpers",
+      "ember-source-3.28",
+      "ember-source-4.4",
+      "ember-source-4.8",
+      "ember-source-4.12",
+      "ember-source-5.4",
+      "ember-source-5.8",
+      "ember-source-5.12",
+      "ember-source-6.4",
+      "ember-source-6.8",
+      "ember-source-6.12",
+    ],
+    stopsAt: { stage: "vite", message: "ember-cli-mirage doesn't work correctly with Vite" },
   },
   {
     name: "ember-observer",
     repo: "emberobserver/client",
     sha: "94e197af754b703dee9d30df030f63f95691c4b1",
-    completed: ["package-manager", "ember-cli", "ember-fetch"],
-    stopsAt: { stage: "vite", message: "older than 3.28" },
+    completed: [
+      "package-manager",
+      "ember-cli",
+      "ember-fetch",
+      "ember-source-3.28",
+      "ember-source-4.4",
+      "ember-source-4.8",
+      "ember-source-4.12",
+      "ember-source-5.4",
+      "ember-source-5.8",
+      "ember-source-5.12",
+      "ember-source-6.4",
+      "ember-source-6.8",
+      "ember-source-6.12",
+    ],
+    stopsAt: { stage: "vite", message: "ember-cli-mirage doesn't work correctly with Vite" },
   },
   {
     name: "super-rentals",
     verify: true,
     repo: "ember-learn/super-rentals",
     sha: "6d2414ed6d3f788c4fc072c6e3b5a42640ccb26e",
-    completed: ["vite", "ember-cli-deprecation-workflow", "template-tag"],
-    stopsAt: { stage: "ember-nvp", message: "An ember-source older than 7.2" },
+    completed: [
+      "ember-source-6.8",
+      "ember-source-6.12",
+      "vite",
+      "ember-cli-deprecation-workflow",
+      "template-tag",
+      "ember-source-7.4",
+    ],
+    /**
+     * The ember.nvp migration drops the ember-data build config, which the classic addon set in its included hook.
+     */
+    stopsAt: { stage: "ember-nvp", message: "the build fails after this stage" },
   },
   {
     name: "ember-api-docs",
@@ -89,11 +128,18 @@ export const apps = [
      * The last commit with the Ember frontend. The next commit moves crates.io to Svelte.
      */
     sha: "e7004ce2883da90028147418839881408c46ea39",
-    completed: ["ember-web-app"],
+    completed: [
+      "ember-web-app",
+      "vite",
+      "ember-test-selectors",
+      "update-@sentry/ember",
+      "v1-addons",
+      "template-tag",
+    ],
     /**
-     * ember-vite-codemod sees the .ts files of the svelte/ workspace, and opens a tsconfig.json that does not exist.
+     * `{{svg-jar @icon}}` has a dynamic icon name, which @svg-jar/codemod cannot turn into an import.
      */
-    stopsAt: { stage: "vite", message: "ember-vite-codemod failed" },
+    stopsAt: { stage: "svg-jar", message: "the build fails after this stage" },
   },
   {
     name: "croodle",
@@ -116,7 +162,21 @@ export const apps = [
     repo: "CenterForOpenScience/ember-osf-web",
     sha: "2d188e1ba4769f8064fbea2ace03b34ba6f310cc",
     setup: [["git", "submodule", "update", "--init", "--depth", "1"]],
-    completed: ["package-manager", "ember-cli", "ember-fetch", "ember-composable-helpers"],
+    completed: [
+      "package-manager",
+      "ember-cli",
+      "ember-fetch",
+      "ember-composable-helpers",
+      "ember-source-4.4",
+      "ember-source-4.8",
+      "ember-source-4.12",
+      "ember-source-5.4",
+      "ember-source-5.8",
+      "ember-source-5.12",
+      "ember-source-6.4",
+      "ember-source-6.8",
+      "ember-source-6.12",
+    ],
     /**
      * ember-vite-codemod also refuses ember-css-modules.
      */
@@ -131,7 +191,21 @@ export const apps = [
      */
     sha: "6c43413cdcf991d0e0cb924e1271b4ef5aa4658f",
     directory: "ghost/admin",
-    completed: ["ember-cli", "ember-fetch", "ember-composable-helpers"],
-    stopsAt: { stage: "vite", message: "ember-source 3.24.0 is older than 3.28" },
+    completed: [
+      "ember-cli",
+      "ember-fetch",
+      "ember-composable-helpers",
+      "ember-source-3.28",
+      "ember-source-4.4",
+      "ember-source-4.8",
+      "ember-source-4.12",
+      "ember-source-5.4",
+      "ember-source-5.8",
+      "ember-source-5.12",
+      "ember-source-6.4",
+      "ember-source-6.8",
+      "ember-source-6.12",
+    ],
+    stopsAt: { stage: "vite", message: "ember-cli-mirage doesn't work correctly with Vite" },
   },
 ];

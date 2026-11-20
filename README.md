@@ -21,6 +21,7 @@ The package has no dependencies. The parsers run as WebAssembly inside the bundl
 | `ember-cli`                      | Updates ember-cli to 4.12, the minimum for the vite stage                                                                                   | this repo                               |
 | `ember-fetch`                    | Removes ember-fetch, and uses the global `fetch` (RFC 1065)                                                                                 | ember-estree, in this repo              |
 | `ember-composable-helpers`       | Moves to `@nullvoxpopuli/ember-composable-helpers`                                                                                          | ember-estree, in this repo              |
+| `ember-source-classic`           | Updates ember-source one LTS at a time up to 6.12, one commit each (`ember-source-<lts>`), with the packages that each app blueprint lists  | this repo                               |
 | `vite`                           | Builds with Vite. v1 addons keep working through Embroider                                                                                  | `ember-vite-codemod@1.9.0`              |
 | `ember-cli-deploy`               | Removes ember-cli-deploy and its plugins                                                                                                    | this repo                               |
 | `ember-cli-autoprefixer`         | Removes ember-cli-autoprefixer                                                                                                              | this repo                               |
@@ -31,10 +32,11 @@ The package has no dependencies. The parsers run as WebAssembly inside the bundl
 | `v2-addons`                      | Updates each other v1 addon that has a v2 release (`update-<name>`), one commit each. `v1-addons` lists the rest in the progress file       | this repo                               |
 | `template-tag`                   | Converts `.hbs` templates to `<template>` tag                                                                                               | `@embroider/template-tag-codemod@1.4.2` |
 | `svg-jar`                        | Replaces ember-svg-jar with `@svg-jar/plugin`                                                                                               | `@svg-jar/codemod@0.0.1`                |
+| `ember-source-vite`              | Updates ember-source to 7.4. ember-source 7 builds only with Vite                                                                           | this repo                               |
 | `ember-nvp`                      | Moves to the ember.nvp layout, without `@embroider/compat`                                                                                  | `ember.nvp@2.4.0`                       |
 
 A stage is done when its `detect` finds nothing more to do.
-The stages from other packages run with your package manager (`pnpm dlx`, `yarn dlx`, or `npx`).
+The stages from other packages run with `npx`.
 Each one is a stage to port to ember-estree, so that the bundle needs nothing from the network.
 
 The stages before `vite` remove what ember-vite-codemod refuses, and addons that break the Vite build.
