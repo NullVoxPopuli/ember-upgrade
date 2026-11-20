@@ -78,6 +78,30 @@ export function allowBuild(pkg, name) {
 }
 
 /**
+ * Forces one version of a package for the whole dependency tree.
+ *
+ * @param {Manifest} pkg
+ * @param {"pnpm" | "yarn" | "npm"} pm
+ * @param {string} name
+ * @param {string} range
+ */
+export function addOverride(pkg, pm, name, range) {
+  /**
+   * npm refuses an override that conflicts with a direct dependency.
+   */
+  if (SECTIONS.some((key) => pkg[key] && name in pkg[key])) setDependency(pkg, name, range);
+
+  if (pm === "pnpm") {
+    pkg.pnpm ??= {};
+    pkg.pnpm.overrides = sorted(Object.assign({}, pkg.pnpm.overrides, { [name]: range }));
+  } else if (pm === "yarn") {
+    pkg.resolutions = sorted(Object.assign({}, pkg.resolutions, { [name]: range }));
+  } else {
+    pkg.overrides = sorted(Object.assign({}, pkg.overrides, { [name]: range }));
+  }
+}
+
+/**
  * @param {Record<string, string>} object
  */
 function sorted(object) {

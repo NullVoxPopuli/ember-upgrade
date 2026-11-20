@@ -78,7 +78,7 @@ export const deprecationWorkflow = {
 
 const STYLEGUIDE_PR = "https://github.com/ember-learn/ember-styleguide/pull/551";
 const STYLEGUIDE_REF =
-  "github:NullVoxPopuli-ai-agent/ember-styleguide#62ab6362516a6165b001597a3e826ad2d879fa59";
+  "github:NullVoxPopuli-ai-agent/ember-styleguide#13c541632cb2adb728db69bf8abc852e7777562e";
 
 /** @type {Stage} */
 export const emberStyleguide = {

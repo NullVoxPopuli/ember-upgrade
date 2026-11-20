@@ -64,12 +64,21 @@ export const apps = [
     repo: "ember-learn/ember-api-docs",
     sha: "3f3aba0cc5b9274bf771cfa6c033ddd29f4330c8",
     setup: [["npm", "run", "clone"]],
-    completed: ["ember-web-app"],
-    /**
-     * The v2 branch of ember-styleguide lists ember-repl and kolay as dependencies,
-     * and ember-cli cannot load ember-repl 8.
-     * https://github.com/ember-learn/ember-styleguide/pull/551
-     */
-    stopsAt: { stage: "ember-styleguide", message: "the build fails after this stage" },
+    completed: [
+      "ember-web-app",
+      "ember-styleguide",
+      "vite",
+      "ember-cli-deploy",
+      "ember-cli-autoprefixer",
+      "ember-test-selectors",
+      "prember",
+      "ember-cli-deprecation-workflow",
+      "ember-metrics",
+      "update-ember-cli-showdown",
+      "update-ember-decorators",
+      "v1-addons",
+      "svg-jar",
+    ],
+    stopsAt: { stage: "ember-nvp", message: "An ember-source older than 7.2" },
   },
 ];
