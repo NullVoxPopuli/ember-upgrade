@@ -48,7 +48,7 @@ function sh(cwd, command, args, options = {}) {
     encoding: "utf8",
     /**
      * Node kills the child when its output passes maxBuffer (1 MB by default).
-     * A vite build of ember-api-docs lists thousands of files.
+     * A vite build of a large app lists thousands of files.
      */
     maxBuffer: Infinity,
     stdio: options.capture ? "pipe" : "inherit",

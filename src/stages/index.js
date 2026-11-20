@@ -11,6 +11,8 @@ import {
 } from "./addons/removals.js";
 import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
 import emberCli from "./ember-cli/index.js";
+import emberCssModules from "./ember-css-modules/index.js";
+import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
 import { classicLts, viteLts } from "./ember-source/index.js";
@@ -44,7 +46,9 @@ export const stages = [
    * resolves only after the vite stage. Production builds do not import mirage.
    */
   emberCliMirage,
+  emberCssModules,
   vite,
+  emberScopedCss,
   emberCliDeploy,
   emberCliAutoprefixer,
   emberTestSelectors,
