@@ -93,6 +93,10 @@ export const apps = [
       "ember-source-7.4",
       "ember-nvp",
     ],
+    /**
+     * The upgraded app must pass its own tests, not only build.
+     */
+    after: [["npm", "test"]],
   },
   {
     name: "ember-api-docs",
