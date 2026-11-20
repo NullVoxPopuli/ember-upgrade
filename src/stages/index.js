@@ -1,4 +1,5 @@
 import composableHelpers from "./addons/composable-helpers.js";
+import emberCliMirage from "./addons/ember-cli-mirage.js";
 import emberFetch from "./addons/ember-fetch.js";
 import emberMetrics from "./addons/ember-metrics.js";
 import emberWebApp from "./addons/ember-web-app.js";
@@ -37,6 +38,7 @@ export const stages = [
   emberCli,
   emberFetch,
   composableHelpers,
+  emberCliMirage,
   classicLts,
   vite,
   emberCliDeploy,
