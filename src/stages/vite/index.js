@@ -13,6 +13,19 @@ const PINS = {
   "babel-plugin-ember-template-compilation": "4.0.1",
 };
 
+const TSCONFIG = `{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext"
+  },
+  "include": ["app/**/*", "tests/**/*", "types/**/*"]
+}
+`;
+
 /** @type {import('#types.js').Stage} */
 export default {
   name: "vite",
@@ -44,6 +57,22 @@ export default {
      * The runner checks git and commits after each stage.
      * Embroider keeps v1 addons working, and the addon stages after this one update them, one commit for each.
      */
+    /**
+     * ember-vite-codemod treats the app as TypeScript when any .ts file is in the repo,
+     * for example in another workspace package, and then crashes without a tsconfig.json.
+     */
+    if (!project.has("tsconfig.json") && project.files(["**/*.{ts,cts,mts,gts}"]).length > 0) {
+      project.write("tsconfig.json", TSCONFIG);
+      recordProgress(project, {
+        id: "tsconfig.json",
+        status: "added",
+        note:
+          "ember-upgrade added a small tsconfig.json, because ember-vite-codemod needs one when the repo has .ts files. " +
+          "Keep it for editor support, or delete it if the app has no TypeScript.",
+        links: ["https://github.com/mainmatter/ember-vite-codemod/issues/164"],
+      });
+    }
+
     if (!runUpstream(project, "ember-vite-codemod@1.9.0", ["--skip-git", "--skip-v2-addon"])) {
       throw new Error("ember-vite-codemod failed. Its output is above.");
     }

@@ -12,6 +12,7 @@ import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons
 import emberCli from "./ember-cli/index.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
+import { classicLts, viteLts } from "./ember-source/index.js";
 import packageManager from "./package-manager/index.js";
 import templateTag from "./template-tag/index.js";
 import vite from "./vite/index.js";
@@ -23,6 +24,8 @@ import vite from "./vite/index.js";
  * Most addon stages run after the vite stage, because Embroider keeps v1 addons working until each one is updated.
  * The addon stages before the vite stage are for addons that break the Vite build.
  * The package-manager stage is first, because each install after it must give a correct dependency tree.
+ * ember-source 7 builds only with Vite, and template-tag-codemod still needs a classic ember-source,
+ * so the 7.x steps run just before the ember-nvp stage, which needs 7.2.
  *
  * @type {(import('#types.js').Stage | import('#types.js').StageGroup)[]}
  */
@@ -34,6 +37,7 @@ export const stages = [
   emberCli,
   emberFetch,
   composableHelpers,
+  classicLts,
   vite,
   emberCliDeploy,
   emberCliAutoprefixer,
@@ -44,5 +48,6 @@ export const stages = [
   v2Addons,
   templateTag,
   svgJar,
+  viteLts,
   emberNvp,
 ];

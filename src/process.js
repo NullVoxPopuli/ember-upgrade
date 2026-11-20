@@ -48,7 +48,7 @@ export function install(project) {
 }
 
 /**
- * Runs an upstream codemod at a fixed version, with the project's package manager.
+ * Runs an upstream codemod at a fixed version.
  *
  * Each stage that calls this is a stage to port to ember-estree,
  * so that the bundle needs nothing from the network.
@@ -58,11 +58,10 @@ export function install(project) {
  * @param {string[]} args
  */
 export function runUpstream(project, spec, args) {
-  let pm = packageManager(project);
-
-  if (pm === "pnpm") return exec(project, "pnpm", ["dlx", spec].concat(args));
-  if (pm === "yarn") return exec(project, "yarn", ["dlx", spec].concat(args));
-
+  /**
+   * npx comes with Node, so it works in every project.
+   * yarn 1 has no `dlx`, and `pnpm dlx` of pnpm 11.15 crashes in some workspaces (TryGhost/Ghost).
+   */
   return exec(project, "npx", ["--yes", spec].concat(args));
 }
 
