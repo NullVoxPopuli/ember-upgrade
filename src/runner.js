@@ -109,6 +109,14 @@ export async function run(project, stages, options = {}) {
       return { ok: false, todo };
     }
 
+    /**
+     * Some upstream codemods stop at their own checks and still exit with 0.
+     */
+    if (stage.detect(project)) {
+      log(`x ${stage.name}: the stage did not finish. Its output is above.`);
+      return { ok: false, todo };
+    }
+
     if (options.verify) {
       let pm = packageManager(project);
 

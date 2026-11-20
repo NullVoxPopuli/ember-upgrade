@@ -69,3 +69,25 @@ test("a dirty working tree stops the run", async () => {
   expect(result.ok).toBe(false);
   expect(lines).toEqual(["The git working tree has changes. Commit or stash them first."]);
 });
+
+test("a stage that exits but changes nothing stops the run", async () => {
+  let { directory } = gitProject({ "package.json": `{ "name": "x" }` });
+  /** @type {string[]} */
+  let lines = [];
+  /** @type {import('#types.js').Stage} */
+  let stuck = {
+    name: "stuck",
+    label: "Never finishes",
+    detect: () => true,
+    check: async () => ({ blockers: [], todo: [] }),
+    run: async () => [],
+  };
+
+  let result = await run(new Project(directory), [stuck], { log: (line) => lines.push(line) });
+
+  expect(result.ok).toBe(false);
+  expect(lines).toEqual([
+    "> stuck: Never finishes",
+    "x stuck: the stage did not finish. Its output is above.",
+  ]);
+});

@@ -40,3 +40,27 @@ jobs:
     steps:
       - uses: wyvox/action@v1
       - run: pnpm test:bundle
+
+  trial-apps:
+    name: List trial apps
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.list.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: echo "apps=$(node --input-type=module -e 'import { apps } from "./trials/apps.js"; console.log(JSON.stringify(apps.map((a) => a.name)))')" >> "$GITHUB_OUTPUT"
+
+  trials:
+    name: Trial (${{ matrix.app }})
+    needs: trial-apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.trial-apps.outputs.apps) }}
+    steps:
+      - uses: wyvox/action@v1
+      - run: pnpm build
+      - run: node scripts/trial.js ${{ matrix.app }}
