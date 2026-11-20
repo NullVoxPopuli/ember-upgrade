@@ -33,21 +33,21 @@ export const apps = [
     name: "hospitalrun",
     repo: "HospitalRun/hospitalrun-frontend",
     sha: "872cd97f3bbd73ea4403396995b7769c4fa13957",
-    completed: ["package-manager", "ember-globals"],
+    completed: ["package-manager", "ember-globals", "ember-cli"],
     stopsAt: { stage: "vite", message: "older than 3.28" },
   },
   {
     name: "code-corps",
     repo: "code-corps/code-corps-ember",
     sha: "bc074964adcb23e8af61c38bcb6353ecc1022a0c",
-    completed: ["package-manager", "ember-globals"],
+    completed: ["package-manager", "ember-globals", "ember-cli", "ember-composable-helpers"],
     stopsAt: { stage: "vite", message: "older than 3.28" },
   },
   {
     name: "ember-observer",
     repo: "emberobserver/client",
     sha: "94e197af754b703dee9d30df030f63f95691c4b1",
-    completed: ["package-manager"],
+    completed: ["package-manager", "ember-cli", "ember-fetch"],
     stopsAt: { stage: "vite", message: "older than 3.28" },
   },
   {
@@ -116,22 +116,22 @@ export const apps = [
     repo: "CenterForOpenScience/ember-osf-web",
     sha: "2d188e1ba4769f8064fbea2ace03b34ba6f310cc",
     setup: [["git", "submodule", "update", "--init", "--depth", "1"]],
-    completed: ["package-manager"],
+    completed: ["package-manager", "ember-cli", "ember-fetch", "ember-composable-helpers"],
     /**
-     * ember-vite-codemod also lists ember-fetch, ember-composable-helpers, ember-cli-mirage, and ember-css-modules.
+     * ember-vite-codemod also refuses ember-css-modules.
      */
-    stopsAt: { stage: "vite", message: "ember-cli 3.28.6 (< 4.12) was detected" },
+    stopsAt: { stage: "vite", message: "ember-cli-mirage doesn't work correctly with Vite" },
   },
   {
     name: "ghost-admin",
-    verify: true,
     repo: "TryGhost/Ghost",
     /**
      * The last commit before ghost/admin moved to apps/ember-admin.
+     * No build: it needs a built @tryghost/koenig-lexical from the workspace, which Ghost builds with nx.
      */
     sha: "6c43413cdcf991d0e0cb924e1271b4ef5aa4658f",
     directory: "ghost/admin",
-    completed: [],
+    completed: ["ember-cli", "ember-fetch", "ember-composable-helpers"],
     stopsAt: { stage: "vite", message: "ember-source 3.24.0 is older than 3.28" },
   },
 ];
