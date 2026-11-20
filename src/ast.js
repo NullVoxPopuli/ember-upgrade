@@ -63,3 +63,16 @@ export function walk(node, visit, parent) {
 export function identifierName(node) {
   return node?.type === "Identifier" ? node.name : undefined;
 }
+
+/**
+ * @param {Node | undefined} property a Property of an object literal
+ * @returns {string | undefined} the key, for `key:` and `"key":`, but not for `[key]:`
+ */
+export function propertyName(property) {
+  if (property?.type !== "Property" || property.computed) return;
+
+  let key = property.key;
+
+  if (key.type === "Identifier") return key.name;
+  if (key.type === "Literal" && typeof key.value === "string") return key.value;
+}

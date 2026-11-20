@@ -1,7 +1,6 @@
+import { buildFile } from "#config-files.js";
 import { runUpstream } from "#process.js";
 import { atLeast } from "#version.js";
-
-const BUILD_FILES = ["ember-cli-build.js", "ember-cli-build.cjs"];
 
 /** @type {import('#types.js').Stage} */
 export default {
@@ -10,7 +9,7 @@ export default {
   needsInstall: true,
 
   detect(project) {
-    return BUILD_FILES.some((file) => project.has(file)) && !project.dependency("@embroider/vite");
+    return Boolean(buildFile(project)) && !project.dependency("@embroider/vite");
   },
 
   async check(project) {
@@ -32,8 +31,9 @@ export default {
   async run(project) {
     /**
      * The runner checks git and commits after each stage.
+     * Embroider keeps v1 addons working, and the addon stages after this one update them, one commit for each.
      */
-    if (!runUpstream(project, "ember-vite-codemod@1.9.0", ["--skip-git"])) {
+    if (!runUpstream(project, "ember-vite-codemod@1.9.0", ["--skip-git", "--skip-v2-addon"])) {
       throw new Error("ember-vite-codemod failed. Its output is above.");
     }
 
