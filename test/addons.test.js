@@ -301,9 +301,9 @@ test("deprecation-workflow v4 is imported first in app.js", async () => {
   );
 });
 
-test("ember-styleguide installs from git, and pnpm may build it", async () => {
+test("ember-styleguide installs from git, and pnpm 10 may build it", async () => {
   let app = project({
-    "package.json": `{ "name": "x", "devDependencies": { "ember-styleguide": "^11.3.1" } }`,
+    "package.json": `{ "name": "x", "packageManager": "pnpm@10.28.0", "devDependencies": { "ember-styleguide": "^11.3.1" } }`,
     "pnpm-lock.yaml": "",
   });
 
@@ -313,8 +313,23 @@ test("ember-styleguide installs from git, and pnpm may build it", async () => {
   expect(app.dependency("ember-styleguide")).toMatch(
     /^github:NullVoxPopuli-ai-agent\/ember-styleguide#/,
   );
-  expect(app.packageJson.pnpm).toEqual({ onlyBuiltDependencies: ["ember-styleguide"] });
+  expect(app.read("pnpm-workspace.yaml")).toBe("onlyBuiltDependencies:\n  - ember-styleguide\n");
   expect(readProgress(app)[0].links).toEqual([
     "https://github.com/ember-learn/ember-styleguide/pull/551",
   ]);
+});
+
+test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "packageManager": "pnpm@12.21.0", "devDependencies": { "ember-styleguide": "^11.3.1" } }`,
+    "pnpm-lock.yaml": "",
+    "pnpm-workspace.yaml": "allowBuilds:\n  esbuild: true\n",
+  });
+
+  await emberStyleguide.run(app);
+
+  expect(app.read("pnpm-workspace.yaml")).toBe(
+    "allowBuilds:\n  esbuild: true\n  ember-styleguide: true\n",
+  );
+  expect(app.packageJson.pnpm).toBeUndefined();
 });
