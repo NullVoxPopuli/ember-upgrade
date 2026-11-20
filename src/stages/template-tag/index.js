@@ -1,4 +1,6 @@
+import { join } from "node:path";
 import { runUpstream } from "#process.js";
+import { fixImports } from "./fix-imports.js";
 import { atLeast } from "#version.js";
 
 /** @type {import('#types.js').Stage} */
@@ -32,6 +34,13 @@ export default {
 
     if (!runUpstream(project, "@embroider/template-tag-codemod@1.4.2", args)) {
       throw new Error("@embroider/template-tag-codemod failed. Its output is above.");
+    }
+
+    for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
+      let source = project.read(file);
+      let fixed = fixImports(source, join(project.directory, file));
+
+      if (fixed !== source) project.write(file, fixed);
     }
 
     return [];
