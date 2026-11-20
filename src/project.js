@@ -1,10 +1,12 @@
 import { existsSync, globSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /**
  * The source folders of apps, classic addons, and v2 addons.
  */
 const SOURCE_GLOBS = ["{app,addon,addon-test-support,tests,src}/**/*.{js,ts,gjs,gts}"];
+
+const LOCKFILES = ["pnpm-lock.yaml", "yarn.lock", "package-lock.json"];
 
 /**
  * The project that stages read and change.
@@ -25,6 +27,28 @@ export class Project {
    */
   has(file) {
     return existsSync(join(this.directory, file));
+  }
+
+  /**
+   * The lockfile of the project. In a monorepo it is in a parent folder.
+   * The search stops at the root of the git repository.
+   *
+   * @returns {{ name: string, path: string } | undefined}
+   */
+  get lockfile() {
+    let directory = this.directory;
+
+    for (;;) {
+      for (let name of LOCKFILES) {
+        if (existsSync(join(directory, name))) return { name, path: join(directory, name) };
+      }
+
+      let parent = dirname(directory);
+
+      if (existsSync(join(directory, ".git")) || parent === directory) return;
+
+      directory = parent;
+    }
   }
 
   /**

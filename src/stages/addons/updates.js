@@ -1,7 +1,8 @@
 import { parseProgram } from "#ast.js";
 import { addVitePlugin, removeBuildOptions, viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
-import { allowBuild, editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import { allowBuild } from "#manager-settings.js";
+import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
@@ -105,11 +106,9 @@ export const emberStyleguide = {
       return [];
     }
 
-    editPackageJson(project, (pkg) => {
-      setDependency(pkg, "ember-styleguide", STYLEGUIDE_REF);
+    editPackageJson(project, (pkg) => setDependency(pkg, "ember-styleguide", STYLEGUIDE_REF));
 
-      if (packageManager(project) === "pnpm") allowBuild(pkg, "ember-styleguide");
-    });
+    if (packageManager(project) === "pnpm") allowBuild(project, "ember-styleguide");
 
     recordProgress(project, {
       id: "ember-styleguide",

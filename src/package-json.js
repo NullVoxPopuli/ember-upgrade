@@ -64,47 +64,9 @@ export function dependencyNames(pkg) {
 }
 
 /**
- * pnpm 10 builds a git-hosted package only when the project allows it.
- *
- * @param {Manifest} pkg
- * @param {string} name
- */
-export function allowBuild(pkg, name) {
-  pkg.pnpm ??= {};
-
-  let allowed = pkg.pnpm.onlyBuiltDependencies ?? [];
-
-  if (!allowed.includes(name)) pkg.pnpm.onlyBuiltDependencies = allowed.concat(name).sort();
-}
-
-/**
- * Forces one version of a package for the whole dependency tree.
- *
- * @param {Manifest} pkg
- * @param {"pnpm" | "yarn" | "npm"} pm
- * @param {string} name
- * @param {string} range
- */
-export function addOverride(pkg, pm, name, range) {
-  /**
-   * npm refuses an override that conflicts with a direct dependency.
-   */
-  if (SECTIONS.some((key) => pkg[key] && name in pkg[key])) setDependency(pkg, name, range);
-
-  if (pm === "pnpm") {
-    pkg.pnpm ??= {};
-    pkg.pnpm.overrides = sorted(Object.assign({}, pkg.pnpm.overrides, { [name]: range }));
-  } else if (pm === "yarn") {
-    pkg.resolutions = sorted(Object.assign({}, pkg.resolutions, { [name]: range }));
-  } else {
-    pkg.overrides = sorted(Object.assign({}, pkg.overrides, { [name]: range }));
-  }
-}
-
-/**
  * @param {Record<string, string>} object
  */
-function sorted(object) {
+export function sorted(object) {
   /** @type {Record<string, string>} */
   let result = {};
 

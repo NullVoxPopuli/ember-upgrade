@@ -1,6 +1,6 @@
 import { buildFile } from "#config-files.js";
-import { addOverride, editPackageJson } from "#package-json.js";
-import { packageManager, published, runUpstream } from "#process.js";
+import { addOverride } from "#manager-settings.js";
+import { published, runUpstream } from "#process.js";
 import { recordProgress } from "#progress.js";
 import { atLeast } from "#version.js";
 
@@ -48,20 +48,16 @@ export default {
       throw new Error("ember-vite-codemod failed. Its output is above.");
     }
 
-    let pm = packageManager(project);
-
-    editPackageJson(project, (pkg) => {
-      for (let [name, fallback] of Object.entries(PINS)) {
-        addOverride(pkg, pm, name, `^${published(name)?.version ?? fallback}`);
-      }
-    });
+    for (let [name, fallback] of Object.entries(PINS)) {
+      addOverride(project, name, `^${published(name)?.version ?? fallback}`);
+    }
 
     for (let name of Object.keys(PINS)) {
       recordProgress(project, {
         id: name,
         status: "override",
         note:
-          `package.json forces the latest ${name} for all dependencies, because v1 addons depend on older versions. ` +
+          `An override forces the latest ${name} for all dependencies, because v1 addons depend on older versions. ` +
           "Remove the override when no dependency needs an older version.",
       });
     }

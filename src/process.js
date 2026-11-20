@@ -5,8 +5,10 @@ import { spawnSync } from "node:child_process";
  * @returns {"pnpm" | "yarn" | "npm"}
  */
 export function packageManager(project) {
-  if (project.has("pnpm-lock.yaml")) return "pnpm";
-  if (project.has("yarn.lock")) return "yarn";
+  let lockfile = project.lockfile?.name;
+
+  if (lockfile === "pnpm-lock.yaml") return "pnpm";
+  if (lockfile === "yarn.lock") return "yarn";
 
   return "npm";
 }

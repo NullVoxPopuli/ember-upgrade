@@ -81,4 +81,22 @@ export const apps = [
     ],
     stopsAt: { stage: "ember-nvp", message: "An ember-source older than 7.2" },
   },
+  {
+    name: "crates.io",
+    verify: true,
+    repo: "rust-lang/crates.io",
+    /**
+     * The last commit with the Ember frontend. The next commit moves crates.io to Svelte.
+     */
+    sha: "e7004ce2883da90028147418839881408c46ea39",
+    completed: [],
+  },
+  {
+    name: "croodle",
+    verify: true,
+    repo: "jelhan/croodle",
+    sha: "7fca47194a90246533935b46720f502146644bd0",
+    directory: "client",
+    completed: [],
+  },
 ];
