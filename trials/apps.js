@@ -91,11 +91,8 @@ export const apps = [
       "ember-cli-deprecation-workflow",
       "template-tag",
       "ember-source-7.4",
+      "ember-nvp",
     ],
-    /**
-     * The ember.nvp migration drops the ember-data build config, which the classic addon set in its included hook.
-     */
-    stopsAt: { stage: "ember-nvp", message: "the build fails after this stage" },
   },
   {
     name: "ember-api-docs",

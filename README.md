@@ -33,7 +33,7 @@ The package has no dependencies. The parsers run as WebAssembly inside the bundl
 | `template-tag`                   | Converts `.hbs` templates to `<template>` tag                                                                                               | `@embroider/template-tag-codemod@1.4.2` |
 | `svg-jar`                        | Replaces ember-svg-jar with `@svg-jar/plugin`                                                                                               | `@svg-jar/codemod@0.0.1`                |
 | `ember-source-vite`              | Updates ember-source to 7.4. ember-source 7 builds only with Vite                                                                           | this repo                               |
-| `ember-nvp`                      | Moves to the ember.nvp layout, without `@embroider/compat`                                                                                  | `ember.nvp@2.4.0`                       |
+| `ember-nvp`                      | Moves to the ember.nvp layout, without `@embroider/compat`                                                                                  | `ember.nvp@2.5.1`                       |
 
 A stage is done when its `detect` finds nothing more to do.
 The stages from other packages run with `npx`.

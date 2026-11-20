@@ -1,5 +1,5 @@
 import { buildFile } from "#config-files.js";
-import { runUpstream } from "#process.js";
+import { packageManager, runUpstream } from "#process.js";
 
 /** @type {import('#types.js').Stage} */
 export default {
@@ -30,7 +30,12 @@ export default {
   },
 
   async run(project) {
+    /**
+     * Without a name, ember.nvp gives the app the name of its template, and imports of `<name>/...` stop resolving.
+     */
     let args = [
+      "--name",
+      String(project.packageJson.name),
       "--path",
       project.directory,
       "--replaceOrUpdate",
@@ -41,7 +46,14 @@ export default {
       "yes",
     ];
 
-    if (!runUpstream(project, "ember.nvp@2.4.0", args)) {
+    /**
+     * Without it, ember.nvp writes pnpm scripts, also in an npm project.
+     */
+    let pm = packageManager(project);
+
+    if (pm === "npm" || pm === "pnpm") args.push("--packageManager", pm);
+
+    if (!runUpstream(project, "ember.nvp@2.5.1", args)) {
       throw new Error("ember.nvp failed. Its output is above.");
     }
 
