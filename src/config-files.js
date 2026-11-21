@@ -111,7 +111,7 @@ function pluginsArray(program) {
  * Adds an import and a plugin call to the Vite config.
  *
  * @param {import('#project.js').Project} project
- * @param {{ importLine: string, call: string, specifier: string }} plugin
+ * @param {{ importLine: string, call: string, specifier: string, first?: boolean }} plugin first puts the plugin before the others
  * @returns {boolean} false when the config has no `plugins` array to add to
  */
 export function addVitePlugin(project, plugin) {
@@ -139,9 +139,18 @@ export function addVitePlugin(project, plugin) {
     lastImport ? `\n${plugin.importLine}` : `${plugin.importLine}\n`,
   );
 
+  let first = plugins.elements[0];
   let last = plugins.elements[plugins.elements.length - 1];
 
-  if (!last) {
+  if (plugin.first && first) {
+    let lineStart = source.lastIndexOf("\n", first.start - 1) + 1;
+    let indent = source.slice(lineStart, first.start);
+
+    edits.insert(
+      first.start,
+      indent.trim() === "" ? `${plugin.call},\n${indent}` : `${plugin.call}, `,
+    );
+  } else if (!last) {
     edits.insert(plugins.start + 1, plugin.call);
   } else {
     let lineStart = source.lastIndexOf("\n", last.start - 1) + 1;
