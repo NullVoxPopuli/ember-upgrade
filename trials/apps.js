@@ -224,6 +224,7 @@ export const apps = [
       "update-ember-simple-auth",
       "update-ember-sinon-qunit",
       "v1-addons",
+      "ember-event-helpers",
     ],
     stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },
