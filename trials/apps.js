@@ -146,11 +146,12 @@ export const apps = [
       "v1-addons",
       "template-tag",
       "svg-jar",
+      "ember-source-7.4",
     ],
     /**
-     * The compat build reads `templateCompiler` from undefined with ember-source 7.
+     * v1 addons, classic settings in ember-cli-build, and vendor/ files are left for the compatless work.
      */
-    stopsAt: { stage: "ember-source-7.4", message: "the build fails after this stage" },
+    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "croodle",

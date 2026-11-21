@@ -7,6 +7,7 @@ import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
+import { ICONS_MODULE, iconsModule, rewriteDynamicIcons } from "./svg-jar-icons.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
 /** @typedef {import('#types.js').Finding} Finding */
@@ -124,11 +125,11 @@ export const emberStyleguide = {
 };
 
 /**
- * @svg-jar/codemod 0.0.1 with svg-jar/codemod PRs 1, 2 and 3, and a built dist/.
+ * @svg-jar/codemod 0.0.1 with svg-jar/codemod PRs 2 and 3, and a built dist/.
  * Go back to the npm version when a release has them.
  */
 const SVG_JAR_CODEMOD =
-  "github:NullVoxPopuli-ai-agent/codemod#8cfc6d175c148726e16153d8353b604138439ee3";
+  "github:NullVoxPopuli-ai-agent/codemod#6809cae188e3178e2c045bbbf5173b5a0a48ca2c";
 
 /**
  * @param {import('#project.js').Project} project
@@ -137,11 +138,16 @@ const SVG_JAR_CODEMOD =
 function svgJarUsers(project) {
   return project
     .files(["{app,tests}/**/*.{js,ts,gjs,gts,hbs}"])
-    .filter((file) => /ember-svg-jar|\{\{svg-?[jJ]ar\b/.test(project.read(file)));
+    .filter(
+      (file) => file !== ICONS_MODULE && /ember-svg-jar|\{\{svg-?[jJ]ar\b/.test(project.read(file)),
+    );
 }
 
 /**
  * Runs after the template-tag stage, because the svg-jar codemod changes .gjs and .gts files.
+ * ember-svg-jar does not work with Vite, so the stage always removes it.
+ * The codemod needs a string for each icon name. A call with a name that is only known at runtime
+ * looks the icon up in a generated map of every icon in the svgJar source dirs.
  *
  * @type {Stage}
  */
@@ -150,7 +156,7 @@ export const svgJar = {
   label: "Replace ember-svg-jar with @svg-jar/plugin (@svg-jar/codemod)",
 
   detect(project) {
-    return Boolean(project.dependency("ember-svg-jar")) && !project.dependency("@svg-jar/plugin");
+    return Boolean(project.dependency("ember-svg-jar"));
   },
 
   async check(project) {
@@ -178,6 +184,28 @@ export const svgJar = {
   },
 
   async run(project) {
+    let dynamic = [];
+
+    for (let file of project.files(["{app,tests}/**/*.{gjs,gts}"])) {
+      let output = rewriteDynamicIcons(project.read(file), file);
+
+      if (output === undefined) continue;
+
+      project.write(file, output);
+      dynamic.push(file);
+    }
+
+    if (dynamic.length > 0) {
+      project.write(ICONS_MODULE, iconsModule(project));
+      recordProgress(project, {
+        id: "svg-jar: icon map",
+        status: "added",
+        note:
+          `${ICONS_MODULE} imports every icon, because ${dynamic.join(", ")} pick the icon by name at runtime. ` +
+          "Pass the icon component to those templates instead of its name, then delete the map.",
+      });
+    }
+
     /**
      * The codemod reads `svgJar.sourceDirs` from ember-cli-build, so the option stays until it is done.
      */
@@ -207,15 +235,13 @@ export const svgJar = {
     let users = svgJarUsers(project);
 
     if (users.length > 0) {
-      todo.push({
-        title: "Icons that the svg-jar codemod did not find",
-        where: users,
-        action: "Import each SVG file, and use it as a component. Then remove ember-svg-jar.",
-      });
-    } else {
-      editPackageJson(project, (pkg) => removeDependency(pkg, "ember-svg-jar"));
-      removeBuildOptions(project, ["svgJar"]);
+      throw new Error(
+        `The svg-jar codemod did not find the icons in ${users.join(", ")}. Its output is above.`,
+      );
     }
+
+    editPackageJson(project, (pkg) => removeDependency(pkg, "ember-svg-jar"));
+    removeBuildOptions(project, ["svgJar"]);
 
     return todo;
   },

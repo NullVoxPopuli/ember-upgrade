@@ -1,7 +1,31 @@
-import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import { join } from "node:path";
+
+import { addOverride, hasOverride } from "#manager-settings.js";
+import {
+  dependencyNames,
+  editPackageJson,
+  removeDependency,
+  setDependency,
+} from "#package-json.js";
+import { published } from "#process.js";
+import { Project } from "#project.js";
+import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 
 /** @typedef {import('#types.js').Stage} Stage */
+
+const AMD_BUNDLES = "https://deprecations.emberjs.com/id/using-amd-bundles";
+
+/**
+ * ember-source 7 has no AMD template compiler, so each v1 addon needs ember-cli-htmlbars 7,
+ * which reads the ES module one. ember-cli-htmlbars 7 adds the async template compilation plugin,
+ * which only ember-cli-babel 8 can run. classicEmberSupport() builds v1 addons with both.
+ * The versions are the fallback when the registry does not answer.
+ */
+const EMBER_7_PINS = {
+  "ember-cli-babel": "8.3.2",
+  "ember-cli-htmlbars": "7.0.1",
+};
 
 /**
  * @type {Record<string, Record<string, string>>}
@@ -81,15 +105,73 @@ function step(lts) {
         }
 
         /**
-         * ember-cli-htmlbars reads the template compiler from the classic ember-source addon, which 7.x does not have.
-         * A Vite app compiles templates with babel-plugin-ember-template-compilation, so it does not need it.
+         * A Vite app compiles its own templates with babel-plugin-ember-template-compilation,
+         * so only v1 addons need ember-cli-htmlbars.
          */
         if (target[0] >= 7) removeDependency(pkg, "ember-cli-htmlbars");
       });
 
+      if (target[0] >= 7) {
+        updateEmberImporters(project);
+
+        for (let [name, fallback] of Object.entries(EMBER_7_PINS)) {
+          addOverride(project, name, `^${published(name)?.version ?? fallback}`);
+          recordProgress(project, {
+            id: name,
+            status: "override",
+            note:
+              `An override forces the latest ${name} for all dependencies, because v1 addons depend on older versions. ` +
+              "Remove the override when vite.config no longer uses classicEmberSupport().",
+            links: [AMD_BUNDLES],
+          });
+        }
+      }
+
       return [];
     },
   };
+}
+
+/**
+ * ember-source 7 has no `ember` module. The app's own imports are for the ember-globals stage,
+ * so this is for the dependencies: each one whose installed code imports `ember` goes to its latest version,
+ * and so does an override that holds it back.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function updateEmberImporters(project) {
+  let pkg = JSON.parse(project.read("package.json"));
+
+  for (let name of dependencyNames(pkg)) {
+    if (name === "ember-source" || !importsEmber(join(project.directory, "node_modules", name))) {
+      continue;
+    }
+
+    let latest = published(name)?.version;
+
+    if (!latest || parse(latest)?.[0] === parse(project.dependency(name))?.[0]) continue;
+
+    editPackageJson(project, (manifest) => setDependency(manifest, name, `^${latest}`));
+
+    if (hasOverride(project, name)) addOverride(project, name, `^${latest}`);
+  }
+}
+
+/**
+ * @param {string} directory an installed package
+ * @returns {boolean} its code imports the `ember` module
+ */
+function importsEmber(directory) {
+  let dependency = new Project(directory);
+
+  if (!dependency.has("package.json")) return false;
+
+  return dependency
+    .files(["**/*.{js,mjs,cjs}"])
+    .filter((file) => !/(^|\/)tests?\//.test(file))
+    .some((file) =>
+      /\bfrom\s*['"]ember['"]|\brequire\(\s*['"]ember['"]\s*\)/.test(dependency.read(file)),
+    );
 }
 
 /**

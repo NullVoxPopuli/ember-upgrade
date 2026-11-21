@@ -1,6 +1,15 @@
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 
-import { addYamlListEntry, setYamlMapEntry, setYamlNestedMap } from "#manager-settings.js";
+import {
+  addOverride,
+  addYamlListEntry,
+  setYamlMapEntry,
+  setYamlNestedMap,
+} from "#manager-settings.js";
+import { Project } from "#project.js";
 
 /**
  * From TryGhost/Ghost at 6c43413, shortened.
@@ -98,4 +107,42 @@ test("adds and replaces a packageExtensions entry", () => {
       "broccoli-plugin": "^1.3.1",
     }),
   ).toBe(added);
+});
+
+/**
+ * @param {object} pkg
+ */
+function pnpmProject(pkg) {
+  let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
+
+  writeFileSync(join(directory, "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+  writeFileSync(join(directory, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+  writeFileSync(join(directory, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n");
+
+  return { directory, project: new Project(directory) };
+}
+
+test("a pnpm override goes in pnpm-workspace.yaml", () => {
+  let { directory, project } = pnpmProject({ packageManager: "pnpm@10.34.9" });
+
+  addOverride(project, "ember-cli-htmlbars", "^7.0.1");
+
+  expect(readFileSync(join(directory, "pnpm-workspace.yaml"), "utf8")).toContain(
+    "ember-cli-htmlbars: '^7.0.1'",
+  );
+});
+
+test("a pnpm override goes in resolutions when package.json has them, because pnpm then ignores the others", () => {
+  let { directory, project } = pnpmProject({
+    packageManager: "pnpm@10.34.9",
+    resolutions: { "ember-auto-import": "2.13.1" },
+  });
+
+  addOverride(project, "ember-cli-htmlbars", "^7.0.1");
+
+  expect(JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).resolutions).toEqual({
+    "ember-auto-import": "2.13.1",
+    "ember-cli-htmlbars": "^7.0.1",
+  });
+  expect(readFileSync(join(directory, "pnpm-workspace.yaml"), "utf8")).not.toContain("overrides");
 });
