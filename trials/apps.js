@@ -145,12 +145,13 @@ export const apps = [
       "update-@sentry/ember",
       "v1-addons",
       "template-tag",
+      "svg-jar",
+      "ember-source-7.4",
     ],
     /**
-     * Four components pass the icon name as an argument or pick it with `(if ...)`,
-     * so a person must make those icons static first.
+     * v1 addons, classic settings in ember-cli-build, and vendor/ files are left for the compatless work.
      */
-    stopsAt: { stage: "svg-jar", message: "blocked" },
+    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "croodle",

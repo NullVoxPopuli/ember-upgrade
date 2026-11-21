@@ -94,6 +94,27 @@ export function allowBuild(project, name) {
 }
 
 /**
+ * @param {Project} project
+ * @param {string} name
+ * @returns {boolean} the project already forces a version of the package
+ */
+export function hasOverride(project, name) {
+  let root = workspaceRoot(project);
+  let pkg = JSON.parse(root.read("package.json"));
+  let maps = [pkg.resolutions, pkg.overrides, pkg.pnpm?.overrides];
+
+  if (maps.some((map) => map && name in map)) return true;
+
+  if (!root.has(WORKSPACE_FILE)) return false;
+
+  let quoted = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+
+  return new RegExp(`^overrides:[^]*?^\\s+['"]?${quoted}['"]?:`, "m").test(
+    root.read(WORKSPACE_FILE),
+  );
+}
+
+/**
  * Forces one version of a package for the whole dependency tree.
  *
  * @param {Project} project
