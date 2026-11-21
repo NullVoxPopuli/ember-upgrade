@@ -1,7 +1,23 @@
+import { addOverride } from "#manager-settings.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import { published } from "#process.js";
+import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 
 /** @typedef {import('#types.js').Stage} Stage */
+
+const AMD_BUNDLES = "https://deprecations.emberjs.com/id/using-amd-bundles";
+
+/**
+ * ember-source 7 has no AMD template compiler, so each v1 addon needs ember-cli-htmlbars 7,
+ * which reads the ES module one. ember-cli-htmlbars 7 adds the async template compilation plugin,
+ * which only ember-cli-babel 8 can run. classicEmberSupport() builds v1 addons with both.
+ * The versions are the fallback when the registry does not answer.
+ */
+const EMBER_7_PINS = {
+  "ember-cli-babel": "8.3.2",
+  "ember-cli-htmlbars": "7.0.1",
+};
 
 /**
  * @type {Record<string, Record<string, string>>}
@@ -81,11 +97,25 @@ function step(lts) {
         }
 
         /**
-         * ember-cli-htmlbars reads the template compiler from the classic ember-source addon, which 7.x does not have.
-         * A Vite app compiles templates with babel-plugin-ember-template-compilation, so it does not need it.
+         * A Vite app compiles its own templates with babel-plugin-ember-template-compilation,
+         * so only v1 addons need ember-cli-htmlbars.
          */
         if (target[0] >= 7) removeDependency(pkg, "ember-cli-htmlbars");
       });
+
+      if (target[0] >= 7) {
+        for (let [name, fallback] of Object.entries(EMBER_7_PINS)) {
+          addOverride(project, name, `^${published(name)?.version ?? fallback}`);
+          recordProgress(project, {
+            id: name,
+            status: "override",
+            note:
+              `An override forces the latest ${name} for all dependencies, because v1 addons depend on older versions. ` +
+              "Remove the override when vite.config no longer uses classicEmberSupport().",
+            links: [AMD_BUNDLES],
+          });
+        }
+      }
 
       return [];
     },
