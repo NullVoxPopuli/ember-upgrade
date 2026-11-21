@@ -49,9 +49,12 @@ function cratesIo() {
         },
       },
     },
+    /**
+     * Hoisting reaches a newer copy than the one that ember-data asks for.
+     */
     "node_modules/.pnpm/node_modules/@ember-data/model/package.json": {
       name: "@ember-data/model",
-      version: "5.8.2",
+      version: "5.9.1",
     },
     "node_modules/ember-cli-notifications/package.json": {
       name: "ember-cli-notifications",
@@ -106,7 +109,7 @@ test("the packages that the app imports without declaring them become dependenci
 
   expect(app.packageJson.devDependencies).toMatchInlineSnapshot(`
     {
-      "@ember-data/model": "^5.8.2",
+      "@ember-data/model": "5.8.2",
       "ember-cli-notifications": "9.1.0",
       "ember-data": "~5.8.2",
     }
