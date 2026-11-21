@@ -113,9 +113,15 @@ export function addOverride(project, name, range) {
     }
   });
 
-  if (pm === "pnpm") return setPnpmMapSetting(project, "overrides", name, range);
+  /**
+   * pnpm ignores the overrides in pnpm-workspace.yaml when package.json has `resolutions`
+   * (crates.io), so the override goes next to the ones the project already has.
+   */
+  let resolutions = Boolean(JSON.parse(root.read("package.json")).resolutions);
 
-  let field = pm === "yarn" ? "resolutions" : "overrides";
+  if (pm === "pnpm" && !resolutions) return setPnpmMapSetting(project, "overrides", name, range);
+
+  let field = pm === "yarn" || resolutions ? "resolutions" : "overrides";
 
   editPackageJson(root, (pkg) => {
     pkg[field] = sorted(Object.assign({}, pkg[field], { [name]: range }));
