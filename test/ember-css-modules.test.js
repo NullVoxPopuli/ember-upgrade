@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 
-import { addVitePlugin } from "#config-files.js";
+import { addVitePlugin, removeCompatBuildOptions } from "#config-files.js";
 import { Project } from "#project.js";
 import {
   plan,
@@ -527,21 +527,52 @@ test("in-repo addons and pods need additionalRoots", () => {
   expect(additionalRoots(app)).toEqual(["app", "lib/registries/addon"]);
 });
 
-test("an app on ember-scoped-css-compat keeps its setup", () => {
-  let files = {
+test("an app on ember-scoped-css-compat moves to the current ember-scoped-css", () => {
+  let app = project({
     "vite.config.mjs": "export default {};\n",
-  };
-  let current = project({
-    ...files,
-    "package.json": JSON.stringify({ devDependencies: { "ember-scoped-css": "^3.0.0" } }),
-  });
-  let compat = project({
-    ...files,
     "package.json": JSON.stringify({
       devDependencies: { "ember-scoped-css": "^0.24.3", "ember-scoped-css-compat": "^10.2.3" },
     }),
   });
 
-  expect(emberScopedCss.detect(current)).toBe(true);
-  expect(emberScopedCss.detect(compat)).toBe(false);
+  expect(emberScopedCss.detect(app)).toBe(true);
+});
+
+/**
+ * From rust-lang/crates.io, shortened.
+ */
+test("packagerOptions goes from compatBuild, and the other options stay", () => {
+  let app = project({
+    "ember-cli-build.js": `module.exports = async function (defaults) {
+  return compatBuild(app, buildOnce, {
+    extraPublicTrees,
+    packagerOptions: {
+      webpackConfig: {
+        module: { rules: [{ loader: require.resolve('ember-scoped-css/build/app-css-loader') }] },
+      },
+    },
+    staticModifiers: true,
+  });
+};
+`,
+  });
+
+  expect(removeCompatBuildOptions(app, ["packagerOptions"])).toEqual(["packagerOptions"]);
+  expect(app.read("ember-cli-build.js")).toBe(`module.exports = async function (defaults) {
+  return compatBuild(app, buildOnce, {
+    extraPublicTrees,
+    staticModifiers: true,
+  });
+};
+`);
+});
+
+test("the template transform gets an empty options object when there are no additional roots", () => {
+  let output = addTemplateTransform(
+    "export default { plugins: [['babel-plugin-ember-template-compilation', { transforms: [] }]] };\n",
+    "babel.config.mjs",
+    "",
+  );
+
+  expect(output).toContain("transforms: [scopedCSS.template({})]");
 });

@@ -140,3 +140,54 @@ export const prember = removalStage({
     links: ["https://github.com/evoactivity/vite-ember-ssr#quick-start-ssg"],
   },
 });
+
+export const emberCliBundleAnalyzer = removalStage({
+  name: "ember-cli-bundle-analyzer",
+  label: "Remove ember-cli-bundle-analyzer. It analyzes ember-cli builds",
+  matches: (name) => name === "ember-cli-bundle-analyzer",
+  buildOptions: ["bundleAnalyzer"],
+  progress: {
+    note: "ember-cli-bundle-analyzer is removed. For the same report of a Vite build, add rollup-plugin-visualizer.",
+    links: ["https://github.com/btd/rollup-plugin-visualizer"],
+  },
+});
+
+export const emberCliDependencyLint = removalStage({
+  name: "ember-cli-dependency-lint",
+  label: "Remove ember-cli-dependency-lint. It is an ember-cli command",
+  matches: (name) => name === "ember-cli-dependency-lint",
+  files: ["config/dependency-lint.js"],
+  todo(project) {
+    let scripts = scriptsMatching(project, /\bember dependency-lint\b/);
+
+    if (scripts.length === 0) return [];
+
+    return [
+      {
+        title: "Scripts that call `ember dependency-lint`",
+        where: scripts,
+        action:
+          "Remove them. A package manager with a strict dependency tree, such as pnpm, reports duplicate addons.",
+      },
+    ];
+  },
+});
+
+export const emberDisablePrototypeExtensions = removalStage({
+  name: "ember-disable-prototype-extensions",
+  label:
+    "Remove ember-disable-prototype-extensions. ember-source 5 removed the prototype extensions",
+  matches: (name) => name === "ember-disable-prototype-extensions",
+});
+
+export const qunitConsoleGrouper = removalStage({
+  name: "qunit-console-grouper",
+  label: "Remove qunit-console-grouper. It adds a script to the ember-cli vendor.js",
+  matches: (name) => name === "qunit-console-grouper",
+  progress: {
+    note:
+      "qunit-console-grouper is removed. It grouped the console output of each test in the browser. " +
+      "To keep that, copy its lib/qunit-console-grouper.js into tests/ and import it from tests/test-helper.",
+    links: ["https://github.com/simplabs/qunit-console-grouper"],
+  },
+});

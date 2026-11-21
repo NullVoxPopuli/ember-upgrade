@@ -257,8 +257,17 @@ function hasOwnStage(name) {
     name === "ember-cli-deploy" ||
     name.startsWith("ember-cli-deploy-") ||
     [
+      "@mainmatter/ember-api-actions",
+      "@zestia/ember-auto-focus",
       "ember-cli-autoprefixer",
+      "ember-cli-bundle-analyzer",
+      "ember-cli-dependency-lint",
+      "ember-cli-head",
+      "ember-disable-prototype-extensions",
+      "ember-error-route",
+      "ember-event-helpers",
       "ember-test-selectors",
+      "qunit-console-grouper",
       "prember",
       "ember-cli-deprecation-workflow",
       "ember-metrics",

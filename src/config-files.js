@@ -89,6 +89,52 @@ export function removeBuildOptions(project, names) {
 }
 
 /**
+ * Removes options that the app passes to `compatBuild(app, buildOnce, { ... })`.
+ *
+ * @param {import('#project.js').Project} project
+ * @param {string[]} names
+ * @returns {string[]} the options that were there
+ */
+export function removeCompatBuildOptions(project, names) {
+  let file = buildFile(project);
+
+  if (!file) return [];
+
+  let source = project.read(file);
+  let program = parseProgram(source, file);
+
+  if (!program) return [];
+
+  let edits = new Edits(source);
+  /** @type {string[]} */
+  let removed = [];
+
+  walk(program, (node) => {
+    if (
+      node.type !== "CallExpression" ||
+      node.callee.type !== "Identifier" ||
+      node.callee.name !== "compatBuild" ||
+      node.arguments[2]?.type !== "ObjectExpression"
+    ) {
+      return;
+    }
+
+    for (let property of node.arguments[2].properties) {
+      let name = propertyName(property);
+
+      if (name && names.includes(name)) {
+        removeProperty(edits, property);
+        removed.push(name);
+      }
+    }
+  });
+
+  if (edits.size > 0) project.write(file, edits.apply());
+
+  return removed;
+}
+
+/**
  * Finds the `plugins: [...]` array in a Vite config.
  *
  * @param {Node} program

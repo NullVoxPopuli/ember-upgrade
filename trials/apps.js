@@ -141,15 +141,24 @@ export const apps = [
     completed: [
       "ember-web-app",
       "vite",
+      "ember-scoped-css",
       "ember-test-selectors",
+      "ember-cli-bundle-analyzer",
+      "ember-cli-dependency-lint",
+      "ember-disable-prototype-extensions",
+      "qunit-console-grouper",
       "update-@sentry/ember",
-      "v1-addons",
+      "ember-event-helpers",
+      "@zestia/ember-auto-focus",
+      "ember-error-route",
+      "ember-cli-head",
+      "@mainmatter/ember-api-actions",
       "template-tag",
       "svg-jar",
       "ember-source-7.4",
     ],
     /**
-     * v1 addons, classic settings in ember-cli-build, and vendor/ files are left for the compatless work.
+     * Classic settings in ember-cli-build and vendor/qunit.css are left for the compatless work.
      */
     stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
@@ -215,6 +224,7 @@ export const apps = [
       "update-ember-simple-auth",
       "update-ember-sinon-qunit",
       "v1-addons",
+      "ember-event-helpers",
     ],
     stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },

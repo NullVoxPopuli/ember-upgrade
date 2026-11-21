@@ -1,13 +1,24 @@
 import composableHelpers from "./addons/composable-helpers.js";
 import emberCliMirage from "./addons/ember-cli-mirage.js";
 import emberFetch from "./addons/ember-fetch.js";
+import {
+  emberApiActions,
+  emberAutoFocus,
+  emberCliHead,
+  emberErrorRoute,
+  emberEventHelpers,
+} from "./addons/inline.js";
 import emberMetrics from "./addons/ember-metrics.js";
 import emberWebApp from "./addons/ember-web-app.js";
 import {
   emberCliAutoprefixer,
+  emberCliBundleAnalyzer,
+  emberCliDependencyLint,
   emberCliDeploy,
+  emberDisablePrototypeExtensions,
   emberTestSelectors,
   prember,
+  qunitConsoleGrouper,
 } from "./addons/removals.js";
 import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
 import emberCli from "./ember-cli/index.js";
@@ -53,9 +64,22 @@ export const stages = [
   emberCliAutoprefixer,
   emberTestSelectors,
   prember,
+  emberCliBundleAnalyzer,
+  emberCliDependencyLint,
+  emberDisablePrototypeExtensions,
+  qunitConsoleGrouper,
   deprecationWorkflow,
   emberMetrics,
   v2Addons,
+  /**
+   * Before template-tag, which needs the components that these stages add to resolve,
+   * and which would turn the head template of ember-cli-head into a route template.
+   */
+  emberEventHelpers,
+  emberAutoFocus,
+  emberErrorRoute,
+  emberCliHead,
+  emberApiActions,
   templateTag,
   svgJar,
   viteLts,
