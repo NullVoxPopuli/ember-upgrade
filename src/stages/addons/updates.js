@@ -7,6 +7,7 @@ import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
+import { ICONS_MODULE, iconsModule, rewriteDynamicIcons } from "./svg-jar-icons.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
 /** @typedef {import('#types.js').Finding} Finding */
@@ -131,24 +132,22 @@ const SVG_JAR_CODEMOD =
   "github:NullVoxPopuli-ai-agent/codemod#6809cae188e3178e2c045bbbf5173b5a0a48ca2c";
 
 /**
- * `{{svgJar @icon}}` or `(svgJar this.name)`: an icon name that is not a string.
- */
-const DYNAMIC_NAME = /[{(]\s*svg-?[jJ]ar\s+(?!["'])/;
-
-/**
  * @param {import('#project.js').Project} project
  * @returns {string[]} the files that still use ember-svg-jar
  */
 function svgJarUsers(project) {
   return project
     .files(["{app,tests}/**/*.{js,ts,gjs,gts,hbs}"])
-    .filter((file) => /ember-svg-jar|\{\{svg-?[jJ]ar\b/.test(project.read(file)));
+    .filter(
+      (file) => file !== ICONS_MODULE && /ember-svg-jar|\{\{svg-?[jJ]ar\b/.test(project.read(file)),
+    );
 }
 
 /**
  * Runs after the template-tag stage, because the svg-jar codemod changes .gjs and .gts files.
  * ember-svg-jar does not work with Vite, so the stage always removes it.
- * The codemod needs a string for each icon name, so a dynamic name stops the stage.
+ * The codemod needs a string for each icon name. A call with a name that is only known at runtime
+ * looks the icon up in a generated map of every icon in the svgJar source dirs.
  *
  * @type {Stage}
  */
@@ -181,23 +180,32 @@ export const svgJar = {
       });
     }
 
-    let dynamic = project
-      .files(["{app,tests}/**/*.{gjs,gts}"])
-      .filter((file) => DYNAMIC_NAME.test(project.read(file)));
-
-    if (dynamic.length > 0) {
-      report.blockers.push({
-        title: "Icon names that are not strings",
-        where: dynamic,
-        action:
-          "Make each icon static: import the SVG file in the caller, and pass the component instead of its name.",
-      });
-    }
-
     return report;
   },
 
   async run(project) {
+    let dynamic = [];
+
+    for (let file of project.files(["{app,tests}/**/*.{gjs,gts}"])) {
+      let output = rewriteDynamicIcons(project.read(file), file);
+
+      if (output === undefined) continue;
+
+      project.write(file, output);
+      dynamic.push(file);
+    }
+
+    if (dynamic.length > 0) {
+      project.write(ICONS_MODULE, iconsModule(project));
+      recordProgress(project, {
+        id: "svg-jar: icon map",
+        status: "added",
+        note:
+          `${ICONS_MODULE} imports every icon, because ${dynamic.join(", ")} pick the icon by name at runtime. ` +
+          "Pass the icon component to those templates instead of its name, then delete the map.",
+      });
+    }
+
     /**
      * The codemod reads `svgJar.sourceDirs` from ember-cli-build, so the option stays until it is done.
      */

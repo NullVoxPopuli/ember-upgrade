@@ -7,7 +7,8 @@ import { Project } from "#project.js";
 import { parseProgress, printProgress, readProgress } from "#progress.js";
 import emberMetrics from "#stages/addons/ember-metrics.js";
 import { emberCliDeploy } from "#stages/addons/removals.js";
-import { deprecationWorkflow, emberStyleguide, svgJar } from "#stages/addons/updates.js";
+import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
+import { deprecationWorkflow, emberStyleguide } from "#stages/addons/updates.js";
 
 /**
  * @param {Record<string, string>} files
@@ -337,18 +338,81 @@ test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml", async () => 
 /**
  * From rust-lang/crates.io, after the template-tag stage, shortened.
  */
-test("the svg-jar stage stops on an icon name that is not a string", async () => {
+const STATS_VALUE = `import scopedClass from 'ember-scoped-css/helpers/scoped-class';
+import svgJar from 'ember-svg-jar/helpers/svg-jar';
+
+<template>
+  <div ...attributes class='stats-value'>
+    {{svgJar @icon role='img' aria-hidden='true' class=(scopedClass 'icon')}}
+  </div>
+</template>
+`;
+
+test("an icon name that is only known at runtime becomes a lookup in the icon map", () => {
+  expect(rewriteDynamicIcons(STATS_VALUE, "app/components/stats-value.gjs")).toBe(
+    `import scopedClass from 'ember-scoped-css/helpers/scoped-class';
+import svgJarIcon from '../utils/svg-jar-icons.js';
+
+<template>
+  <div ...attributes class='stats-value'>
+    {{#let (svgJarIcon @icon) as |SvgJarIcon|}}<SvgJarIcon role='img' aria-hidden='true' class={{scopedClass 'icon'}} />{{/let}}
+  </div>
+</template>
+`,
+  );
+});
+
+test("the svgJar import stays for the codemod when the file also has static icons", () => {
+  let source = `import svgJar from 'ember-svg-jar/helpers/svg-jar';
+
+<template>
+  {{svgJar 'github'}}
+  {{svgJar (if @open 'chevron-up' 'chevron-down')}}
+</template>
+`;
+
+  expect(rewriteDynamicIcons(source, "app/components/toggle.gjs")).toBe(
+    `import svgJar from 'ember-svg-jar/helpers/svg-jar';
+import svgJarIcon from '../utils/svg-jar-icons.js';
+
+<template>
+  {{svgJar 'github'}}
+  {{#let (svgJarIcon (if @open 'chevron-up' 'chevron-down')) as |SvgJarIcon|}}<SvgJarIcon />{{/let}}
+</template>
+`,
+  );
+});
+
+test("a file with only static icons is left to the codemod", () => {
+  expect(
+    rewriteDynamicIcons("<template>{{svgJar 'github'}}</template>\n", "app/components/a.gjs"),
+  ).toBeUndefined();
+});
+
+test("the icon map names each icon by its file name, as ember-svg-jar does", () => {
   let app = project({
-    "package.json": JSON.stringify({ devDependencies: { "ember-svg-jar": "2.7.1" } }),
-    "vite.config.mjs": "export default {};\n",
-    "app/components/footer.gjs": "<template>{{svgJar 'github'}}</template>\n",
-    "app/components/stats-value.gjs":
-      "<template>{{svgJar @icon role='img' aria-hidden='true'}}</template>\n",
+    "ember-cli-build.js": "module.exports = function () {};\n",
+    "public/assets/github.svg": "<svg></svg>",
+    "public/assets/brands/rust-logo.svg": "<svg></svg>",
   });
 
-  let { blockers } = await svgJar.check(app);
+  expect(iconsModule(app)).toBe(`/**
+ * Each icon that ember-svg-jar found by name, for templates that pick the icon at runtime.
+ * A caller that passes the component instead of a name does not need this map.
+ */
+import RustLogo from '../../public/assets/brands/rust-logo.svg?unsafe-inline';
+import Github from '../../public/assets/github.svg?unsafe-inline';
 
-  expect(blockers.map((blocker) => [blocker.title, blocker.where])).toEqual([
-    ["Icon names that are not strings", ["app/components/stats-value.gjs"]],
-  ]);
+const ICONS = {
+  "rust-logo": RustLogo,
+  "github": Github,
+};
+
+/**
+ * @param {string} name
+ */
+export default function svgJarIcon(name) {
+  return ICONS[name];
+}
+`);
 });
