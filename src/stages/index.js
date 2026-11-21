@@ -1,4 +1,5 @@
 import composableHelpers from "./addons/composable-helpers.js";
+import emberCliMirage from "./addons/ember-cli-mirage.js";
 import emberFetch from "./addons/ember-fetch.js";
 import emberMetrics from "./addons/ember-metrics.js";
 import emberWebApp from "./addons/ember-web-app.js";
@@ -38,6 +39,11 @@ export const stages = [
   emberFetch,
   composableHelpers,
   classicLts,
+  /**
+   * ember-auto-import does not read package.json `imports`, so `#mirage/...`
+   * resolves only after the vite stage. Production builds do not import mirage.
+   */
+  emberCliMirage,
   vite,
   emberCliDeploy,
   emberCliAutoprefixer,
