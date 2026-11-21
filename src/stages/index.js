@@ -21,6 +21,7 @@ import {
   qunitConsoleGrouper,
 } from "./addons/removals.js";
 import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
+import buildSettings from "./build-settings/index.js";
 import emberCli from "./ember-cli/index.js";
 import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
@@ -83,5 +84,6 @@ export const stages = [
   templateTag,
   svgJar,
   viteLts,
+  buildSettings,
   emberNvp,
 ];
