@@ -5,9 +5,13 @@ import emberMetrics from "./addons/ember-metrics.js";
 import emberWebApp from "./addons/ember-web-app.js";
 import {
   emberCliAutoprefixer,
+  emberCliBundleAnalyzer,
+  emberCliDependencyLint,
   emberCliDeploy,
+  emberDisablePrototypeExtensions,
   emberTestSelectors,
   prember,
+  qunitConsoleGrouper,
 } from "./addons/removals.js";
 import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
 import emberCli from "./ember-cli/index.js";
@@ -53,6 +57,10 @@ export const stages = [
   emberCliAutoprefixer,
   emberTestSelectors,
   prember,
+  emberCliBundleAnalyzer,
+  emberCliDependencyLint,
+  emberDisablePrototypeExtensions,
+  qunitConsoleGrouper,
   deprecationWorkflow,
   emberMetrics,
   v2Addons,
