@@ -566,3 +566,13 @@ test("packagerOptions goes from compatBuild, and the other options stay", () => 
 };
 `);
 });
+
+test("the template transform gets an empty options object when there are no additional roots", () => {
+  let output = addTemplateTransform(
+    "export default { plugins: [['babel-plugin-ember-template-compilation', { transforms: [] }]] };\n",
+    "babel.config.mjs",
+    "",
+  );
+
+  expect(output).toContain("transforms: [scopedCSS.template({})]");
+});

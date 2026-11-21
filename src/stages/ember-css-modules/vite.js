@@ -167,7 +167,10 @@ export function addTemplateTransform(source, file, options) {
   if (!transforms) return;
 
   let edits = new Edits(source);
-  let call = `scopedCSS.template(${options})`;
+  /**
+   * ember-scoped-css 3 reads `options.additionalRoots`, so the call needs an object.
+   */
+  let call = `scopedCSS.template(${options || "{}"})`;
   let last = transforms.elements[transforms.elements.length - 1];
 
   if (last) edits.insert(last.end, `, ${call}`);
