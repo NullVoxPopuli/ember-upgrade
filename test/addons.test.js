@@ -440,5 +440,17 @@ test("a small v1 addon moves into the app, and its imports follow", async () => 
     "<meta name='description' content={{this.model.description}}>\n",
   );
   expect(app.has("app/services/head-data.js")).toBe(true);
+
+  let own = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-cli-head": "2.0.0" } }),
+    "app/templates/head.hbs": "<meta>\n",
+    "app/services/head-data.js": "export default class HeadDataService {}\n",
+  });
+
+  expect((await emberCliHead.check(own)).blockers).toEqual([]);
+
+  await emberCliHead.run(own);
+
+  expect(own.read("app/services/head-data.js")).toBe("export default class HeadDataService {}\n");
   expect(app.dependency("ember-cli-head")).toBeUndefined();
 });

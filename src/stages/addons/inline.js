@@ -12,6 +12,7 @@ import { recordProgress } from "#progress.js";
  * @property {string} name the addon
  * @property {string} label
  * @property {Record<string, string>} files the files to write, by path in the project
+ * @property {Record<string, string>} [defaults] files to write only when the app has none, because the app can override them
  * @property {Record<string, string>} imports each import specifier of the addon, and the file that replaces it
  * @property {Record<string, string>} [moves] files of the app that move, from and to
  * @property {Record<string, string>} [dependencies] packages that the new files import, with a fallback version
@@ -40,6 +41,7 @@ function specifier(from, to) {
  */
 export function inlineStage(inline) {
   let targets = Object.keys(inline.files).concat(Object.values(inline.moves ?? {}));
+  let defaults = Object.keys(inline.defaults ?? {});
 
   return {
     name: inline.name,
@@ -87,6 +89,10 @@ export function inlineStage(inline) {
 
       for (let [file, contents] of Object.entries(inline.files)) write(file, contents);
 
+      for (let [file, contents] of Object.entries(inline.defaults ?? {})) {
+        if (!project.has(file)) write(file, contents);
+      }
+
       for (let [from, to] of Object.entries(inline.moves ?? {})) {
         write(to, project.read(from));
         rmSync(join(project.directory, from));
@@ -117,7 +123,7 @@ export function inlineStage(inline) {
       recordProgress(project, {
         id: inline.name,
         status: "moved into the app",
-        note: `${inline.note} The code is now in ${targets.join(", ")}.`,
+        note: `${inline.note} The code is now in ${targets.concat(defaults).join(", ")}.`,
       });
 
       return [];
@@ -284,11 +290,13 @@ function allRouteInfos(routeInfo) {
 export const emberCliHead = inlineStage({
   name: "ember-cli-head",
   label: "Move ember-cli-head into the app",
-  files: {
+  defaults: {
     "app/services/head-data.js": `${origin("ember-cli-head")}import Service from '@ember/service';
 
 export default class HeadData extends Service {}
 `,
+  },
+  files: {
     "app/components/head-content.js": `${origin("ember-cli-head")}import Component from '@glimmer/component';
 import { service } from '@ember/service';
 
