@@ -156,9 +156,11 @@ export const apps = [
       "template-tag",
       "svg-jar",
       "ember-source-7.4",
+      "build-settings",
     ],
     /**
-     * Classic settings in ember-cli-build and vendor/qunit.css are left for the compatless work.
+     * ember.nvp 2.5.2 looks up the app's own workspace package @crates-io/msw on npm.
+     * NullVoxPopuli/ember.nvp#205 fixes it.
      */
     stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
