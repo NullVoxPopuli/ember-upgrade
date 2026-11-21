@@ -123,7 +123,12 @@ export const emberStyleguide = {
   },
 };
 
-const SVG_JAR_CODEMOD = "@svg-jar/codemod@0.0.1";
+/**
+ * @svg-jar/codemod 0.0.1 with svg-jar/codemod PRs 1, 2 and 3, and a built dist/.
+ * Go back to the npm version when a release has them.
+ */
+const SVG_JAR_CODEMOD =
+  "github:NullVoxPopuli-ai-agent/codemod#8cfc6d175c148726e16153d8353b604138439ee3";
 
 /**
  * @param {import('#project.js').Project} project

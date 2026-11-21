@@ -145,11 +145,12 @@ export const apps = [
       "update-@sentry/ember",
       "v1-addons",
       "template-tag",
+      "svg-jar",
     ],
     /**
-     * `{{svg-jar @icon}}` has a dynamic icon name, which @svg-jar/codemod cannot turn into an import.
+     * The compat build reads `templateCompiler` from undefined with ember-source 7.
      */
-    stopsAt: { stage: "svg-jar", message: "the build fails after this stage" },
+    stopsAt: { stage: "ember-source-7.4", message: "the build fails after this stage" },
   },
   {
     name: "croodle",
