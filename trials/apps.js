@@ -145,12 +145,12 @@ export const apps = [
       "update-@sentry/ember",
       "v1-addons",
       "template-tag",
-      "svg-jar",
     ],
     /**
-     * The compat build reads `templateCompiler` from undefined with ember-source 7.
+     * Four components pass the icon name as an argument or pick it with `(if ...)`,
+     * so a person must make those icons static first.
      */
-    stopsAt: { stage: "ember-source-7.4", message: "the build fails after this stage" },
+    stopsAt: { stage: "svg-jar", message: "blocked" },
   },
   {
     name: "croodle",

@@ -7,7 +7,7 @@ import { Project } from "#project.js";
 import { parseProgress, printProgress, readProgress } from "#progress.js";
 import emberMetrics from "#stages/addons/ember-metrics.js";
 import { emberCliDeploy } from "#stages/addons/removals.js";
-import { deprecationWorkflow, emberStyleguide } from "#stages/addons/updates.js";
+import { deprecationWorkflow, emberStyleguide, svgJar } from "#stages/addons/updates.js";
 
 /**
  * @param {Record<string, string>} files
@@ -332,4 +332,23 @@ test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml", async () => 
     "allowBuilds:\n  esbuild: true\n  ember-styleguide: true\n",
   );
   expect(app.packageJson.pnpm).toBeUndefined();
+});
+
+/**
+ * From rust-lang/crates.io, after the template-tag stage, shortened.
+ */
+test("the svg-jar stage stops on an icon name that is not a string", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-svg-jar": "2.7.1" } }),
+    "vite.config.mjs": "export default {};\n",
+    "app/components/footer.gjs": "<template>{{svgJar 'github'}}</template>\n",
+    "app/components/stats-value.gjs":
+      "<template>{{svgJar @icon role='img' aria-hidden='true'}}</template>\n",
+  });
+
+  let { blockers } = await svgJar.check(app);
+
+  expect(blockers.map((blocker) => [blocker.title, blocker.where])).toEqual([
+    ["Icon names that are not strings", ["app/components/stats-value.gjs"]],
+  ]);
 });

@@ -124,11 +124,16 @@ export const emberStyleguide = {
 };
 
 /**
- * @svg-jar/codemod 0.0.1 with svg-jar/codemod PRs 1, 2 and 3, and a built dist/.
+ * @svg-jar/codemod 0.0.1 with svg-jar/codemod PRs 2 and 3, and a built dist/.
  * Go back to the npm version when a release has them.
  */
 const SVG_JAR_CODEMOD =
-  "github:NullVoxPopuli-ai-agent/codemod#8cfc6d175c148726e16153d8353b604138439ee3";
+  "github:NullVoxPopuli-ai-agent/codemod#6809cae188e3178e2c045bbbf5173b5a0a48ca2c";
+
+/**
+ * `{{svgJar @icon}}` or `(svgJar this.name)`: an icon name that is not a string.
+ */
+const DYNAMIC_NAME = /[{(]\s*svg-?[jJ]ar\s+(?!["'])/;
 
 /**
  * @param {import('#project.js').Project} project
@@ -142,6 +147,8 @@ function svgJarUsers(project) {
 
 /**
  * Runs after the template-tag stage, because the svg-jar codemod changes .gjs and .gts files.
+ * ember-svg-jar does not work with Vite, so the stage always removes it.
+ * The codemod needs a string for each icon name, so a dynamic name stops the stage.
  *
  * @type {Stage}
  */
@@ -150,7 +157,7 @@ export const svgJar = {
   label: "Replace ember-svg-jar with @svg-jar/plugin (@svg-jar/codemod)",
 
   detect(project) {
-    return Boolean(project.dependency("ember-svg-jar")) && !project.dependency("@svg-jar/plugin");
+    return Boolean(project.dependency("ember-svg-jar"));
   },
 
   async check(project) {
@@ -171,6 +178,19 @@ export const svgJar = {
         where: hbs,
         action:
           "Run the template-tag stage first. The svg-jar codemod changes .gjs and .gts files only.",
+      });
+    }
+
+    let dynamic = project
+      .files(["{app,tests}/**/*.{gjs,gts}"])
+      .filter((file) => DYNAMIC_NAME.test(project.read(file)));
+
+    if (dynamic.length > 0) {
+      report.blockers.push({
+        title: "Icon names that are not strings",
+        where: dynamic,
+        action:
+          "Make each icon static: import the SVG file in the caller, and pass the component instead of its name.",
       });
     }
 
@@ -207,15 +227,13 @@ export const svgJar = {
     let users = svgJarUsers(project);
 
     if (users.length > 0) {
-      todo.push({
-        title: "Icons that the svg-jar codemod did not find",
-        where: users,
-        action: "Import each SVG file, and use it as a component. Then remove ember-svg-jar.",
-      });
-    } else {
-      editPackageJson(project, (pkg) => removeDependency(pkg, "ember-svg-jar"));
-      removeBuildOptions(project, ["svgJar"]);
+      throw new Error(
+        `The svg-jar codemod did not find the icons in ${users.join(", ")}. Its output is above.`,
+      );
     }
+
+    editPackageJson(project, (pkg) => removeDependency(pkg, "ember-svg-jar"));
+    removeBuildOptions(project, ["svgJar"]);
 
     return todo;
   },
