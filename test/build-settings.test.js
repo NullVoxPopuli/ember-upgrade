@@ -79,7 +79,11 @@ test("the ember-cli-build settings move to the places that a Vite build reads", 
 `,
     "vendor/qunit.css": ".qunit {}\n",
     "tests/test-helper.js": "import { start } from 'ember-qunit';\n\nstart();\n",
-    "node_modules/msw/mockServiceWorker.js": "/* worker */\n",
+    "node_modules/msw/package.json": JSON.stringify({
+      name: "msw",
+      exports: { "./mockServiceWorker.js": "./lib/mockServiceWorker.js" },
+    }),
+    "node_modules/msw/lib/mockServiceWorker.js": "/* worker */\n",
   });
 
   expect(buildSettings.detect(app)).toBe(true);

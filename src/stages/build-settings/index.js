@@ -1,4 +1,5 @@
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, dirname, join, posix } from "node:path";
 
 import { parseProgram, propertyName, walk } from "#ast.js";
@@ -314,7 +315,10 @@ export default {
      * on each install, so the build does not need to.
      */
     if (settings.msw) {
-      let worker = join(project.directory, "node_modules", MSW_WORKER);
+      /**
+       * msw maps the path through its package.json `exports`, as require.resolve in ember-cli-build did.
+       */
+      let worker = createRequire(join(project.directory, "package.json")).resolve(MSW_WORKER);
 
       mkdirSync(join(project.directory, "public"), { recursive: true });
       copyFileSync(worker, join(project.directory, "public", basename(MSW_WORKER)));
