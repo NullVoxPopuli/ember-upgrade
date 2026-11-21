@@ -153,16 +153,20 @@ export const apps = [
       "ember-error-route",
       "ember-cli-head",
       "@mainmatter/ember-api-actions",
+      "macro-decorators",
       "template-tag",
       "svg-jar",
       "ember-source-7.4",
       "build-settings",
+      "app-tree",
+      "declare-imports",
+      "ember-nvp",
+      "undeprecate-inject",
     ],
     /**
-     * ember.nvp 2.5.2 looks up the app's own workspace package @crates-io/msw on npm.
-     * NullVoxPopuli/ember.nvp#205 fixes it.
+     * The upgraded app must pass its own tests, not only build.
      */
-    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
+    after: [["pnpm", "test"]],
   },
   {
     name: "croodle",
