@@ -1,6 +1,8 @@
 import { parseProgram, propertyName, walk } from "#ast.js";
-import { addVitePlugin, viteConfig } from "#config-files.js";
+import { addVitePlugin, removeCompatBuildOptions, viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
+import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
 
 /** @typedef {import('#ast.js').Node} Node */
@@ -12,6 +14,10 @@ const DOCS = "https://github.com/auditboard/ember-scoped-css#configuration";
  * Adds the ember-scoped-css plugins to the configs that the vite stage made.
  * The ember-css-modules stage runs before the vite stage, when these configs do not exist yet.
  *
+ * ember-scoped-css before 1.0 built through ember-scoped-css-compat, a v1 addon, and a webpack loader.
+ * The stage moves those apps to the latest ember-scoped-css in the same step,
+ * because the build needs the new plugins as soon as the v1 addon is gone.
+ *
  * @type {import('#types.js').Stage}
  */
 export default {
@@ -21,15 +27,11 @@ export default {
   detect(project) {
     let config = viteConfig(project);
 
-    /**
-     * ember-scoped-css-compat is the v1 addon setup of ember-scoped-css before 1.0,
-     * which still builds after the vite stage. The plugins here are for 1.0 and later.
-     */
     return Boolean(
       project.dependency("ember-scoped-css") &&
-      !project.dependency("ember-scoped-css-compat") &&
       config &&
-      !project.read(config).includes("ember-scoped-css/vite"),
+      (project.dependency("ember-scoped-css-compat") ||
+        !project.read(config).includes("ember-scoped-css/vite")),
     );
   },
 
@@ -38,6 +40,31 @@ export default {
   },
 
   async run(project) {
+    if (project.dependency("ember-scoped-css-compat")) {
+      editPackageJson(project, (pkg) => {
+        removeDependency(pkg, "ember-scoped-css-compat");
+        setDependency(
+          pkg,
+          "ember-scoped-css",
+          `^${published("ember-scoped-css")?.version ?? "3.5.2"}`,
+        );
+      });
+
+      /**
+       * Vite does not read the webpack config in packagerOptions, and its loader rule
+       * resolves ember-scoped-css/build/app-css-loader, which ember-scoped-css 1.0 removed.
+       */
+      if (removeCompatBuildOptions(project, ["packagerOptions"]).length > 0) {
+        recordProgress(project, {
+          id: "ember-scoped-css: packagerOptions",
+          status: "removed",
+          note:
+            "compatBuild's packagerOptions held the webpack config of the ember-cli build, which Vite does not read. " +
+            "Move what the app still needs, such as resolve fallbacks, to vite.config.",
+        });
+      }
+    }
+
     let roots = additionalRoots(project);
     let options = roots.length
       ? `{ additionalRoots: [${roots.map((root) => `'${root}'`).join(", ")}] }`
