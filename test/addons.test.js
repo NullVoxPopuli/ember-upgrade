@@ -7,6 +7,7 @@ import { Project } from "#project.js";
 import { parseProgress, printProgress, readProgress } from "#progress.js";
 import emberMetrics from "#stages/addons/ember-metrics.js";
 import { emberCliDeploy } from "#stages/addons/removals.js";
+import { emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
 import { deprecationWorkflow, emberStyleguide } from "#stages/addons/updates.js";
 
@@ -415,4 +416,29 @@ export default function svgJarIcon(name) {
   return ICONS[name];
 }
 `);
+});
+
+test("a small v1 addon moves into the app, and its imports follow", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-cli-head": "2.0.0", "ember-source": "7.4.0" },
+    }),
+    "app/templates/head.hbs": "<meta name='description' content={{this.model.description}}>\n",
+    "app/templates/application.gjs":
+      "import HeadLayout from 'ember-cli-head/components/head-layout';\n\n<template><HeadLayout /></template>\n",
+  });
+
+  expect((await emberCliHead.check(app)).blockers).toEqual([]);
+
+  await emberCliHead.run(app);
+
+  expect(app.read("app/templates/application.gjs")).toBe(
+    "import HeadLayout from '../components/head-layout.gjs';\n\n<template><HeadLayout /></template>\n",
+  );
+  expect(app.has("app/templates/head.hbs")).toBe(false);
+  expect(app.read("app/components/head-content.hbs")).toBe(
+    "<meta name='description' content={{this.model.description}}>\n",
+  );
+  expect(app.has("app/services/head-data.js")).toBe(true);
+  expect(app.dependency("ember-cli-head")).toBeUndefined();
 });
