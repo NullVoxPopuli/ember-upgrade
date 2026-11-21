@@ -6,10 +6,12 @@ import { atLeast } from "#version.js";
 
 /**
  * v1 addons depend on older copies of these packages, and the Vite build needs the latest one.
+ * @embroider/macros keeps one shared config, so two copies of it break the build.
  * The versions are the fallback when the registry does not answer.
  */
 const PINS = {
   "@ember/test-waiters": "4.1.2",
+  "@embroider/macros": "1.21.4",
   "babel-plugin-ember-template-compilation": "4.0.1",
 };
 
