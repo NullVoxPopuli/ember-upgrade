@@ -7,7 +7,7 @@ import { Project } from "#project.js";
 import { parseProgress, printProgress, readProgress } from "#progress.js";
 import emberMetrics from "#stages/addons/ember-metrics.js";
 import { emberCliDeploy } from "#stages/addons/removals.js";
-import { emberCliHead } from "#stages/addons/inline.js";
+import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
 import { deprecationWorkflow, emberStyleguide } from "#stages/addons/updates.js";
 
@@ -453,4 +453,38 @@ test("a small v1 addon moves into the app, and its imports follow", async () => 
 
   expect(own.read("app/services/head-data.js")).toBe("export default class HeadDataService {}\n");
   expect(app.dependency("ember-cli-head")).toBeUndefined();
+});
+
+test("CommonJS that only assigns exports becomes an ES module", () => {
+  expect(
+    commonJsToEsm(`"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+/**
+ * import macro from 'macro-decorators';
+ */
+function macro(fn) {
+  return fn;
+}
+exports.default = macro;
+function alias(key) {
+  return key;
+}
+exports.alias = alias;
+`),
+  ).toMatchInlineSnapshot(`
+    "/**
+     * import macro from 'macro-decorators';
+     */
+    function macro(fn) {
+      return fn;
+    }
+    export default macro;
+    function alias(key) {
+      return key;
+    }
+    export { alias };
+    "
+  `);
+
+  expect(commonJsToEsm(`module.exports = function () {};\n`)).toBeUndefined();
 });
