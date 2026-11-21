@@ -123,7 +123,10 @@ export const apps = [
       "ember-cli-deprecation-workflow",
       "template-tag",
       "ember-source-7.4",
+      "app-tree",
+      "declare-imports",
       "ember-nvp",
+      "undeprecate-inject",
     ],
     /**
      * The upgraded app must pass its own tests, not only build.
