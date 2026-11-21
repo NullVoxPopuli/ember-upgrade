@@ -21,8 +21,13 @@ export default {
   detect(project) {
     let config = viteConfig(project);
 
+    /**
+     * ember-scoped-css-compat is the v1 addon setup of ember-scoped-css before 1.0,
+     * which still builds after the vite stage. The plugins here are for 1.0 and later.
+     */
     return Boolean(
       project.dependency("ember-scoped-css") &&
+      !project.dependency("ember-scoped-css-compat") &&
       config &&
       !project.read(config).includes("ember-scoped-css/vite"),
     );

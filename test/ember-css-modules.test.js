@@ -19,7 +19,10 @@ import {
   wrapBareGlobal,
 } from "#stages/ember-css-modules/styles.js";
 import { rewriteTemplate } from "#stages/ember-css-modules/templates.js";
-import { addTemplateTransform, additionalRoots } from "#stages/ember-css-modules/vite.js";
+import emberScopedCss, {
+  addTemplateTransform,
+  additionalRoots,
+} from "#stages/ember-css-modules/vite.js";
 
 /**
  * @param {Record<string, string>} files
@@ -522,4 +525,23 @@ test("in-repo addons and pods need additionalRoots", () => {
   });
 
   expect(additionalRoots(app)).toEqual(["app", "lib/registries/addon"]);
+});
+
+test("an app on ember-scoped-css-compat keeps its setup", () => {
+  let files = {
+    "vite.config.mjs": "export default {};\n",
+  };
+  let current = project({
+    ...files,
+    "package.json": JSON.stringify({ devDependencies: { "ember-scoped-css": "^3.0.0" } }),
+  });
+  let compat = project({
+    ...files,
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-scoped-css": "^0.24.3", "ember-scoped-css-compat": "^10.2.3" },
+    }),
+  });
+
+  expect(emberScopedCss.detect(current)).toBe(true);
+  expect(emberScopedCss.detect(compat)).toBe(false);
 });
