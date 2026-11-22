@@ -33,6 +33,7 @@ import emberNvp from "./ember-nvp/index.js";
 import { classicLts, viteLts } from "./ember-source/index.js";
 import packageManager from "./package-manager/index.js";
 import templateTag from "./template-tag/index.js";
+import templateWhitespace from "./template-whitespace/index.js";
 import undeprecateInject from "./undeprecate-inject/index.js";
 import vite from "./vite/index.js";
 
@@ -88,6 +89,7 @@ export const stages = [
   macroDecorators,
   templateTag,
   svgJar,
+  templateWhitespace,
   viteLts,
   buildSettings,
   /**

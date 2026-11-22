@@ -159,6 +159,7 @@ export const apps = [
       "macro-decorators",
       "template-tag",
       "svg-jar",
+      "template-whitespace",
       "ember-source-7.4",
       "build-settings",
       "app-tree",
