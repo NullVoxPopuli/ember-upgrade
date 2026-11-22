@@ -32,6 +32,7 @@ import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
 import { classicLts, viteLts } from "./ember-source/index.js";
 import packageManager from "./package-manager/index.js";
+import pods from "./pods/index.js";
 import templateColocation from "./template-colocation/index.js";
 import templateTag from "./template-tag/index.js";
 import templateWhitespace from "./template-whitespace/index.js";
@@ -91,6 +92,7 @@ export const stages = [
   emberCliHead,
   emberApiActions,
   macroDecorators,
+  pods,
   templateColocation,
   templateTag,
   svgJar,

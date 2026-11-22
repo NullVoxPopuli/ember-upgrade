@@ -276,6 +276,7 @@ export const apps = [
       "ember-wormhole",
       "v1-addons",
       "ember-event-helpers",
+      "pods",
     ],
     stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },
