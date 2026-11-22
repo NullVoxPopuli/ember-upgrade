@@ -13,6 +13,7 @@ import { recordProgress } from "#progress.js";
  * @property {string} label
  * @property {Record<string, string>} files the files to write, by path in the project
  * @property {Record<string, string>} [defaults] files to write only when the app has none, because the app can override them
+ * @property {(project: Project) => Record<string, string> | undefined} [generated] files made from the installed package; undefined when the stage cannot make them
  * @property {Record<string, string>} imports each import specifier of the addon, and the file that replaces it
  * @property {Record<string, string>} [moves] files of the app that move, from and to
  * @property {Record<string, string>} [dependencies] packages that the new files import, with a fallback version
@@ -40,7 +41,12 @@ function specifier(from, to) {
  * @returns {import('#types.js').Stage}
  */
 export function inlineStage(inline) {
-  let targets = Object.keys(inline.files).concat(Object.values(inline.moves ?? {}));
+  let targets = Object.keys(inline.files).concat(
+    Object.values(inline.moves ?? {}),
+    Object.values(inline.imports).filter(
+      (file) => !(file in inline.files) && !(file in (inline.defaults ?? {})),
+    ),
+  );
   let defaults = Object.keys(inline.defaults ?? {});
 
   return {
@@ -74,6 +80,14 @@ export function inlineStage(inline) {
         });
       }
 
+      if (inline.generated && !inline.generated(project)) {
+        blockers.push({
+          title: `The code of ${inline.name} that the stage cannot convert`,
+          where: [`node_modules/${inline.name}`],
+          action: "Move the package's code into the app by hand.",
+        });
+      }
+
       return { blockers, todo: [] };
     },
 
@@ -89,6 +103,10 @@ export function inlineStage(inline) {
 
       for (let [file, contents] of Object.entries(inline.files)) write(file, contents);
 
+      for (let [file, contents] of Object.entries(inline.generated?.(project) ?? {})) {
+        write(file, contents);
+      }
+
       for (let [file, contents] of Object.entries(inline.defaults ?? {})) {
         if (!project.has(file)) write(file, contents);
       }
@@ -98,7 +116,14 @@ export function inlineStage(inline) {
         rmSync(join(project.directory, from));
       }
 
+      /**
+       * The stage's own files keep the addon's code as it was, examples in comments too.
+       */
+      let own = new Set(targets.concat(defaults));
+
       for (let file of project.files(SOURCES)) {
+        if (own.has(file)) continue;
+
         let source = project.read(file);
         let output = source;
 
@@ -136,7 +161,7 @@ export function inlineStage(inline) {
  * @param {string} license
  */
 function origin(name, license = "MIT") {
-  return `/**\n * From ${name} (${license}). ember-upgrade moved it into the app, because it has no v2 release.\n */\n`;
+  return `/**\n * From ${name} (${license}). ember-upgrade moved it into the app.\n */\n`;
 }
 
 export const emberEventHelpers = inlineStage({
@@ -378,4 +403,56 @@ function addPath(baseUrl, path) {
   note:
     "@mainmatter/ember-api-actions is moved into the app. It uses the adapter of the model. " +
     "With WarpDrive request builders, `store.request()` does the same without an adapter.",
+});
+
+/**
+ * Converts CommonJS that only has `exports.name = name;` statements to ES module syntax.
+ *
+ * @param {string} source
+ * @returns {string | undefined} undefined when the code uses other CommonJS forms
+ */
+export function commonJsToEsm(source) {
+  let output = source
+    .replace(/^"use strict";\n/, "")
+    .replace(/^Object\.defineProperty\(exports, "__esModule", \{ value: true \}\);\n/m, "")
+    .replace(/^exports\.default = ([\w$]+);$/gm, "export default $1;")
+    .replace(/^exports\.([\w$]+) = \1;$/gm, "export { $1 };");
+
+  if (/\b(exports|module\.exports|require)\b/.test(output.replace(/\/\*[^]*?\*\/|\/\/.*$/gm, "")))
+    return;
+
+  return output;
+}
+
+/**
+ * @param {Project} project
+ * @param {string} name a package that ships CommonJS
+ * @param {string} file its entry file
+ * @param {string} target
+ */
+function convertedPackage(project, name, file, target) {
+  let path = join("node_modules", name, file);
+
+  if (!project.has(path)) return;
+
+  let code = commonJsToEsm(project.read(path));
+
+  if (code === undefined) return;
+
+  return { [target]: `${origin(name)}${code}` };
+}
+
+/**
+ * macro-decorators ships only CommonJS that sets `__esModule`.
+ * In a package with `"type": "module"`, Vite gives its default import the whole `module.exports`, as Node does,
+ * so `macro` is not a function after the ember-nvp stage.
+ */
+export const macroDecorators = inlineStage({
+  name: "macro-decorators",
+  label: "Move macro-decorators into the app as an ES module",
+  files: {},
+  generated: (project) =>
+    convertedPackage(project, "macro-decorators", "dist/index.js", "app/utils/macro-decorators.js"),
+  imports: { "macro-decorators": "app/utils/macro-decorators.js" },
+  note: "macro-decorators is moved into the app, as an ES module.",
 });

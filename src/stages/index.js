@@ -7,6 +7,7 @@ import {
   emberCliHead,
   emberErrorRoute,
   emberEventHelpers,
+  macroDecorators,
 } from "./addons/inline.js";
 import emberMetrics from "./addons/ember-metrics.js";
 import emberWebApp from "./addons/ember-web-app.js";
@@ -21,7 +22,9 @@ import {
   qunitConsoleGrouper,
 } from "./addons/removals.js";
 import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
+import appTree from "./app-tree/index.js";
 import buildSettings from "./build-settings/index.js";
+import declareImports from "./declare-imports/index.js";
 import emberCli from "./ember-cli/index.js";
 import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
@@ -30,6 +33,8 @@ import emberNvp from "./ember-nvp/index.js";
 import { classicLts, viteLts } from "./ember-source/index.js";
 import packageManager from "./package-manager/index.js";
 import templateTag from "./template-tag/index.js";
+import templateWhitespace from "./template-whitespace/index.js";
+import undeprecateInject from "./undeprecate-inject/index.js";
 import vite from "./vite/index.js";
 
 /**
@@ -81,9 +86,18 @@ export const stages = [
   emberErrorRoute,
   emberCliHead,
   emberApiActions,
+  macroDecorators,
   templateTag,
   svgJar,
+  templateWhitespace,
   viteLts,
   buildSettings,
+  /**
+   * After the addon stages, which change the app's addons, and before ember-nvp,
+   * whose apps neither merge app trees nor resolve undeclared packages.
+   */
+  appTree,
+  declareImports,
   emberNvp,
+  undeprecateInject,
 ];
