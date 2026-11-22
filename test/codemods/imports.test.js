@@ -37,3 +37,27 @@ export default class Panel extends Component {
     "
   `);
 });
+
+/**
+ * From code-corps/code-corps-ember app/components/donation/donation-container.js, after the conversion.
+ */
+test("adds imports after the last import that stays", () => {
+  let source = `import Component from '@glimmer/component';
+import { or, empty } from '@ember/object/computed';
+
+export default class DonationContainer extends Component {}
+`;
+
+  expect(
+    updateImports(source, "donation-container.js", {
+      prune: ["@ember/object/computed"],
+      add: new Map([["@ember/utils", new Set(["isEmpty"])]]),
+    }),
+  ).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { isEmpty } from '@ember/utils';
+
+    export default class DonationContainer extends Component {}
+    "
+  `);
+});

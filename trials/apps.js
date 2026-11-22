@@ -138,8 +138,10 @@ export const apps = [
       "template-colocation",
       "dynamic-components",
       "classic-components",
+      "template-tag",
+      "ember-source-7.4",
+      "build-settings",
     ],
-    stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },
   {
     name: "super-rentals",

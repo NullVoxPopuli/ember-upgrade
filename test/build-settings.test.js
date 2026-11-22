@@ -126,3 +126,65 @@ module.exports = async function (defaults) {
   expect(JSON.parse(app.read("package.json")).msw).toEqual({ workerDirectory: ["public"] });
   expect(buildSettings.detect(app)).toBe(false);
 });
+
+/**
+ * From emberobserver/client, after the vite stage, shortened.
+ */
+test("an app.import of an npm package's file becomes an import of that file", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@embroider/vite": "^1.0.0", dompurify: "^2.0.17", "left-pad": "^1.3.0" },
+    }),
+    "ember-cli-build.js": `'use strict';
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { compatBuild } = require('@embroider/compat');
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  let app = new EmberApp(defaults, {});
+
+  app.import('node_modules/dompurify/dist/purify.js', {
+    using: [{ transformation: 'amd', as: 'dom-purify' }],
+  });
+  app.import('node_modules/left-pad/index.js');
+
+  return compatBuild(app, buildOnce);
+};
+`,
+    "node_modules/dompurify/dist/purify.js": "",
+    "node_modules/left-pad/index.js": "",
+    "app/app.js": "import Application from '@ember/application';\n",
+    "app/helpers/dom-purify.js": "import createDOMPurify from 'dom-purify';\n",
+  });
+
+  expect(buildSettings.detect(app)).toBe(true);
+
+  await buildSettings.run(app);
+
+  expect(buildSettings.detect(app)).toBe(false);
+  expect({
+    build: app.read("ember-cli-build.js"),
+    app: app.read("app/app.js"),
+    helper: app.read("app/helpers/dom-purify.js"),
+  }).toMatchInlineSnapshot(`
+    {
+      "app": "import Application from '@ember/application';
+    import 'left-pad/index.js';
+    ",
+      "build": "'use strict';
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+    const { compatBuild } = require('@embroider/compat');
+
+    module.exports = async function (defaults) {
+      const { buildOnce } = await import('@embroider/vite');
+      let app = new EmberApp(defaults, {});
+
+
+      return compatBuild(app, buildOnce);
+    };
+    ",
+      "helper": "import createDOMPurify from 'dompurify/dist/purify.js';
+    ",
+    }
+  `);
+});

@@ -43,7 +43,7 @@ function pluginModule(source, node) {
  * @property {string[]} babelPlugins plugins from `babel.plugins` that babel.config needs
  * @property {string[]} otherBabel parts of the `babel` option that the stage cannot move
  * @property {string | undefined} autoImport the source of the `autoImport` option
- * @property {{ statement: Node, file: string, type: string }[]} imports the `app.import()` calls
+ * @property {{ statement: Node, file: string, type: string, amd?: string }[]} imports the `app.import()` calls, with the module name of an `amd` transformation
  * @property {boolean} msw the build copies the MSW service worker into the public files
  */
 
@@ -104,10 +104,25 @@ export function readSettings(source, file) {
       let options = node.arguments[1];
       let type = options?.properties?.find((/** @type {Node} */ p) => propertyName(p) === "type");
 
+      let using = options?.properties?.find((/** @type {Node} */ p) => propertyName(p) === "using");
+      let amd = (using?.value?.elements ?? [])
+        .map((/** @type {Node} */ element) => {
+          let fields = new Map(
+            (element.properties ?? []).map((/** @type {Node} */ p) => [
+              propertyName(p),
+              p.value?.value,
+            ]),
+          );
+
+          return fields.get("transformation") === "amd" ? fields.get("as") : undefined;
+        })
+        .find((/** @type {unknown} */ name) => typeof name === "string");
+
       settings.imports.push({
         statement: parent,
         file: String(node.arguments[0].value),
         type: type?.value.value === "test" ? "test" : "app",
+        amd,
       });
     }
   });
@@ -193,6 +208,20 @@ function removeStatement(edits, statement) {
   if (blankBefore && blankAfter) end += blankAfter[0].length;
 
   edits.replace({ start, end }, "");
+}
+
+/**
+ * @param {Project} project
+ * @param {string} from a module name, such as `dom-purify`
+ * @param {string} to such as `dompurify/dist/purify.js`
+ */
+function renameImports(project, from, to) {
+  for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
+    let source = project.read(file);
+    let output = source.split(`'${from}'`).join(`'${to}'`).split(`"${from}"`).join(`"${to}"`);
+
+    if (output !== source) project.write(file, output);
+  }
 }
 
 /**
@@ -287,6 +316,23 @@ export default {
           ? ["tests/test-helper.js", "tests/test-helper.ts"]
           : ["app/app.js", "app/app.ts"],
       );
+
+      /**
+       * A file of an npm package: the app imports it from the package, as Vite resolves it.
+       * An `amd` transformation named the module, so imports of that name now name the file.
+       */
+      if (entry.file.startsWith("node_modules/") && entryFile && project.has(entry.file)) {
+        let path = entry.file.slice("node_modules/".length);
+
+        if (entry.amd) {
+          renameImports(project, entry.amd, path);
+        } else {
+          prependImport(project, entryFile, `import '${path}';`);
+        }
+
+        removeStatement(edits, entry.statement);
+        continue;
+      }
 
       if (!entry.file.startsWith("vendor/") || !entryFile || !project.has(entry.file)) {
         todo.push({

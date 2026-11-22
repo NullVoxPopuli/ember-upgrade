@@ -80,6 +80,8 @@ export function updateImports(source, file, changes) {
   );
   /** @type {Map<string, Set<string>>} */
   let missing = new Map();
+  /** @type {Set<Node>} */
+  let removed = new Set();
 
   for (let [module, names] of changes.add) {
     let have = new Set(
@@ -104,6 +106,7 @@ export function updateImports(source, file, changes) {
 
     if (kept.length === 0 && !added) {
       edits.removeLine(node);
+      removed.add(node);
       continue;
     }
 
@@ -127,7 +130,7 @@ export function updateImports(source, file, changes) {
   }
 
   if (missing.size > 0) {
-    let last = imports[imports.length - 1];
+    let last = imports.filter((/** @type {Node} */ node) => !removed.has(node)).pop();
     let lines = Array.from(missing).map(([module, names]) => {
       let list = Array.from(names);
       let defaultName = list.find((name) => name.startsWith("default:"))?.slice(8);
@@ -140,7 +143,7 @@ export function updateImports(source, file, changes) {
     });
 
     if (last) edits.insert(last.end, `\n${lines.join("\n")}`);
-    else edits.insert(0, `${lines.join("\n")}\n`);
+    else edits.insert(imports[0]?.start ?? 0, `${lines.join("\n")}\n`);
   }
 
   return edits.size > 0 ? edits.apply() : source;
