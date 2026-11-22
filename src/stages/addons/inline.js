@@ -17,6 +17,7 @@ import { recordProgress } from "#progress.js";
  * @property {Record<string, string>} imports each import specifier of the addon, and the file that replaces it
  * @property {Record<string, string>} [moves] files of the app that move, from and to
  * @property {Record<string, string>} [dependencies] packages that the new files import, with a fallback version
+ * @property {Record<string, string>} [ranges] packages that the new files import, with the range that the addon asked for
  * @property {string} note what the person needs to know about the moved code
  */
 
@@ -142,6 +143,10 @@ export function inlineStage(inline) {
           if (!project.dependency(name)) {
             setDependency(pkg, name, `^${published(name)?.version ?? fallback}`);
           }
+        }
+
+        for (let [name, range] of Object.entries(inline.ranges ?? {})) {
+          if (!project.dependency(name)) setDependency(pkg, name, range);
         }
       });
 
