@@ -6,6 +6,7 @@ import { editPackageJson, removeDependency, setDependency } from "#package-json.
 import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
+import { inlineV1Stage } from "./inline-v1.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
 import { ICONS_MODULE, iconsModule, rewriteDynamicIcons } from "./svg-jar-icons.js";
 
@@ -434,9 +435,12 @@ export const v2Addons = {
       }
 
       let release = published(name);
+      let inline = release?.v2 ? undefined : inlineV1Stage(project, name);
 
       if (release?.v2) {
         stages.push(updateStage(name, release));
+      } else if (inline) {
+        stages.push(inline);
       } else {
         v1Only.push({
           name,
