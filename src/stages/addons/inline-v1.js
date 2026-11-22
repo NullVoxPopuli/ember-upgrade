@@ -2,6 +2,7 @@ import { existsSync, globSync, readFileSync, realpathSync } from "node:fs";
 import { join, posix } from "node:path";
 
 import { parseProgram, propertyName, walk } from "#ast.js";
+import { contentForPages } from "./content-for.js";
 import { inlineStage } from "./inline.js";
 
 /** @typedef {import('#ast.js').Node} Node */
@@ -25,7 +26,13 @@ const TEMPLATE_IMPORT = /^import (\w+) from (["'])([^"']+)\2;?\n/gm;
  * @property {Map<string, string>} files the new files, by path in the project
  * @property {Record<string, string>} imports each module of the addon, and the file that has it now
  * @property {Record<string, string>} ranges the addon's runtime dependencies, with its ranges
+ * @property {boolean} contentFor the addon adds HTML to the app's pages with a `contentFor` hook
  */
+
+/**
+ * The build hooks whose work the inline stage does once: `contentFor` adds HTML, which goes into the app's HTML files.
+ */
+const INLINED_HOOKS = new Set(["contentFor"]);
 
 /**
  * @param {string} directory the installed addon
@@ -265,7 +272,12 @@ function withoutExtension(path) {
  * @returns {Plan | undefined}
  */
 export function planInline(name, directory, taken) {
-  if (buildHooks(directory).length > 0 || existsSync(join(directory, "addon", "styles"))) return;
+  let hooks = buildHooks(directory);
+
+  if (hooks.some((hook) => !INLINED_HOOKS.has(hook))) return;
+  if (existsSync(join(directory, "addon", "styles"))) return;
+
+  let contentFor = hooks.includes("contentFor");
 
   let sources = globSync("{addon,app,test-support,addon-test-support}/**/*", {
     cwd: directory,
@@ -275,7 +287,7 @@ export function planInline(name, directory, taken) {
     .filter((file) => CODE.test(file))
     .sort();
 
-  if (sources.length === 0) return;
+  if (sources.length === 0 && !contentFor) return;
 
   let placed = placements(
     name,
@@ -348,7 +360,7 @@ export function planInline(name, directory, taken) {
     if (!BUILD_DEPENDENCY.test(dependency)) ranges[dependency] = String(range);
   }
 
-  return { files, imports, ranges };
+  return { files, imports, ranges, contentFor };
 }
 
 /**
@@ -447,14 +459,22 @@ export function inlineV1Stage(project, name) {
 
   if (!plan) return;
 
-  let { files, imports, ranges } = plan;
+  let { files, imports, ranges, contentFor } = plan;
+
+  /**
+   * A hook that needs ember-cli, such as one that calls `this.addons`, keeps the addon a v1 addon.
+   */
+  if (contentFor && !contentForPages(project, directory)) return;
 
   return inlineStage({
     name,
     label: `Move ${name}, a v1 addon with no v2 release, into the app`,
     files: Object.fromEntries(files),
+    generated: contentFor ? (target) => contentForPages(target, directory) : undefined,
     imports,
     ranges,
-    note: `${name} is a v1 addon with no v2 release, so its code is in the app now, where ember-cli merged it.`,
+    note: contentFor
+      ? `${name} is a v1 addon with no v2 release, so its code is in the app now, where ember-cli merged it, and the HTML that its contentFor hook added is in the app's HTML files.`
+      : `${name} is a v1 addon with no v2 release, so its code is in the app now, where ember-cli merged it.`,
   });
 }
