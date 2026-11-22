@@ -141,7 +141,10 @@ export const apps = [
       "template-tag",
       "ember-source-7.4",
       "build-settings",
+      "app-tree",
+      "declare-imports",
     ],
+    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "super-rentals",
