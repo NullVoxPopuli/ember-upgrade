@@ -69,4 +69,17 @@ test("expected text loses the indentation that content-tag removes from the temp
     "
   `);
   expect(templateWhitespace.detect(app)).toBe(false);
+
+  /**
+   * A second run must not move the lines again.
+   */
+  let before = app.read("tests/acceptance/support-test.js");
+
+  app.write(
+    "app/templates/other.gjs",
+    "<template>\n    <p>\n      For all other cases:\n      <b>help@crates.io</b>\n    </p>\n</template>\n",
+  );
+
+  expect(templateWhitespace.detect(app)).toBe(false);
+  expect(app.read("tests/acceptance/support-test.js")).toBe(before);
 });

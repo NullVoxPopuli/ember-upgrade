@@ -1,4 +1,4 @@
-import { recordProgress } from "#progress.js";
+import { readProgress, recordProgress } from "#progress.js";
 
 /** @typedef {import('#project.js').Project} Project */
 
@@ -98,6 +98,12 @@ export default {
   label: "Match the tests' expected text to the whitespace that content-tag renders",
 
   detect(project) {
+    /**
+     * A moved line can match another template line at its new indentation,
+     * so the text cannot show that the stage ran. The progress entry does.
+     */
+    if (readProgress(project).some((entry) => entry.id === "template-whitespace")) return false;
+
     let lines = templateLines(project);
 
     return project
