@@ -134,3 +134,15 @@ test("a v1 addon with build hooks stays", () => {
 
   expect(inlineV1Stage(app, "ember-tooltips")).toBeUndefined();
 });
+
+test("a v1 addon that exports something other than an object stays", () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-engines": "^0.8.23" } }),
+    "node_modules/ember-engines/package.json": JSON.stringify({ keywords: ["ember-addon"] }),
+    "node_modules/ember-engines/index.js":
+      "const ManifestGenerator = require('ember-asset-loader/lib/manifest-generator');\nmodule.exports = ManifestGenerator.extend({ name: 'ember-engines' });\n",
+    "node_modules/ember-engines/addon/index.js": "export default {};\n",
+  });
+
+  expect(inlineV1Stage(app, "ember-engines")).toBeUndefined();
+});

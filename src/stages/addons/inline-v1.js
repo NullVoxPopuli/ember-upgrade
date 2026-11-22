@@ -31,23 +31,33 @@ const TEMPLATE_IMPORT = /^import (\w+) from (["'])([^"']+)\2;?\n/gm;
  * @returns {string[]} the index.js properties that are build hooks
  */
 export function buildHooks(directory) {
-  let file = join(directory, "index.js");
+  let manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+  let file = join(directory, manifest["ember-addon"]?.main ?? "index.js");
 
   if (!existsSync(file)) return [];
 
   let program = parseProgram(readFileSync(file, "utf8"), file);
-  /** @type {string[]} */
-  let hooks = [];
+  /** @type {string[] | undefined} */
+  let hooks;
 
   walk(program, (node) => {
     if (
       node.type !== "AssignmentExpression" ||
       node.left?.type !== "MemberExpression" ||
-      node.left.object?.name !== "module" ||
-      node.right?.type !== "ObjectExpression"
+      node.left.object?.name !== "module"
     ) {
       return;
     }
+
+    /**
+     * An export that is not an object, such as `ManifestGenerator.extend({ ... })` (ember-engines), brings hooks of its own.
+     */
+    if (node.right?.type !== "ObjectExpression") {
+      hooks = ["module.exports"];
+      return;
+    }
+
+    hooks = [];
 
     for (let property of node.right.properties) {
       let name = propertyName(property);
@@ -56,7 +66,7 @@ export function buildHooks(directory) {
     }
   });
 
-  return hooks;
+  return hooks ?? ["module.exports"];
 }
 
 /**
