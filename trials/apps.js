@@ -329,6 +329,7 @@ export const apps = [
       "update-ember-simple-auth",
       "update-ember-truth-helpers",
       "v1-addons",
+      "dynamic-components",
     ],
     stopsAt: { stage: "template-tag", message: "`pnpm install` failed" },
   },
