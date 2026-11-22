@@ -30,6 +30,7 @@ import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
+import dynamicComponents from "./dynamic-components/index.js";
 import { classicLts, viteLts } from "./ember-source/index.js";
 import packageManager from "./package-manager/index.js";
 import noImplicitThis from "./no-implicit-this/index.js";
@@ -96,6 +97,7 @@ export const stages = [
   pods,
   noImplicitThis,
   templateColocation,
+  dynamicComponents,
   templateTag,
   svgJar,
   templateWhitespace,
