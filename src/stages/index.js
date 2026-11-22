@@ -1,5 +1,6 @@
 import composableHelpers from "./addons/composable-helpers.js";
 import emberCliMirage from "./addons/ember-cli-mirage.js";
+import emberCliSass from "./addons/ember-cli-sass.js";
 import emberFetch from "./addons/ember-fetch.js";
 import {
   emberApiActions,
@@ -55,6 +56,10 @@ export const stages = [
   emberWebApp,
   emberStyleguide,
   emberCli,
+  /**
+   * Before every stage that builds with ember-cli: node-sass does not build for current Node versions.
+   */
+  emberCliSass,
   emberFetch,
   composableHelpers,
   classicLts,
