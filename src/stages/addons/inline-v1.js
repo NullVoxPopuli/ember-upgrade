@@ -461,6 +461,11 @@ export function inlineV1Stage(project, name) {
 
   let { files, imports, ranges, contentFor } = plan;
 
+  /**
+   * A hook that needs ember-cli, such as one that calls `this.addons`, keeps the addon a v1 addon.
+   */
+  if (contentFor && !contentForPages(project, directory)) return;
+
   return inlineStage({
     name,
     label: `Move ${name}, a v1 addon with no v2 release, into the app`,

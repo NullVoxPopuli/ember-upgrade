@@ -304,3 +304,35 @@ module.exports = {
     }
   `);
 });
+
+/**
+ * From ember-power-select-typeahead 0.8.1 (MIT): the hook asks ember-cli for another addon.
+ */
+test("an addon whose contentFor hook needs ember-cli stays a v1 addon", () => {
+  let addon = "node_modules/ember-power-select-typeahead";
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-power-select-typeahead": "^0.8.1" },
+    }),
+    "config/environment.js": "module.exports = function () {\n  return {};\n};\n",
+    "index.html": '<html><body>\n{{content-for "body"}}\n</body></html>\n',
+    [`${addon}/package.json`]: JSON.stringify({
+      name: "ember-power-select-typeahead",
+      keywords: ["ember-addon"],
+    }),
+    [`${addon}/index.js`]: `'use strict';
+module.exports = {
+  name: 'ember-power-select-typeahead',
+  contentFor: function(type, config) {
+    var emberPowerSelect = this.addons.filter(function(addon) {
+      return addon.name === 'ember-power-select';
+    })[0];
+    return emberPowerSelect.contentFor(type, config);
+  }
+};
+`,
+    [`${addon}/addon/components/power-select-typeahead.js`]: "export default class {}\n",
+  });
+
+  expect(inlineV1Stage(app, "ember-power-select-typeahead")).toBeUndefined();
+});
