@@ -212,6 +212,7 @@ export const apps = [
       "ember-cli-mirage",
       "ember-css-modules",
       "vite",
+      "vite-sass",
       "ember-scoped-css",
       "ember-cli-autoprefixer",
       "ember-cli-deprecation-workflow",
