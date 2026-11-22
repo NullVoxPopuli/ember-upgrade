@@ -132,6 +132,7 @@ export const apps = [
       "emberx-select",
       "v1-addons",
       "template-colocation",
+      "dynamic-components",
     ],
     stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },
