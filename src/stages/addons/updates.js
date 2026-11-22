@@ -1,7 +1,7 @@
 import { parseProgram } from "#ast.js";
 import { addVitePlugin, removeBuildOptions, viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
-import { allowBuild } from "#manager-settings.js";
+import { allowBuild, overrideRange, removeOverride } from "#manager-settings.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
@@ -280,11 +280,28 @@ function hasOwnStage(name) {
 }
 
 /**
+ * A newer pin stays, such as the ones that the vite stage adds.
+ *
+ * @param {string} pin
+ * @param {string} range
+ * @returns {boolean} the pin forces an older major than the range, or an older minor of a 0.x release
+ */
+function olderRelease(pin, range) {
+  let [pinMajor, pinMinor] = minorOf(pin) ?? [];
+  let [major, minor] = minorOf(range) ?? [];
+
+  if (pinMajor === undefined || pinMinor === undefined || major === undefined) return false;
+  if (minor === undefined || atLeast(pin, major, minor)) return false;
+
+  return pinMajor !== major || (major === 0 && pinMinor !== minor);
+}
+
+/**
  * @param {string} name
  * @param {import('#process.js').Published} release
  * @returns {Stage}
  */
-function updateStage(name, release) {
+export function updateStage(name, release) {
   let major = minorOf(release.version)?.[0] ?? 0;
   let format = release.addon ? "a v2 addon" : "a plain npm package";
 
@@ -301,7 +318,40 @@ function updateStage(name, release) {
     },
 
     async run(project) {
-      editPackageJson(project, (pkg) => setDependency(pkg, name, `^${release.version}`));
+      let wanted = Object.assign({}, release.dependencies, release.peerDependencies);
+      /** @type {string[]} */
+      let unpinned = [];
+
+      for (let [dependency, range] of Object.entries(wanted)) {
+        let pin = overrideRange(project, dependency);
+
+        if (pin && olderRelease(pin, range)) {
+          removeOverride(project, dependency);
+          unpinned.push(`${dependency} (${pin}, and ${name} ${release.version} asks for ${range})`);
+        }
+      }
+
+      editPackageJson(project, (pkg) => {
+        setDependency(pkg, name, `^${release.version}`);
+
+        for (let [peer, range] of Object.entries(release.peerDependencies ?? {})) {
+          if (peer === "ember-source" || pkg.dependencies?.[peer] || pkg.devDependencies?.[peer]) {
+            continue;
+          }
+
+          setDependency(pkg, peer, range);
+        }
+      });
+
+      if (unpinned.length > 0) {
+        recordProgress(project, {
+          id: `${name}: overrides`,
+          status: "removed",
+          note:
+            `package.json forced versions that ${name} ${release.version} does not accept, so they are gone: ` +
+            `${unpinned.join(", ")}.`,
+        });
+      }
 
       return [
         {

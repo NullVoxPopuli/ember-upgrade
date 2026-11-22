@@ -13,6 +13,11 @@ const PINS = {
   "@ember/test-waiters": "4.1.2",
   "@embroider/macros": "1.21.4",
   "babel-plugin-ember-template-compilation": "4.0.1",
+  /**
+   * ember-element-helper before 0.5 adds a template plugin as a class,
+   * which babel-plugin-ember-template-compilation 4 calls without `new`.
+   */
+  "ember-element-helper": "1.0.0",
 };
 
 const TSCONFIG = `{
