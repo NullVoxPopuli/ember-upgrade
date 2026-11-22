@@ -11,7 +11,10 @@ import { readProgress, recordProgress } from "#progress.js";
 /** @typedef {import('#project.js').Project} Project */
 
 const ENVIRONMENT = "config/environment.js";
-const POD_FILES = ["app/**/{component,controller,route,template}.{js,ts,hbs}"];
+/**
+ * Only pods name a template `template.hbs`. Other pod file names, such as `route.js`, are also plain module names.
+ */
+const POD_TEMPLATES = ["app/**/template.hbs"];
 const SOURCES = ["{app,tests,lib,mirage}/**/*.{js,ts,gjs,gts}"];
 const EXTENSION = /\.(js|ts|gjs|gts|hbs|scss|css)$/;
 const SPECIFIER = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])([^"']+)\2/g;
@@ -55,7 +58,7 @@ function moves(project) {
 
   let result = spawnSync(
     "git",
-    ["diff", "--cached", "-M100%", "--name-status", "-z", "--", "app", "tests"],
+    ["diff", "--cached", "--relative", "-M100%", "--name-status", "-z", "--", "app", "tests"],
     { cwd: project.directory, encoding: "utf8" },
   );
   let fields = result.stdout.split("\0");
@@ -136,7 +139,7 @@ export default {
     return (
       usesPods(project) ||
       Boolean(environmentPrefixes(project).podModulePrefix) ||
-      project.files(POD_FILES).length > 0
+      project.files(POD_TEMPLATES).length > 0
     );
   },
 
