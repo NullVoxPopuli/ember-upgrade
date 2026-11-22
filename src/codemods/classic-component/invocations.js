@@ -120,8 +120,8 @@ export function findInvocations(template, name) {
         kind: "angle",
         named: node.attributes
           .map((/** @type {Node} */ attribute) => String(attribute.name))
-          .filter((attribute) => attribute.startsWith("@"))
-          .map((attribute) => attribute.slice(1)),
+          .filter((/** @type {string} */ attribute) => attribute.startsWith("@"))
+          .map((/** @type {string} */ attribute) => attribute.slice(1)),
         positional: 0,
         node,
       });
