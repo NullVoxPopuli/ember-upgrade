@@ -75,6 +75,7 @@ export const apps = [
       "update-ember-simple-auth-token",
       "update-ember-truth-helpers",
       "v1-addons",
+      "template-colocation",
     ],
     stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },
