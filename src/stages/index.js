@@ -36,6 +36,7 @@ import templateTag from "./template-tag/index.js";
 import templateWhitespace from "./template-whitespace/index.js";
 import undeprecateInject from "./undeprecate-inject/index.js";
 import vite from "./vite/index.js";
+import viteSass from "./vite-sass/index.js";
 
 /**
  * The stages, in the order they run.
@@ -65,6 +66,8 @@ export const stages = [
   emberCliMirage,
   emberCssModules,
   vite,
+  /** Later stages boot the compat build, where ember-cli-sass can load node-sass. */
+  viteSass,
   emberScopedCss,
   emberCliDeploy,
   emberCliAutoprefixer,

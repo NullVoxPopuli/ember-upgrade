@@ -263,6 +263,7 @@ function hasOwnStage(name) {
       "ember-cli-bundle-analyzer",
       "ember-cli-dependency-lint",
       "ember-cli-head",
+      "ember-cli-sass",
       "ember-disable-prototype-extensions",
       "ember-error-route",
       "ember-event-helpers",
