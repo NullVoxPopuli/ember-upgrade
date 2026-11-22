@@ -84,30 +84,30 @@ test("a v1 addon with no v2 release moves into the app", async () => {
         "lodash": "^4.0.0",
       },
       "files": {
-        "app/addons/emberx-select/services/x-registry.js": "export default class Registry {}
+        "app/addons/emberx-select/components/x-legacy.hbs": "Old
     ",
-        "app/components/category-position-dropdown.js": "import XSelect from './x-select.js';
-    export default class extends XSelect {}
-    ",
-        "app/components/x-legacy.hbs": "Old
-    ",
-        "app/components/x-legacy.js": "import Component from '@ember/component';
+        "app/addons/emberx-select/components/x-legacy.js": "import Component from '@ember/component';
     export default Component.extend({
       tagName: '',
     });
+    ",
+        "app/addons/emberx-select/services/x-registry.js": "export default class Registry {}
+    ",
+        "app/addons/emberx-select/utils/helper.js": "export function helper() {}
+    ",
+        "app/components/category-position-dropdown.js": "import XSelect from './x-select.js';
+    export default class extends XSelect {}
     ",
         "app/components/x-option.js": "export { default } from "./x-select";
     ",
         "app/components/x-select.hbs": "<select>{{yield}}</select>
     ",
         "app/components/x-select.js": "import Component from '@ember/component';
-    import { helper } from '../utils/helper';
+    import { helper } from '../addons/emberx-select/utils/helper';
     export default Component.extend({});
     ",
         "app/services/x-registry.js": "import Registry from '../addons/emberx-select/services/x-registry.js';
     export default class extends Registry {}
-    ",
-        "app/utils/helper.js": "export function helper() {}
     ",
         "tests/helpers/emberx-select/index.js": "export function selectOption() {}
     ",

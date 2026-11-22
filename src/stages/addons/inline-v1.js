@@ -60,24 +60,78 @@ export function buildHooks(directory) {
 }
 
 /**
- * @param {string} path a file of the addon, such as `addon/templates/components/x-select.hbs`
+ * ember-cli merged the addon's `app/` tree into the app, so only the modules that it re-exports
+ * were visible to the resolver. Each of those goes to its `app/` path, a component template goes
+ * next to its component, and every other module stays in the addon's own folder, app/addons/<addon>.
+ * The app's own files win, as they did in ember-cli: an addon module at the path of an app file,
+ * which the app often extends, also goes to app/addons/<addon>.
+ *
  * @param {string} name the addon
- * @returns {string | undefined} where it goes in the project
+ * @param {string[]} sources the addon's code files
+ * @param {(file: string) => string | undefined} read
+ * @param {(file: string) => boolean} taken the project has a module at the path, with any extension
+ * @returns {Map<string, string>} each file of `addon/`, `test-support/`, and `addon-test-support/`, and where it goes
  */
-export function targetOf(path, name) {
-  if (path.startsWith("addon/templates/components/")) {
-    return `app/components/${path.slice("addon/templates/components/".length)}`;
+export function placements(name, sources, read, taken) {
+  /** @type {Map<string, string>} the module of the addon, such as `components/x-select`, and its app path */
+  let reexported = new Map();
+
+  for (let file of sources) {
+    if (!file.startsWith("app/")) continue;
+
+    let specifier = new RegExp(`from\\s*["']${name}/([^"']+)["']`).exec(read(file) ?? "")?.[1];
+
+    if (specifier) reexported.set(specifier, withoutExtension(file));
   }
 
-  if (path.startsWith("addon/")) return `app/${path.slice("addon/".length)}`;
-  if (path.startsWith("app/")) return path;
-  if (path.startsWith("test-support/")) return `tests/${path.slice("test-support/".length)}`;
-  if (path.startsWith("addon-test-support/")) {
-    /**
-     * Apps import these as `<addon>/test-support/...`, and many addons have an index.js there.
-     */
-    return `tests/helpers/${name}/${path.slice("addon-test-support/".length)}`;
+  /** @type {Map<string, string>} */
+  let placed = new Map();
+
+  for (let file of sources) {
+    let extension = /\.\w+$/.exec(file)?.[0] ?? "";
+
+    if (file.startsWith("test-support/")) {
+      placed.set(file, `tests/${file.slice("test-support/".length)}`);
+      continue;
+    }
+
+    if (file.startsWith("addon-test-support/")) {
+      /**
+       * Apps import these as `<addon>/test-support/...`, and many addons have an index.js there.
+       */
+      placed.set(file, `tests/helpers/${name}/${file.slice("addon-test-support/".length)}`);
+      continue;
+    }
+
+    if (!file.startsWith("addon/")) continue;
+
+    let module = withoutExtension(file.slice("addon/".length));
+    let own = `app/addons/${name}/${module}${extension}`;
+    let component = module.startsWith("templates/components/")
+      ? `app/components/${module.slice("templates/components/".length)}${extension}`
+      : undefined;
+    let visible =
+      component ?? (reexported.has(module) ? `${reexported.get(module)}${extension}` : undefined);
+
+    placed.set(file, visible && !taken(visible) ? visible : own);
   }
+
+  /**
+   * A template goes where its component went.
+   */
+  for (let [file, target] of placed) {
+    if (!file.startsWith("addon/templates/components/")) continue;
+
+    let module = withoutExtension(file.slice("addon/templates/components/".length));
+    let component = Array.from(placed).find(
+      ([from]) => withoutExtension(from) === `addon/components/${module}`,
+    )?.[1];
+
+    if (component) placed.set(file, `${withoutExtension(component)}.hbs`);
+    else if (target.startsWith("app/addons/")) placed.set(file, target);
+  }
+
+  return placed;
 }
 
 /**
@@ -113,24 +167,18 @@ export function planInline(name, directory, taken) {
 
   if (sources.length === 0) return;
 
+  let placed = placements(
+    name,
+    sources,
+    (file) => readFileSync(join(directory, file), "utf8"),
+    taken,
+  );
   /** @type {Map<string, string>} module of the addon, without the extension, to its new path */
   let modules = new Map();
-  /** @type {Map<string, string>} */
-  let targets = new Map();
   /** @type {Record<string, string>} */
   let imports = {};
 
-  for (let file of sources) {
-    let target = targetOf(file, name);
-
-    if (!target || file.startsWith("app/")) continue;
-
-    if (file.startsWith("addon/") && taken(target)) {
-      target = `app/addons/${name}/${file.slice("addon/".length)}`;
-    }
-
-    targets.set(file, target);
-
+  for (let [file, target] of placed) {
     modules.set(withoutExtension(file), target);
 
     if (file.startsWith("addon/")) {
@@ -155,7 +203,7 @@ export function planInline(name, directory, taken) {
   let files = new Map();
 
   for (let file of sources) {
-    let target = targets.get(file) ?? targetOf(file, name);
+    let target = placed.get(file) ?? (file.startsWith("app/") ? file : undefined);
 
     if (!target || (file.startsWith("app/") && taken(target))) continue;
 
