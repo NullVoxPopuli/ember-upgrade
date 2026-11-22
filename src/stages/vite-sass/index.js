@@ -2,6 +2,7 @@ import { existsSync, globSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 
 import { buildFile, removeBuildOptions } from "#config-files.js";
+import { addOverride } from "#manager-settings.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
@@ -316,6 +317,32 @@ export default {
         }
       }
     });
+
+    let compiling = context.packages
+      .filter(({ folder }) => {
+        let manifest = JSON.parse(readFileSync(join(folder, "package.json"), "utf8"));
+
+        return Boolean(manifest.dependencies?.["ember-cli-sass"]);
+      })
+      .map(({ name }) => name);
+
+    /**
+     * ember-cli-sass before 10 compiles with node-sass, which does not build for current Node versions.
+     */
+    if (compiling.length > 0) {
+      addOverride(
+        project,
+        "ember-cli-sass",
+        `^${published("ember-cli-sass")?.version ?? "11.0.1"}`,
+      );
+      recordProgress(project, {
+        id: "vite-sass: ember-cli-sass",
+        status: "override",
+        note:
+          `${compiling.join(", ")} compile their own Sass with ember-cli-sass, so an override forces the latest ember-cli-sass, which uses sass. ` +
+          "Remove the override when no dependency needs ember-cli-sass.",
+      });
+    }
 
     recordProgress(project, {
       id: "vite-sass",

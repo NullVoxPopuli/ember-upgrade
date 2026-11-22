@@ -25,10 +25,11 @@ function project(files) {
  * @param {string} file
  */
 function dependencies(app, file = "package.json") {
-  let { dependencies, devDependencies } = JSON.parse(app.read(file));
+  let { dependencies, devDependencies, overrides } = JSON.parse(app.read(file));
 
   return Object.assign({}, dependencies, devDependencies, {
     sass: devDependencies.sass?.replace(/\d+\.\d+\.\d+/, "x"),
+    overrides: { "ember-cli-sass": overrides?.["ember-cli-sass"]?.replace(/\d+\.\d+\.\d+/, "x") },
   });
 }
 
@@ -45,7 +46,12 @@ test("Vite compiles the Sass, with the imports that ember-cli-sass resolved", as
         "ember-modal-dialog": "2.4.1",
         "node-sass": "^4.5.3",
         "normalize.css": "^7.0.0",
+        "ember-tooltips": "^2.9.0",
       },
+    }),
+    "node_modules/ember-tooltips/package.json": JSON.stringify({
+      keywords: ["ember-addon"],
+      dependencies: { "ember-cli-sass": "^7.0.0" },
     }),
     "node_modules/ember-cli-bourbon/package.json": JSON.stringify({
       keywords: ["ember-addon"],
@@ -115,7 +121,11 @@ test("Vite compiles the Sass, with the imports that ember-cli-sass resolved", as
         "bourbon-neat": "^1.7.1",
         "ember-cli-bourbon": "2.0.0-beta.1",
         "ember-modal-dialog": "2.4.1",
+        "ember-tooltips": "^2.9.0",
         "normalize.css": "^7.0.0",
+        "overrides": {
+          "ember-cli-sass": "^x",
+        },
         "sass": "^x",
       },
       "tests/index.html": "<link rel="stylesheet" href="{{rootURL}}app/styles/app.scss">
