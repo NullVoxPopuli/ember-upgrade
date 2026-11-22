@@ -89,6 +89,8 @@ export const apps = [
       "ember-router-scroll",
       "update-ember-simple-auth",
       "update-ember-simple-auth-token",
+      "ember-stripe-elements",
+      "ember-stripe-service",
       "update-ember-truth-helpers",
       "v1-addons",
       "no-implicit-this",

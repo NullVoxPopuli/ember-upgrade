@@ -219,3 +219,120 @@ test("a v1 addon whose included hook does more stays", () => {
 
   expect(inlineV1Stage(app, "ember-cli-moment-shim")).toBeUndefined();
 });
+
+/**
+ * From ember-stripe-elements 0.3.0 (MIT) and code-corps/code-corps-ember, shortened.
+ */
+test("the HTML of a contentFor hook goes into the app's HTML files", async () => {
+  let addon = "node_modules/ember-stripe-elements";
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-stripe-elements": "^0.3.0" } }),
+    "config/environment.js": `module.exports = function (environment) {
+  let ENV = { stripe: {} };
+  if (environment === 'test') ENV.stripe.mock = true;
+  return ENV;
+};
+`,
+    "index.html": `<html>
+  <body>
+    {{content-for "body"}}
+    <script type="module" src="/app/app.js"></script>
+    {{content-for "body-footer"}}
+  </body>
+</html>
+`,
+    "tests/index.html": `<html>
+  <body>
+    {{content-for "body"}}
+    {{content-for "test-body"}}
+  </body>
+</html>
+`,
+    [`${addon}/package.json`]: JSON.stringify({
+      name: "ember-stripe-elements",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-cli-babel": "^6.6.0" },
+    }),
+    [`${addon}/index.js`]: `'use strict';
+module.exports = {
+  name: 'ember-stripe-elements',
+  contentFor(type, config) {
+    let stripeConfig = config.stripe || {};
+    if (type === 'body' && !stripeConfig.lazyLoad && !stripeConfig.mock) {
+      return '<script type="text/javascript" src="https://js.stripe.com/v3/"></script>';
+    }
+  }
+};
+`,
+    [`${addon}/addon/services/stripev3.js`]: "export default class StripeService {}\n",
+    [`${addon}/app/services/stripev3.js`]:
+      "export { default } from 'ember-stripe-elements/services/stripev3';\n",
+  });
+
+  let stage = inlineV1Stage(app, "ember-stripe-elements");
+
+  if (!stage) throw new Error("the addon stays a v1 addon");
+
+  expect(await stage.check(app)).toEqual({ blockers: [], todo: [] });
+
+  await stage.run(app);
+
+  expect({
+    index: app.read("index.html"),
+    tests: app.read("tests/index.html"),
+    service: app.read("app/services/stripev3.js"),
+  }).toMatchInlineSnapshot(`
+    {
+      "index": "<html>
+      <body>
+        <script type="text/javascript" src="https://js.stripe.com/v3/"></script>
+        {{content-for "body"}}
+        <script type="module" src="/app/app.js"></script>
+        {{content-for "body-footer"}}
+      </body>
+    </html>
+    ",
+      "service": "export default class StripeService {}
+    ",
+      "tests": "<html>
+      <body>
+        {{content-for "body"}}
+        {{content-for "test-body"}}
+      </body>
+    </html>
+    ",
+    }
+  `);
+});
+
+/**
+ * From ember-power-select-typeahead 0.8.1 (MIT): the hook asks ember-cli for another addon.
+ */
+test("an addon whose contentFor hook needs ember-cli stays a v1 addon", () => {
+  let addon = "node_modules/ember-power-select-typeahead";
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-power-select-typeahead": "^0.8.1" },
+    }),
+    "config/environment.js": "module.exports = function () {\n  return {};\n};\n",
+    "index.html": '<html><body>\n{{content-for "body"}}\n</body></html>\n',
+    [`${addon}/package.json`]: JSON.stringify({
+      name: "ember-power-select-typeahead",
+      keywords: ["ember-addon"],
+    }),
+    [`${addon}/index.js`]: `'use strict';
+module.exports = {
+  name: 'ember-power-select-typeahead',
+  contentFor: function(type, config) {
+    var emberPowerSelect = this.addons.filter(function(addon) {
+      return addon.name === 'ember-power-select';
+    })[0];
+    return emberPowerSelect.contentFor(type, config);
+  }
+};
+`,
+    [`${addon}/addon/components/power-select-typeahead.js`]: "export default class {}\n",
+  });
+
+  expect(inlineV1Stage(app, "ember-power-select-typeahead")).toBeUndefined();
+});
