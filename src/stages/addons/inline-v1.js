@@ -61,9 +61,10 @@ export function buildHooks(directory) {
 
 /**
  * @param {string} path a file of the addon, such as `addon/templates/components/x-select.hbs`
+ * @param {string} name the addon
  * @returns {string | undefined} where it goes in the project
  */
-export function targetOf(path) {
+export function targetOf(path, name) {
   if (path.startsWith("addon/templates/components/")) {
     return `app/components/${path.slice("addon/templates/components/".length)}`;
   }
@@ -72,7 +73,10 @@ export function targetOf(path) {
   if (path.startsWith("app/")) return path;
   if (path.startsWith("test-support/")) return `tests/${path.slice("test-support/".length)}`;
   if (path.startsWith("addon-test-support/")) {
-    return `tests/helpers/${path.slice("addon-test-support/".length)}`;
+    /**
+     * Apps import these as `<addon>/test-support/...`, and many addons have an index.js there.
+     */
+    return `tests/helpers/${name}/${path.slice("addon-test-support/".length)}`;
   }
 }
 
@@ -88,11 +92,15 @@ function withoutExtension(path) {
  * The addon's code as app files. undefined when the addon is not only code that the app can hold:
  * it has build hooks, styles that ember-cli compiled, or no code at all.
  *
+ * The app's own files win, as they did in ember-cli. An addon module at the path of an app file,
+ * which the app often extends, goes to app/addons/<addon>, where the resolver does not look.
+ *
  * @param {string} name
  * @param {string} directory where the addon is installed
+ * @param {(file: string) => boolean} taken the project has a module at the path, with any extension
  * @returns {Plan | undefined}
  */
-export function planInline(name, directory) {
+export function planInline(name, directory, taken) {
   if (buildHooks(directory).length > 0 || existsSync(join(directory, "addon", "styles"))) return;
 
   let sources = globSync("{addon,app,test-support,addon-test-support}/**/*", {
@@ -107,13 +115,21 @@ export function planInline(name, directory) {
 
   /** @type {Map<string, string>} module of the addon, without the extension, to its new path */
   let modules = new Map();
+  /** @type {Map<string, string>} */
+  let targets = new Map();
   /** @type {Record<string, string>} */
   let imports = {};
 
   for (let file of sources) {
-    let target = targetOf(file);
+    let target = targetOf(file, name);
 
     if (!target || file.startsWith("app/")) continue;
+
+    if (file.startsWith("addon/") && taken(target)) {
+      target = `app/addons/${name}/${file.slice("addon/".length)}`;
+    }
+
+    targets.set(file, target);
 
     modules.set(withoutExtension(file), target);
 
@@ -128,16 +144,22 @@ export function planInline(name, directory) {
     }
   }
 
-  if (imports[`${name}/index`]) imports[name] = imports[`${name}/index`];
+  /**
+   * An import of a folder, such as `<addon>/test-support`, gets its index file.
+   */
+  for (let [specifier, target] of Object.entries(imports)) {
+    if (specifier.endsWith("/index")) imports[specifier.slice(0, -"/index".length)] ??= target;
+  }
 
   /** @type {Map<string, string>} */
   let files = new Map();
 
   for (let file of sources) {
-    let target = targetOf(file);
-    let source = readFileSync(join(directory, file), "utf8");
+    let target = targets.get(file) ?? targetOf(file, name);
 
-    if (!target) continue;
+    if (!target || (file.startsWith("app/") && taken(target))) continue;
+
+    let source = readFileSync(join(directory, file), "utf8");
 
     /**
      * The app tree re-exported the addon's modules. A module at the same path is that module now,
@@ -236,7 +258,13 @@ export function inlineV1Stage(project, name) {
   if (!existsSync(join(installed, "package.json"))) return;
 
   let directory = realpathSync(installed);
-  let plan = planInline(name, directory);
+  let plan = planInline(name, directory, (file) => {
+    let base = file.replace(CODE, "");
+
+    return file.endsWith(".hbs")
+      ? project.has(file)
+      : [".js", ".ts", ".gjs", ".gts"].some((extension) => project.has(base + extension));
+  });
 
   if (!plan) return;
 

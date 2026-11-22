@@ -53,6 +53,15 @@ test("a v1 addon with no v2 release moves into the app", async () => {
     [`${ADDON}/app/templates/components/x-select.js`]:
       "export { default } from 'emberx-select/templates/components/x-select';\n",
     [`${ADDON}/test-support/helpers/x-select.js`]: "export default function select() {}\n",
+    [`${ADDON}/addon-test-support/index.js`]: "export function selectOption() {}\n",
+    "tests/helpers/index.js": "export function setupApplicationTest() {}\n",
+    [`${ADDON}/addon/services/x-registry.js`]: "export default class Registry {}\n",
+    [`${ADDON}/app/services/x-registry.js`]:
+      "export { default } from 'emberx-select/services/x-registry';\n",
+    "app/services/x-registry.js":
+      "import Registry from 'emberx-select/services/x-registry';\nexport default class extends Registry {}\n",
+    "tests/integration/x-select-test.js":
+      "import { selectOption } from 'emberx-select/test-support';\n",
     "app/components/category-position-dropdown.js":
       "import XSelect from 'emberx-select/components/x-select';\nexport default class extends XSelect {}\n",
   });
@@ -75,6 +84,8 @@ test("a v1 addon with no v2 release moves into the app", async () => {
         "lodash": "^4.0.0",
       },
       "files": {
+        "app/addons/emberx-select/services/x-registry.js": "export default class Registry {}
+    ",
         "app/components/category-position-dropdown.js": "import XSelect from './x-select.js';
     export default class extends XSelect {}
     ",
@@ -93,9 +104,18 @@ test("a v1 addon with no v2 release moves into the app", async () => {
     import { helper } from '../utils/helper';
     export default Component.extend({});
     ",
+        "app/services/x-registry.js": "import Registry from '../addons/emberx-select/services/x-registry.js';
+    export default class extends Registry {}
+    ",
         "app/utils/helper.js": "export function helper() {}
     ",
+        "tests/helpers/emberx-select/index.js": "export function selectOption() {}
+    ",
+        "tests/helpers/index.js": "export function setupApplicationTest() {}
+    ",
         "tests/helpers/x-select.js": "export default function select() {}
+    ",
+        "tests/integration/x-select-test.js": "import { selectOption } from '../helpers/emberx-select/index.js';
     ",
       },
     }
