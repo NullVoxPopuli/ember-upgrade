@@ -119,17 +119,42 @@ export default {
       );
 
       let modules = join(install, "node_modules");
-      let script =
-        `require(${JSON.stringify(join(modules, "codemod-cli/src/bin-support.js"))})` +
-        `.runTransform(${JSON.stringify(join(modules, "ember-no-implicit-this-codemod/bin"))}, "no-implicit-this", ` +
-        `${JSON.stringify(FILES.concat("--config", CONFIG))}, "js,ts,hbs")` +
-        ".catch((error) => { console.error(error); process.exit(1); });";
-      let result = spawnSync(process.execPath, ["-e", script], {
-        cwd: project.directory,
-        stdio: "inherit",
-      });
+      let files = project.files(FILES);
 
-      if (result.status !== 0) throw new Error(`${CODEMOD} failed. Its output is above.`);
+      /**
+       * jscodeshift, not codemod-cli, because codemod-cli does not pass `--no-babel`.
+       * With Babel, jscodeshift compiles the transform with the app's babel.config.mjs,
+       * which is async, and every file fails.
+       */
+      let result = spawnSync(
+        process.execPath,
+        [
+          join(modules, "jscodeshift/bin/jscodeshift.js"),
+          "--no-babel",
+          "--extensions=js,ts,hbs",
+          "-t",
+          join(modules, "ember-no-implicit-this-codemod/transforms/no-implicit-this/index.js"),
+        ].concat(files),
+        {
+          cwd: project.directory,
+          encoding: "utf8",
+          env: Object.assign({}, process.env, {
+            CODEMOD_CLI_ARGS: JSON.stringify({ config: CONFIG }),
+          }),
+        },
+      );
+      let output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+      process.stdout.write(output);
+
+      /**
+       * jscodeshift exits with 0 when a file fails, so the summary shows the failures.
+       */
+      let errors = Number(/(\d+) errors?/.exec(output.replace(/\x1b\[[0-9;]*m/g, ""))?.[1] ?? 0);
+
+      if (result.status !== 0 || errors > 0) {
+        throw new Error(`${CODEMOD} failed on ${errors} files. Its output is above.`);
+      }
     } finally {
       rmSync(join(project.directory, CONFIG), { force: true });
       rmSync(install, { recursive: true, force: true });
