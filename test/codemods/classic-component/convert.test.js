@@ -535,3 +535,62 @@ export default Component.extend({
     }
   `);
 });
+
+/**
+ * From CenterForOpenScience/ember-osf-web app/meetings/index/-components/meetings-list/component.ts, shortened.
+ */
+test("a TypeScript method keeps its modifiers and types", () => {
+  let result = convertComponents(
+    new Map([
+      [
+        "app/components/meetings-list.ts",
+        `import Component from '@ember/component';
+import { action } from '@ember/object';
+import { restartableTask, timeout } from 'ember-concurrency';
+
+export default class MeetingsList extends Component {
+    search?: string;
+
+    @restartableTask
+    async searchMeetings(search: string): Promise<void> {
+        await timeout(500);
+        this.set('search', search);
+    }
+
+    @action
+    sortMeetings(sort: string) {
+        this.set('sort', sort);
+    }
+}
+`,
+      ],
+      ["app/components/meetings-list.hbs", "{{this.search}}\n"],
+    ]),
+  );
+
+  expect(result.files.get("app/components/meetings-list.ts")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { action } from '@ember/object';
+    import { restartableTask, timeout } from 'ember-concurrency';
+    import { tracked } from '@glimmer/tracking';
+
+    export default class MeetingsList extends Component {
+        sort;
+
+        @tracked
+        search?: string;
+
+        @restartableTask
+        async searchMeetings(search: string): Promise<void> {
+            await timeout(500);
+            this.search = search;
+        }
+
+        @action
+        sortMeetings(sort: string) {
+            this.sort = sort;
+        }
+    }
+    "
+  `);
+});

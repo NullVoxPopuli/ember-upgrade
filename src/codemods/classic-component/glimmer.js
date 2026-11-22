@@ -16,6 +16,11 @@ import { readClassicComponent } from "./read.js";
 const NAME = /^[A-Za-z_$][\w$]*$/;
 
 /**
+ * One level of indentation in generated code, which becomes the class body's own indentation.
+ */
+const INDENT = "\u21e5";
+
+/**
  * The hooks that run when the element is inserted or removed. The Glimmer version runs them from a modifier.
  */
 const ELEMENT_HOOKS = new Set(["didInsertElement", "willDestroyElement", "willClearRender"]);
@@ -233,15 +238,30 @@ function bodyOf(source, fn, name, unreadable) {
 }
 
 /**
+ * The part of a method before its body, such as `async *save(a, b = 1): Promise<void>`.
+ * A method keeps its own text, with its modifiers and types. A function value, such as `save: function (a) {}`, gets a method header.
+ *
  * @param {string} source
- * @param {Node} fn
- * @returns {string} such as `async *(a, b = 1)`, the part of a method before its body
+ * @param {Node} node the class member or object property
+ * @param {Node} fn the method's function
+ * @param {string} key
+ * @returns {string}
  */
-function signature(source, fn) {
-  let params = fn.params ?? [];
-  let list = params.length > 0 ? source.slice(params[0].start, params[params.length - 1].end) : "";
+function methodHeader(source, node, fn, key) {
+  let decorators = node.decorators ?? [];
+  let start = decorators.length > 0 ? decorators[decorators.length - 1].end : node.start;
 
-  return `${fn.async ? "async " : ""}${fn.generator ? "*" : ""}(${list})`;
+  if (node.type === "MethodDefinition" || (node.type === "Property" && node.method)) {
+    return source.slice(start, fn.body.start).trim();
+  }
+
+  let open = source.indexOf("(", fn.id ? fn.id.end : fn.start);
+  let rest = source
+    .slice(open, fn.body.start)
+    .trim()
+    .replace(/\s*=>$/, "");
+
+  return `${fn.async ? "async " : ""}${fn.generator ? "*" : ""}${key}${rest}`;
 }
 
 /**
@@ -449,11 +469,11 @@ export function toGlimmer(input, file, names, options) {
     }
 
     let kept = entry.decorators.filter((decorator) => decoratorName(decorator) !== "action");
-    let lines = kept.map((decorator) => `  @${decorator}\n`).join("");
+    let lines = kept.map((decorator) => `\u21e5@${decorator}\n`).join("");
 
     if (bound || entry.decorators.some((decorator) => decoratorName(decorator) === "action")) {
       need("@ember/object", "action");
-      lines += "  @action\n";
+      lines += "\u21e5@action\n";
     }
 
     let code = bodyOf(source, parts.fn, entry.name, result.unreadable);
@@ -463,7 +483,9 @@ export function toGlimmer(input, file, names, options) {
      */
     if (indent > 0) code = code.replaceAll(`\n${" ".repeat(indent)}`, "\n");
 
-    body.push(`${comments}${lines}  ${parts.key}${signature(source, parts.fn)} {${code}}`);
+    let header = methodHeader(source, entry.node, parts.fn, parts.key);
+
+    body.push(`${comments}${lines}\u21e5${header} {${code}}`);
   };
 
   for (let entry of members) {
@@ -475,7 +497,7 @@ export function toGlimmer(input, file, names, options) {
       let read = `this.args${member(name)}`;
 
       body.push(
-        `${comments}  get ${memberName(name)}() {\n    return ${fallback ? `${read} ?? ${fallback.startsWith("() =>") ? `(${fallback})` : fallback}` : read};\n  }`,
+        `${comments}\u21e5get ${memberName(name)}() {\n\u21e5\u21e5return ${fallback ? `${read} ?? ${fallback.startsWith("() =>") ? `(${fallback})` : fallback}` : read};\n\u21e5}`,
       );
       continue;
     }
@@ -560,16 +582,16 @@ export function toGlimmer(input, file, names, options) {
           (decorator) => decoratorName(decorator) === "computed",
         );
         let kept = entry.decorators.filter((decorator) => decoratorName(decorator) !== "computed");
-        let lines = kept.map((decorator) => `  @${decorator}\n`).join("");
+        let lines = kept.map((decorator) => `\u21e5@${decorator}\n`).join("");
 
         if (computed === "computed") {
           need("@glimmer/tracking", "cached");
-          lines += "  @cached\n";
+          lines += "\u21e5@cached\n";
         }
 
         let text = component.form === "class" ? withoutDecorators(source, entry) : entry.source;
 
-        body.push(`${comments}${lines}  ${text}`);
+        body.push(`${comments}${lines}\u21e5${text}`);
         break;
       }
 
@@ -586,7 +608,7 @@ export function toGlimmer(input, file, names, options) {
         if (cached) need("@glimmer/tracking", "cached");
 
         body.push(
-          `${comments}${cached ? "  @cached\n" : ""}  get ${parts.key}() {${bodyOf(source, parts.fn, name, result.unreadable)}}`,
+          `${comments}${cached ? "\u21e5@cached\n" : ""}\u21e5get ${parts.key}() {${bodyOf(source, parts.fn, name, result.unreadable)}}`,
         );
         break;
       }
@@ -633,7 +655,7 @@ export function toGlimmer(input, file, names, options) {
             need(module, imported);
           }
 
-          let text = `${comments}  get ${memberName(name)}() {\n    return ${macro.body};\n  }`;
+          let text = `${comments}\u21e5get ${memberName(name)}() {\n\u21e5\u21e5return ${macro.body};\n\u21e5}`;
 
           if (macro.setter && names.tracked.has(name)) {
             result.unreadable.push(`the alias ${name} is set`);
@@ -645,14 +667,14 @@ export function toGlimmer(input, file, names, options) {
 
         if (component.form === "class") {
           let text = withoutDecorators(source, entry);
-          let lines = entry.decorators.map((value) => `  @${value}\n`).join("");
+          let lines = entry.decorators.map((value) => `\u21e5@${value}\n`).join("");
 
           if (names.tracked.has(name) && entry.decorators.length === 0) {
             need("@glimmer/tracking", "tracked");
-            lines = "  @tracked\n";
+            lines = "\u21e5@tracked\n";
           }
 
-          body.push(`${comments}${lines}  ${text}`);
+          body.push(`${comments}${lines}\u21e5${text}`);
           break;
         }
 
@@ -665,15 +687,15 @@ export function toGlimmer(input, file, names, options) {
             from.module === "@ember/controller" ||
             from.module === "ember-concurrency")
         ) {
-          body.push(`${comments}  @${value}\n  ${memberName(name)};`);
+          body.push(`${comments}\u21e5@${value}\n\u21e5${memberName(name)};`);
           break;
         }
 
         if (names.tracked.has(name)) {
           need("@glimmer/tracking", "tracked");
-          body.push(`${comments}  @tracked ${memberName(name)} = ${value};`);
+          body.push(`${comments}\u21e5@tracked ${memberName(name)} = ${value};`);
         } else {
-          body.push(`${comments}  ${memberName(name)} = ${value};`);
+          body.push(`${comments}\u21e5${memberName(name)} = ${value};`);
         }
         break;
       }
@@ -685,9 +707,9 @@ export function toGlimmer(input, file, names, options) {
 
     if (names.tracked.has(name)) {
       need("@glimmer/tracking", "tracked");
-      body.unshift(`  @tracked ${memberName(name)};`);
+      body.unshift(`\u21e5@tracked ${memberName(name)};`);
     } else {
-      body.unshift(`  ${memberName(name)};`);
+      body.unshift(`\u21e5${memberName(name)};`);
     }
   }
 
@@ -697,7 +719,10 @@ export function toGlimmer(input, file, names, options) {
   if (names.getters) {
     let getters = Array.from(names.args)
       .filter((name) => !has(name))
-      .map((name) => `  get ${memberName(name)}() {\n    return this.args${member(name)};\n  }`);
+      .map(
+        (name) =>
+          `\u21e5get ${memberName(name)}() {\n\u21e5\u21e5return this.args${member(name)};\n\u21e5}`,
+      );
 
     body = getters.concat(body);
   }
@@ -722,22 +747,24 @@ export function toGlimmer(input, file, names, options) {
 
     let inserted = elementHooks
       .filter((entry) => entry.name === "didInsertElement" || entry.kind === "on")
-      .map((entry) => `    this${member(entry.name)}();\n`)
+      .map((entry) => `\u21e5\u21e5this${member(entry.name)}();\n`)
       .join("");
     let removed = elementHooks
       .filter((entry) => entry.name === "willDestroyElement" || entry.name === "willClearRender")
-      .map((entry) => `      this${member(entry.name)}();\n`)
+      .map((entry) => `\u21e5\u21e5\u21e5this${member(entry.name)}();\n`)
       .join("");
 
     body.unshift(
-      `  element = null;\n\n  lifecycle = modifier((element) => {\n    this.element = element;\n${inserted}\n    return () => {\n${removed}      this.element = null;\n    };\n  });`,
+      `\u21e5element = null;\n\n\u21e5lifecycle = modifier((element) => {\n\u21e5\u21e5this.element = element;\n${inserted}\n\u21e5\u21e5return () => {\n${removed}\u21e5\u21e5\u21e5this.element = null;\n\u21e5\u21e5};\n\u21e5});`,
     );
   }
 
   if (init || constructorCalls.length > 0) {
-    let calls = constructorCalls.map((call) => `\n    ${call}`).join("");
+    let calls = constructorCalls.map((call) => `\n\u21e5\u21e5${call}`).join("");
 
-    body.unshift(`  constructor(owner, args) {\n    super(owner, args);${init}${calls}\n  }`);
+    body.unshift(
+      `\u21e5constructor(owner, args) {\n\u21e5\u21e5super(owner, args);${init}${calls}\n\u21e5}`,
+    );
   }
 
   if (result.unreadable.length > 0) return result;
@@ -752,7 +779,19 @@ export function toGlimmer(input, file, names, options) {
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join("") ||
       "Component");
-  let classText = `class ${className} extends ${component.superClass} {\n${body.join("\n\n")}\n}`;
+  /**
+   * Generated lines take the indentation of the class body, so they line up with the members that keep their source.
+   */
+  let firstMember = members[0]?.node;
+  let unit = firstMember
+    ? (/^[ \t]*/.exec(source.slice(source.lastIndexOf("\n", firstMember.start - 1) + 1))?.[0] ??
+      "  ")
+    : "  ";
+  let classText =
+    `class ${className} extends ${component.superClass} {\n${body.join("\n\n")}\n}`.replaceAll(
+      INDENT,
+      unit || "  ",
+    );
   let edits = new Edits(source);
 
   for (let decorator of component.node.decorators ?? []) edits.removeLine(decorator);
