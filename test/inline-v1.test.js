@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import { inlineV1Stage } from "#stages/addons/inline-v1.js";
+import { inlineV1Stage, withHasBlockHelpers } from "#stages/addons/inline-v1.js";
 
 /**
  * @param {Record<string, string>} files
@@ -145,4 +145,27 @@ test("a v1 addon that exports something other than an object stays", () => {
   });
 
   expect(inlineV1Stage(app, "ember-engines")).toBeUndefined();
+});
+
+/**
+ * From ember-one-way-select, in TryGhost/Ghost.
+ */
+test("inlined templates call has-block, which replaced the removed hasBlock property", () => {
+  let template = `{{#if hasBlock}}
+  {{yield}}
+{{else if (and hasBlockParams @label)}}
+  {{hasBlock}} {{~hasBlockParams~}}
+{{/if}}
+{{this.hasBlock}} {{@hasBlock}}
+`;
+
+  expect(withHasBlockHelpers(template)).toMatchInlineSnapshot(`
+    "{{#if (has-block)}}
+      {{yield}}
+    {{else if (and (has-block-params) @label)}}
+      {{has-block}} {{~has-block-params~}}
+    {{/if}}
+    {{this.hasBlock}} {{@hasBlock}}
+    "
+  `);
 });

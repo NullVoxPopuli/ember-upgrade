@@ -235,7 +235,9 @@ export function planInline(name, directory, taken) {
       }
     }
 
-    files.set(target, rewriteSource(source, { origin: file, target, imports, modules }));
+    let rewritten = rewriteSource(source, { origin: file, target, imports, modules });
+
+    files.set(target, target.endsWith(".hbs") ? withHasBlockHelpers(rewritten) : rewritten);
   }
 
   let manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
@@ -247,6 +249,25 @@ export function planInline(name, directory, taken) {
   }
 
   return { files, imports, ranges };
+}
+
+/**
+ * Ember 4 removed the `hasBlock` and `hasBlockParams` properties, which old addon templates still read.
+ * The helpers replace them, with parentheses where the property was an argument.
+ *
+ * @param {string} template
+ * @returns {string}
+ */
+export function withHasBlockHelpers(template) {
+  return template
+    .replace(
+      /\{\{(~?)\s*hasBlock(Params)?\s*(~?)\}\}/g,
+      (_, before, params, after) =>
+        `{{${before}${params ? "has-block-params" : "has-block"}${after}}}`,
+    )
+    .replace(/(?<![\w.@-])hasBlock(Params)?(?![\w-])/g, (_, params) =>
+      params ? "(has-block-params)" : "(has-block)",
+    );
 }
 
 /**
