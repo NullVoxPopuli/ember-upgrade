@@ -64,6 +64,7 @@ export const apps = [
       "ember-metrics",
       "ember-ajax",
       "ember-auto-focus",
+      "ember-autoresize",
       "update-ember-can",
       "update-ember-cli-flash",
       "ember-cli-jwt-decode",

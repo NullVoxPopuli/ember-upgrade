@@ -4,6 +4,7 @@ import { join, posix } from "node:path";
 import { parseProgram, propertyName, walk } from "#ast.js";
 import { inlineStage } from "./inline.js";
 
+/** @typedef {import('#ast.js').Node} Node */
 /** @typedef {import('#project.js').Project} Project */
 
 /**
@@ -37,6 +38,7 @@ export function buildHooks(directory) {
   if (!existsSync(file)) return [];
 
   let program = parseProgram(readFileSync(file, "utf8"), file);
+  let dependencies = manifest.dependencies ?? {};
   /** @type {string[] | undefined} */
   let hooks;
 
@@ -62,11 +64,109 @@ export function buildHooks(directory) {
     for (let property of node.right.properties) {
       let name = propertyName(property);
 
+      if (name === "included" && importsDependencies(property, dependencies)) continue;
       if (!name || !NAMING.has(name)) hooks.push(name ?? "...");
     }
   });
 
   return hooks ?? ["module.exports"];
+}
+
+/**
+ * @param {Node | undefined} node
+ * @returns {Node | undefined} the identifier that a member chain or call chain starts at
+ */
+function rootOf(node) {
+  if (node?.type === "CallExpression") return rootOf(node.callee);
+  if (node?.type === "MemberExpression") return rootOf(node.object);
+
+  return node;
+}
+
+/**
+ * @param {Node | undefined} node
+ * @returns {string[]} the property names of a member chain, such as `_super`, `included`, `apply`
+ */
+function memberNames(node) {
+  if (node?.type === "CallExpression") return memberNames(node.callee);
+  if (node?.type !== "MemberExpression") return [];
+
+  return memberNames(node.object).concat(String(node.property?.name));
+}
+
+/**
+ * An `included` hook that only makes the addon's dependencies importable, which old addons did
+ * with `app.import('node_modules/<dependency>/...')` (ember-autoresize and dom-ruler).
+ * The app declares the addon's dependencies when the addon moves in, so Vite imports them.
+ * The version checks and the `_super` call around them do nothing for the app's code.
+ *
+ * @param {Node} property the `included` property of the addon
+ * @param {Record<string, string>} dependencies the addon's dependencies
+ * @returns {boolean}
+ */
+export function importsDependencies(property, dependencies) {
+  let body = (property.value ?? property).body?.body;
+
+  if (!Array.isArray(body)) return false;
+
+  /** @type {Set<string>} */
+  let checkers = new Set();
+
+  return body.every((/** @type {Node} */ statement) => {
+    if (statement.type === "VariableDeclaration") {
+      return statement.declarations.every((/** @type {Node} */ declarator) => {
+        if (
+          declarator.init?.type !== "NewExpression" ||
+          declarator.init.callee?.name !== "VersionChecker"
+        ) {
+          return false;
+        }
+
+        checkers.add(declarator.id?.name);
+        return true;
+      });
+    }
+
+    let call = statement.type === "ExpressionStatement" ? statement.expression : undefined;
+
+    if (call?.type !== "CallExpression") return false;
+
+    let root = rootOf(call);
+    let callee = call.callee;
+
+    if (
+      root?.type === "ThisExpression" &&
+      callee?.type === "MemberExpression" &&
+      callee.property?.name === "import"
+    ) {
+      return importsDependency(call, dependencies);
+    }
+
+    if (root?.type === "ThisExpression") return memberNames(callee).includes("_super");
+    if (root?.type === "Identifier" && checkers.has(root.name)) return true;
+
+    return (
+      callee?.type === "MemberExpression" &&
+      callee.property?.name === "import" &&
+      importsDependency(call, dependencies)
+    );
+  });
+}
+
+/**
+ * @param {Node} call an `app.import(...)` call
+ * @param {Record<string, string>} dependencies
+ * @returns {boolean} the call imports a file of one of the dependencies
+ */
+function importsDependency(call, dependencies) {
+  let path = call.arguments?.[0]?.value;
+
+  if (typeof path !== "string" || !path.startsWith("node_modules/")) return false;
+
+  let parts = path.slice("node_modules/".length).split("/");
+  let name = parts[0]?.startsWith("@") ? parts.slice(0, 2).join("/") : String(parts[0]);
+
+  return name in dependencies;
 }
 
 /**

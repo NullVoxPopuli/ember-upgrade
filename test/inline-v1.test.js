@@ -169,3 +169,53 @@ test("inlined templates call has-block, which replaced the removed hasBlock prop
     "
   `);
 });
+
+/**
+ * From ember-autoresize 1.0.0, in code-corps/code-corps-ember.
+ */
+test("a v1 addon whose included hook only imports its dependencies moves in", () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-autoresize": "1.0.0" } }),
+    "node_modules/ember-autoresize/package.json": JSON.stringify({
+      keywords: ["ember-addon"],
+      dependencies: { "dom-ruler": "^0.2.5", "ember-cli-version-checker": "^2.1.0" },
+    }),
+    "node_modules/ember-autoresize/index.js": `'use strict';
+let VersionChecker = require('ember-cli-version-checker');
+
+module.exports = {
+  name: 'ember-autoresize',
+
+  included: function (app) {
+    this._super.included.apply(this, arguments);
+    let checker = new VersionChecker(this);
+
+    checker.for('ember-cli').assertAbove('2.15.0', 'ember-cli 2.15 or greater is required');
+
+    app.import('node_modules/dom-ruler/dist/amd/dom-ruler.js', {
+      exports: { 'dom-ruler': ['default'] },
+    });
+  },
+};
+`,
+    "node_modules/ember-autoresize/addon/mixins/autoresize.js":
+      'import { measureText } from "dom-ruler";\nexport default {};\n',
+  });
+
+  expect(inlineV1Stage(app, "ember-autoresize")).toBeDefined();
+});
+
+test("a v1 addon whose included hook does more stays", () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-cli-moment-shim": "3.0.0" } }),
+    "node_modules/ember-cli-moment-shim/package.json": JSON.stringify({
+      keywords: ["ember-addon"],
+      dependencies: { moment: "^2.0.0" },
+    }),
+    "node_modules/ember-cli-moment-shim/index.js":
+      "module.exports = {\n  name: 'ember-cli-moment-shim',\n  included(app) {\n    this.options = app.options.moment;\n    app.import('node_modules/moment/moment.js');\n  },\n};\n",
+    "node_modules/ember-cli-moment-shim/addon/index.js": "export default {};\n",
+  });
+
+  expect(inlineV1Stage(app, "ember-cli-moment-shim")).toBeUndefined();
+});
