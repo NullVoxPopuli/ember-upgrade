@@ -64,4 +64,10 @@ jobs:
     steps:
       - uses: wyvox/action@v1
       - run: pnpm build
-      - run: node scripts/trial.js ${{ matrix.app }}
+      - run: node scripts/trial.js ${{ matrix.app }} --diff trial.diff
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trial-${{ matrix.app }}
+          path: trial.diff
+          if-no-files-found: ignore

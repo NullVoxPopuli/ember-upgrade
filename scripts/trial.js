@@ -1,12 +1,13 @@
 /**
  * Upgrades one real app with the built CLI, and compares the result with trials/apps.js.
  *
- *   node scripts/trial.js <name> [--keep]
+ *   node scripts/trial.js <name> [--keep] [--diff <file>]
  *
  * The app is cloned into a temporary folder. --keep prints the folder and leaves it.
+ * --diff writes what the upgrade changed, without lockfiles, so that CI can keep it.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -15,7 +16,10 @@ import { apps } from "../trials/apps.js";
 
 let { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { keep: { type: "boolean", default: false } },
+  options: {
+    keep: { type: "boolean", default: false },
+    diff: { type: "string" },
+  },
 });
 
 let app = apps.find((a) => a.name === positionals[0]);
@@ -152,6 +156,17 @@ try {
 } catch (error) {
   failures.push(error instanceof Error ? error.message : String(error));
 } finally {
+  if (values.diff) {
+    let diff = sh(
+      checkout,
+      "git",
+      ["diff", app.sha, "--", ".", ":!pnpm-lock.yaml", ":!package-lock.json", ":!yarn.lock"],
+      { capture: true },
+    );
+
+    writeFileSync(resolve(values.diff), diff.stdout);
+  }
+
   if (values.keep) console.log(`\nKept ${checkout}`);
   else rmSync(root, { recursive: true, force: true });
 }
