@@ -71,6 +71,8 @@ export function runUpstream(project, spec, args) {
  * @property {boolean} addon the latest version is an ember addon
  * @property {boolean} v2 the latest version is a v2 addon, or a plain package
  * @property {string | undefined} repository a URL for people to read
+ * @property {Record<string, string>} [dependencies] of the `latest` version
+ * @property {Record<string, string>} [peerDependencies] of the `latest` version
  */
 
 /**
@@ -82,7 +84,17 @@ export function runUpstream(project, spec, args) {
 export function published(name) {
   let result = spawnSync(
     "npm",
-    ["view", name, "version", "keywords", "ember-addon", "repository", "--json"],
+    [
+      "view",
+      name,
+      "version",
+      "keywords",
+      "ember-addon",
+      "repository",
+      "dependencies",
+      "peerDependencies",
+      "--json",
+    ],
     {
       encoding: "utf8",
       shell: process.platform === "win32",
@@ -105,5 +117,7 @@ export function published(name) {
     addon,
     v2: !addon || info["ember-addon"]?.version === 2,
     repository,
+    dependencies: info.dependencies ?? {},
+    peerDependencies: info.peerDependencies ?? {},
   };
 }

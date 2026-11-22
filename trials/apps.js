@@ -229,7 +229,6 @@ export const apps = [
       "update-ember-concurrency",
       "update-ember-cookies",
       "update-ember-decorators",
-      "update-ember-element-helper",
       "update-ember-flatpickr",
       "update-ember-inflector",
       "update-ember-intl",

@@ -115,6 +115,33 @@ export function hasOverride(project, name) {
 }
 
 /**
+ * @param {Project} project
+ * @param {string} name
+ * @returns {string | undefined} the range that package.json forces for the package
+ */
+export function overrideRange(project, name) {
+  let pkg = JSON.parse(workspaceRoot(project).read("package.json"));
+
+  for (let map of [pkg.resolutions, pkg.overrides, pkg.pnpm?.overrides]) {
+    if (map && typeof map[name] === "string") return map[name];
+  }
+}
+
+/**
+ * Removes the version that package.json forces for the package.
+ *
+ * @param {Project} project
+ * @param {string} name
+ */
+export function removeOverride(project, name) {
+  editPackageJson(workspaceRoot(project), (pkg) => {
+    for (let map of [pkg.resolutions, pkg.overrides, pkg.pnpm?.overrides]) {
+      if (map) delete map[name];
+    }
+  });
+}
+
+/**
  * Forces one version of a package for the whole dependency tree.
  *
  * @param {Project} project

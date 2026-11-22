@@ -53,7 +53,7 @@ export default {
 
     if (pm === "npm" || pm === "pnpm") args.push("--packageManager", pm);
 
-    if (!runUpstream(project, "ember.nvp@2.7.0", args)) {
+    if (!runUpstream(project, "ember.nvp@2.9.1", args)) {
       throw new Error("ember.nvp failed. Its output is above.");
     }
 
