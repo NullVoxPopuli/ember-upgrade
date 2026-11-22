@@ -110,6 +110,7 @@ export const apps = [
       "update-ember-moment",
       "update-ember-power-select",
       "v1-addons",
+      "template-colocation",
     ],
     stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },
