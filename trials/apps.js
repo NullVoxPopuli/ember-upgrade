@@ -164,6 +164,7 @@ export const apps = [
       "ember-cli-head",
       "@mainmatter/ember-api-actions",
       "macro-decorators",
+      "no-implicit-this",
       "template-tag",
       "svg-jar",
       "template-whitespace",
