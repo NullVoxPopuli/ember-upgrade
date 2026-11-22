@@ -37,6 +37,7 @@ const OUTER_HTML = new Set([
  * @property {string[]} positionalParams
  * @property {string[]} unreadable source that the reader does not understand
  * @property {Node} node the `extend` call or the class
+ * @property {Node} chain the whole default export, such as `Component.extend({}).reopenClass({})`
  */
 
 /**
@@ -312,6 +313,11 @@ function readClassDecorators(source, node, component) {
   for (let decorator of node.decorators ?? []) {
     let call = decorator.expression;
     let name = calleeName(call);
+
+    /**
+     * ember-classic-decorator only marks the class for lint rules.
+     */
+    if (call?.type === "Identifier" && call.name === "classic") continue;
     let args = call?.arguments ?? [];
     let values = args.map((/** @type {Node} */ arg) =>
       arg.type === "Literal" && typeof arg.value === "string" ? arg.value : undefined,
@@ -424,6 +430,7 @@ export function readClassicComponent(source, file, superClasses) {
       positionalParams: [],
       unreadable: [],
       node: exported,
+      chain: exported,
     };
 
     readClassDecorators(source, exported, component);
@@ -448,6 +455,7 @@ export function readClassicComponent(source, file, superClasses) {
     positionalParams: [],
     unreadable: [],
     node: call,
+    chain: exported,
   };
 
   for (let arg of call.arguments) {

@@ -69,16 +69,30 @@ export function rangeOf(node) {
 }
 
 /**
- * Finds each place where a template invokes the component.
+ * Each template's invocations, by the name or tag that they use.
+ * The conversion asks about every component for every template, so each template parses once.
  *
- * @param {string} template
- * @param {string} name the component's name, such as `svg-icon`
- * @returns {Invocation[]}
+ * @type {Map<string, Map<string, Invocation[]>>}
  */
-export function findInvocations(template, name) {
-  let tag = angleName(name);
-  /** @type {Invocation[]} */
-  let found = [];
+const INDEX = new Map();
+
+/**
+ * @param {string} template
+ * @returns {Map<string, Invocation[]>} the invocations by curly name, such as `svg-icon`, and by tag, such as `<SvgIcon`
+ */
+function indexOf(template) {
+  let cached = INDEX.get(template);
+
+  if (cached) return cached;
+
+  /** @type {Map<string, Invocation[]>} */
+  let index = new Map();
+  let add = (/** @type {string} */ key, /** @type {Invocation} */ invocation) => {
+    let list = index.get(key) ?? [];
+
+    list.push(invocation);
+    index.set(key, list);
+  };
 
   walkAll(parseTemplate(template), (node) => {
     let path = node.path?.original;
@@ -86,27 +100,13 @@ export function findInvocations(template, name) {
       (node.hash?.pairs ?? []).map((/** @type {Node} */ pair) => String(pair.key));
 
     if (
-      (node.type === "GlimmerMustacheStatement" || node.type === "GlimmerBlockStatement") &&
-      path === name
-    ) {
-      found.push({
-        kind: node.type === "GlimmerBlockStatement" ? "block" : "curly",
-        named: hashKeys(),
-        positional: node.params.length,
-        node,
-      });
-      return;
-    }
-
-    if (
       (node.type === "GlimmerMustacheStatement" ||
         node.type === "GlimmerSubExpression" ||
         node.type === "GlimmerBlockStatement") &&
       path === "component" &&
-      node.params[0]?.type === "GlimmerStringLiteral" &&
-      node.params[0].value === name
+      node.params[0]?.type === "GlimmerStringLiteral"
     ) {
-      found.push({
+      add(node.params[0].value, {
         kind: "component",
         named: hashKeys(),
         positional: node.params.length - 1,
@@ -115,8 +115,21 @@ export function findInvocations(template, name) {
       return;
     }
 
-    if (node.type === "GlimmerElementNode" && node.tag === tag) {
-      found.push({
+    if (
+      (node.type === "GlimmerMustacheStatement" || node.type === "GlimmerBlockStatement") &&
+      typeof path === "string"
+    ) {
+      add(path, {
+        kind: node.type === "GlimmerBlockStatement" ? "block" : "curly",
+        named: hashKeys(),
+        positional: node.params.length,
+        node,
+      });
+      return;
+    }
+
+    if (node.type === "GlimmerElementNode") {
+      add(`<${node.tag}`, {
         kind: "angle",
         named: node.attributes
           .map((/** @type {Node} */ attribute) => String(attribute.name))
@@ -128,5 +141,23 @@ export function findInvocations(template, name) {
     }
   });
 
-  return found;
+  if (INDEX.size > 2000) INDEX.clear();
+
+  INDEX.set(template, index);
+
+  return index;
+}
+
+/**
+ * Finds each place where a template invokes the component.
+ *
+ * @param {string} template
+ * @param {string} name the component's name, such as `svg-icon`
+ * @returns {Invocation[]} in the order of the template
+ */
+export function findInvocations(template, name) {
+  let index = indexOf(template);
+  let found = (index.get(name) ?? []).concat(index.get(`<${angleName(name)}`) ?? []);
+
+  return found.sort((a, b) => a.node.start - b.node.start);
 }

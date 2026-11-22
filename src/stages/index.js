@@ -23,6 +23,7 @@ import {
 } from "./addons/removals.js";
 import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
 import appTree from "./app-tree/index.js";
+import classicComponents from "./classic-components/index.js";
 import buildSettings from "./build-settings/index.js";
 import declareImports from "./declare-imports/index.js";
 import emberCli from "./ember-cli/index.js";
@@ -98,6 +99,7 @@ export const stages = [
   noImplicitThis,
   templateColocation,
   dynamicComponents,
+  classicComponents,
   templateTag,
   svgJar,
   templateWhitespace,

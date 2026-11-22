@@ -115,21 +115,25 @@ export function attributeBinding(binding) {
  *
  * @param {string} template the component's template
  * @param {ClassicComponent} component
+ * @param {{ modifiers?: string[], start?: string, elementId?: boolean }} [options] more modifiers for the element, template text for the start of its body, and an `id` from `this.elementId`
  * @returns {{ template: string, events: string[] }} the new template, and the methods that handle events now
  */
-export function writeOuterHtml(template, component) {
+export function writeOuterHtml(template, component, options = {}) {
   let outer = component.outerHtml;
   let tag = outer.tagName ?? "div";
   let events = component.members
     .filter((member) => member.kind === "method" && EVENTS.has(member.name))
     .map((member) => member.name);
 
-  if (tag === "") return { template, events: [] };
+  let start = options.start ? `${options.start}\n` : "";
+
+  if (tag === "") return { template: `${start}${template}`, events: [] };
 
   /** @type {string[]} */
   let attributes = [];
 
   if (outer.elementId) attributes.push(`id="${outer.elementId}"`);
+  else if (options.elementId) attributes.push("id={{this.elementId}}");
   if (outer.ariaRole) attributes.push(`role="${outer.ariaRole}"`);
 
   let classes = outer.classNames.concat(
@@ -143,15 +147,18 @@ export function writeOuterHtml(template, component) {
   attributes.push("...attributes");
 
   for (let name of events) attributes.push(`{{on "${EVENTS.get(name)}" this.${name}}}`);
+  for (let modifier of options.modifiers ?? []) attributes.push(modifier);
 
   let opening = `<${tag} ${attributes.join(" ")}`;
 
-  if (VOID.has(tag) && template.trim() === "") return { template: `${opening} />\n`, events };
+  if (VOID.has(tag) && template.trim() === "" && !start) {
+    return { template: `${opening} />\n`, events };
+  }
 
   /**
    * The body stays as it was, because indentation would change the whitespace of rendered text.
    */
   let body = template.endsWith("\n") ? template : `${template}\n`;
 
-  return { template: `${opening}>\n${body}</${tag}>\n`, events };
+  return { template: `${opening}>\n${start}${body}</${tag}>\n`, events };
 }
