@@ -114,8 +114,10 @@ export function rewriteTemplate(template, component, names, glimmer) {
       node.path?.original === "action"
     ) {
       let [target, ...rest] = node.params ?? [];
+      let pairs = node.hash?.pairs ?? [];
+      let path = actionValuePath(node);
 
-      if ((node.hash?.pairs ?? []).length > 0 || !target) {
+      if ((pairs.length > 0 && !path) || !target) {
         unreadable.push(`the action helper with named arguments: ${sourceOf(source, node)}`);
         return;
       }
@@ -123,8 +125,9 @@ export function rewriteTemplate(template, component, names, glimmer) {
       let value = () => {
         let fn = target.type === "GlimmerStringLiteral" ? `this.${target.value}` : print(target);
         let args = rest.map((/** @type {Node} */ arg) => print(arg));
+        let action = args.length > 0 ? `(fn ${fn} ${args.join(" ")})` : fn;
 
-        return args.length > 0 ? `(fn ${fn} ${args.join(" ")})` : fn;
+        return path ? `(this.${ACTION_VALUE} ${action} "${path}")` : action;
       };
 
       if (target.type === "GlimmerStringLiteral" && !NAME.test(target.value)) {
@@ -138,7 +141,7 @@ export function rewriteTemplate(template, component, names, glimmer) {
         edits.replace(rangeOf(node), () => {
           let text = value();
 
-          return `{{${rest.length > 0 ? text.slice(1, -1) : text}}}`;
+          return `{{${text.startsWith("(") ? text.slice(1, -1) : text}}}`;
         });
       }
       return;
@@ -183,6 +186,46 @@ export function rewriteTemplate(template, component, names, glimmer) {
  * The field that wraps an action for `on`, as the `{{action}}` modifier ran it.
  */
 export const ACTION_HANDLER = "handleAction";
+
+/**
+ * The field that calls an action with a value of the event, as the `action` helper did with `value=`.
+ */
+export const ACTION_VALUE = "actionValue";
+
+/**
+ * @param {Node} node an `action` helper
+ * @returns {string | undefined} the path of its `value=`, such as `target.files`, when that is its only named argument
+ */
+function actionValuePath(node) {
+  let pairs = node.hash?.pairs ?? [];
+  let [pair] = pairs;
+
+  if (pairs.length !== 1 || pair.key !== "value" || pair.value.type !== "GlimmerStringLiteral") {
+    return;
+  }
+
+  return /^[\w$.]+$/.test(pair.value.value) ? pair.value.value : undefined;
+}
+
+/**
+ * @param {string} template
+ * @returns {boolean} an `action` helper of the template needs {@link ACTION_VALUE}
+ */
+export function needsActionValue(template) {
+  let needed = false;
+
+  walkTemplate(parseTemplate(template), (node) => {
+    if (
+      (node.type === "GlimmerSubExpression" || node.type === "GlimmerMustacheStatement") &&
+      node.path?.original === "action" &&
+      actionValuePath(node)
+    ) {
+      needed = true;
+    }
+  });
+
+  return needed;
+}
 
 /**
  * The elements that do something on their own when the user clicks them or submits them.

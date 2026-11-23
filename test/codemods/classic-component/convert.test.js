@@ -657,3 +657,56 @@ export default Component.extend({
     }
   `);
 });
+
+/**
+ * From code-corps-ember (MIT), shortened.
+ */
+test("the action helper with value= calls the action with that value of the event", () => {
+  let sources = new Map([
+    [
+      "app/components/image-drop.js",
+      `import Component from '@ember/component';
+
+export default Component.extend({
+  tagName: '',
+
+  filesDidChange(files) {
+    this.drop(files[0]);
+  },
+});
+`,
+    ],
+    [
+      "app/components/image-drop.hbs",
+      `<input type="file" onchange={{action this.filesDidChange value="target.files"}}>
+<input onchange={{action this.pick 1 value="target.value"}}>\n`,
+    ],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(Object.fromEntries(result.files)).toMatchInlineSnapshot(`
+    {
+      "app/components/image-drop.hbs": "<input type="file" onchange={{this.actionValue this.filesDidChange "target.files"}}>
+    <input onchange={{this.actionValue (fn @pick 1) "target.value"}}>
+    ",
+      "app/components/image-drop.js": "import Component from '@glimmer/component';
+    import { action } from '@ember/object';
+
+    export default class ImageDrop extends Component {
+      @action
+      filesDidChange(files) {
+        this.args.drop(files[0]);
+      }
+
+      /**
+       * Calls an action with a value of the event, as the \`action\` helper did with \`value=\`.
+       */
+      actionValue = (run, path) => (event) =>
+        run(path.split('.').reduce((value, key) => value?.[key], event));
+    }
+    ",
+    }
+  `);
+});

@@ -7,7 +7,7 @@ import { COMPONENT_API } from "./args.js";
 import { macroGetter, readPath } from "./macros.js";
 import { EVENTS } from "./outer-html.js";
 import { readClassicComponent } from "./read.js";
-import { ACTION_HANDLER } from "./template.js";
+import { ACTION_HANDLER, ACTION_VALUE } from "./template.js";
 
 /** @typedef {import('#ast.js').Node} Node */
 /** @typedef {import('./read.js').ClassicComponent} ClassicComponent */
@@ -375,7 +375,7 @@ function macroOf(source, call, imports, root) {
  * @param {string} input the module, after {@link import('./accessors.js').rewriteAccessors}
  * @param {string} file
  * @param {Names} names
- * @param {{ templateReads: Set<string>, imports?: Set<string>, actionHandler?: boolean }} options the keys that the template reads, the names that the accessor rewrite needs from `@ember/object`, and whether the template's `{{action}}` modifiers need {@link ACTION_HANDLER}
+ * @param {{ templateReads: Set<string>, imports?: Set<string>, actionHandler?: boolean, actionValue?: boolean }} options the keys that the template reads, the names that the accessor rewrite needs from `@ember/object`, and whether the template needs {@link ACTION_HANDLER} or {@link ACTION_VALUE}
  * @returns {Glimmer}
  */
 export function toGlimmer(input, file, names, options) {
@@ -746,6 +746,14 @@ export function toGlimmer(input, file, names, options) {
 
     body.push(
       `\u21e5/**\n\u21e5 * Runs an action as the \`{{action}}\` modifier did, without the event.\n\u21e5 */\n\u21e5${ACTION_HANDLER} =\n\u21e5\u21e5(run, options = {}) =>\n\u21e5\u21e5(event) => {\n\u21e5\u21e5\u21e5if (options.preventDefault !== false) event.preventDefault();\n\u21e5\u21e5\u21e5if (options.bubbles === false) event.stopPropagation();\n\n\u21e5\u21e5\u21e5return run();\n\u21e5\u21e5};`,
+    );
+  }
+
+  if (options.actionValue) {
+    if (has(ACTION_VALUE)) result.unreadable.push(`the class has a ${ACTION_VALUE} member`);
+
+    body.push(
+      `\u21e5/**\n\u21e5 * Calls an action with a value of the event, as the \`action\` helper did with \`value=\`.\n\u21e5 */\n\u21e5${ACTION_VALUE} = (run, path) => (event) =>\n\u21e5\u21e5run(path.split('.').reduce((value, key) => value?.[key], event));`,
     );
   }
 

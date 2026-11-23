@@ -7,7 +7,7 @@ import { rewriteJQuery } from "./jquery.js";
 import { inlineMixins } from "./mixins.js";
 import { rewritePrototypeExtensions } from "./prototype-extensions.js";
 import { readClassicComponent } from "./read.js";
-import { needsActionHandler, rewriteTemplate } from "./template.js";
+import { needsActionHandler, needsActionValue, rewriteTemplate } from "./template.js";
 import { classUsage, templateUsage } from "./usage.js";
 
 /** @typedef {import('./callers.js').Converted} Converted */
@@ -113,6 +113,7 @@ function analyze(candidate, template, templates, resolve) {
     templateReads: fromTemplate.reads,
     imports: accessors.imports,
     actionHandler: needsActionHandler(template, component),
+    actionValue: needsActionValue(template),
   });
 
   for (let reason of mixins.unreadable) glimmer.unreadable.push(reason);
