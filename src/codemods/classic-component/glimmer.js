@@ -518,10 +518,23 @@ export function toGlimmer(input, file, names, options) {
    * @param {string} decorator
    * @returns {string}
    */
-  let argKeys = (decorator) =>
-    decorator.replace(/(["'])([\w$]+)((?:\.[\w$@\[\]{},]+)*)\1/g, (match, quote, first, rest) =>
-      names.args.has(first) && !has(first) ? `${quote}args.${first}${rest}${quote}` : match,
+  let argKeys = (decorator) => {
+    let callee = imports.get(/^([\w$]+)[.(]/.exec(decorator)?.[1] ?? "");
+    let takesKeys =
+      MACRO_MODULES.has(callee?.module ?? "") ||
+      (callee?.module === "@ember/object" && callee.imported === "computed");
+
+    /**
+     * Only the dependent keys of a macro or `computed` name arguments. A task's body is code, which the first pass rewrote.
+     */
+    if (!takesKeys) return decorator;
+
+    return decorator.replace(
+      /(["'])([\w$]+)((?:\.[\w$@\[\]{},]+)*)\1/g,
+      (match, quote, first, rest) =>
+        names.args.has(first) && !has(first) ? `${quote}args.${first}${rest}${quote}` : match,
     );
+  };
   let allArgs = () =>
     Array.from(names.args)
       .filter((arg) => NAME.test(arg))

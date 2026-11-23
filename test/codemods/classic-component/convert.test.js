@@ -1273,3 +1273,49 @@ export default class DependencyTable extends Component {
     "
   `);
 });
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("a task decorator keeps the keys in its body", () => {
+  let sources = new Map([
+    [
+      "app/components/addon-source-usages.js",
+      `import Component from '@ember/component';
+import { task } from 'ember-concurrency';
+
+export default class AddonSourceUsages extends Component {
+  usages = null;
+
+  @(task(function* () {
+    this.set('usages', yield this.get('codeSearch.usages').perform(this.get('addon.id'), this.query));
+  }).drop())
+  fetchUsages;
+}
+`,
+    ],
+    ["app/components/addon-source-usages.hbs", `{{this.usages.length}}\n`],
+    ["app/templates/code-search.hbs", `<AddonSourceUsages @addon={{this.addon}} @query="x" />\n`],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/addon-source-usages.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { task } from 'ember-concurrency';
+    import { get } from '@ember/object';
+    import { tracked } from '@glimmer/tracking';
+
+    export default class AddonSourceUsages extends Component {
+      @tracked
+      usages = null;
+
+      @(task(function* () {
+        this.usages = yield get(this, 'codeSearch.usages').perform(get(this.args, 'addon.id'), this.args.query);
+      }).drop())
+      fetchUsages;
+    }
+    "
+  `);
+});
