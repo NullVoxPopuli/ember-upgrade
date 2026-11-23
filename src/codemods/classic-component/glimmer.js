@@ -7,6 +7,7 @@ import { COMPONENT_API } from "./args.js";
 import { macroGetter, readPath } from "./macros.js";
 import { EVENTS } from "./outer-html.js";
 import { readClassicComponent } from "./read.js";
+import { ACTION_HANDLER } from "./template.js";
 
 /** @typedef {import('#ast.js').Node} Node */
 /** @typedef {import('./read.js').ClassicComponent} ClassicComponent */
@@ -49,7 +50,13 @@ const PRUNE = [
   "ember-classic-decorator",
   "@ember-decorators/component",
   "@ember-decorators/object",
+  "ember-computed",
 ];
+
+/**
+ * The modules that export the computed macros. `ember-computed` is the shim from before the module API.
+ */
+const MACRO_MODULES = new Set(["@ember/object/computed", "ember-computed"]);
 
 /**
  * @typedef {object} Glimmer
@@ -335,14 +342,15 @@ function macroOf(source, call, imports, root) {
   if (callee?.type === "Identifier") {
     let from = imports.get(callee.name);
 
-    if (from?.module !== "@ember/object/computed") return;
+    if (!from || !MACRO_MODULES.has(from.module)) return;
 
     name = from.imported;
   } else if (
     callee?.type === "MemberExpression" &&
     callee.object?.type === "Identifier" &&
-    imports.get(callee.object.name)?.module === "@ember/object" &&
-    imports.get(callee.object.name)?.imported === "computed"
+    ((imports.get(callee.object.name)?.module === "@ember/object" &&
+      imports.get(callee.object.name)?.imported === "computed") ||
+      imports.get(callee.object.name)?.module === "ember-computed")
   ) {
     name = callee.property?.name;
   }
@@ -367,7 +375,7 @@ function macroOf(source, call, imports, root) {
  * @param {string} input the module, after {@link import('./accessors.js').rewriteAccessors}
  * @param {string} file
  * @param {Names} names
- * @param {{ templateReads: Set<string>, imports?: Set<string> }} options the keys that the template reads, and the names that the accessor rewrite needs from `@ember/object`
+ * @param {{ templateReads: Set<string>, imports?: Set<string>, actionHandler?: boolean }} options the keys that the template reads, the names that the accessor rewrite needs from `@ember/object`, and whether the template's `{{action}}` modifiers need {@link ACTION_HANDLER}
  * @returns {Glimmer}
  */
 export function toGlimmer(input, file, names, options) {
@@ -731,6 +739,14 @@ export function toGlimmer(input, file, names, options) {
     need("@ember/object/internals", "guidFor");
     result.elementId = true;
     body.push("  get elementId() {\n    return guidFor(this);\n  }");
+  }
+
+  if (options.actionHandler) {
+    if (has(ACTION_HANDLER)) result.unreadable.push(`the class has a ${ACTION_HANDLER} member`);
+
+    body.push(
+      `\u21e5/**\n\u21e5 * Runs an action as the \`{{action}}\` modifier did, without the event.\n\u21e5 */\n\u21e5${ACTION_HANDLER} =\n\u21e5\u21e5(run, options = {}) =>\n\u21e5\u21e5(event) => {\n\u21e5\u21e5\u21e5if (options.preventDefault !== false) event.preventDefault();\n\u21e5\u21e5\u21e5if (options.bubbles === false) event.stopPropagation();\n\n\u21e5\u21e5\u21e5return run();\n\u21e5\u21e5};`,
+    );
   }
 
   if (elementHooks.length > 0 || usesElement) {

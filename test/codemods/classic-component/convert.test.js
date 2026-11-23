@@ -594,3 +594,66 @@ export default class MeetingsList extends Component {
     "
   `);
 });
+
+test("an action modifier that stops the default gets the handleAction field", () => {
+  let sources = new Map([
+    [
+      "app/components/save-button.js",
+      `import Component from '@ember/component';
+import { notEmpty } from 'ember-computed';
+
+export default Component.extend({
+  tagName: '',
+  hasItem: notEmpty('item'),
+
+  actions: {
+    save(item) {
+      this.onSave(item);
+    },
+  },
+});
+`,
+    ],
+    [
+      "app/components/save-button.hbs",
+      `<button disabled={{not this.hasItem}} {{action "save" this.item}}>Save</button>\n`,
+    ],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(Object.fromEntries(result.files)).toMatchInlineSnapshot(`
+    {
+      "app/components/save-button.hbs": "<button disabled={{not this.hasItem}} {{on "click" (this.handleAction (fn this.save @item))}}>Save</button>
+    ",
+      "app/components/save-button.js": "import Component from '@glimmer/component';
+    import { isEmpty } from '@ember/utils';
+    import { action } from '@ember/object';
+
+    export default class SaveButton extends Component {
+      get hasItem() {
+        return !isEmpty(this.args.item);
+      }
+
+      @action
+      save(item) {
+        this.args.onSave(item);
+      }
+
+      /**
+       * Runs an action as the \`{{action}}\` modifier did, without the event.
+       */
+      handleAction =
+        (run, options = {}) =>
+        (event) => {
+          if (options.preventDefault !== false) event.preventDefault();
+          if (options.bubbles === false) event.stopPropagation();
+
+          return run();
+        };
+    }
+    ",
+    }
+  `);
+});

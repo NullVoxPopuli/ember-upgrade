@@ -144,12 +144,235 @@ export function rewriteTemplate(template, component, names, glimmer) {
       return;
     }
 
-    if (node.type === "GlimmerElementModifierStatement" && node.path?.original === "action") {
-      unreadable.push(`the action modifier: ${sourceOf(source, node)}`);
+    if (node.type === "GlimmerElementNode") {
+      for (let modifier of node.modifiers ?? []) {
+        if (modifier.path?.original !== "action") continue;
+
+        let read = readActionModifier(modifier, node, component);
+
+        if ("reason" in read) {
+          unreadable.push(`${read.reason}: ${sourceOf(source, modifier)}`);
+          continue;
+        }
+
+        edits.replace(rangeOf(modifier), () => {
+          let fn =
+            read.target.type === "GlimmerStringLiteral"
+              ? `this.${read.target.value}`
+              : print(read.target);
+          let args = read.args.map((/** @type {Node} */ arg) => print(arg));
+          let action = args.length > 0 ? `(fn ${fn} ${args.join(" ")})` : fn;
+          let options = read.options.map(([key, value]) =>
+            typeof value === "string" ? `${key}=${value}` : `${key}=${print(value)}`,
+          );
+
+          if (read.handler) {
+            action = `(this.${ACTION_HANDLER} ${action}${options.map((option) => ` ${option}`).join("")})`;
+          }
+
+          return `{{on "${read.event}" ${action}}}`;
+        });
+      }
     }
   });
 
   return { template: edits.apply(), unreadable };
+}
+
+/**
+ * The field that wraps an action for `on`, as the `{{action}}` modifier ran it.
+ */
+export const ACTION_HANDLER = "handleAction";
+
+/**
+ * The elements that do something on their own when the user clicks them or submits them.
+ */
+const HAS_DEFAULT = new Set([
+  "a",
+  "area",
+  "button",
+  "details",
+  "form",
+  "input",
+  "label",
+  "option",
+  "select",
+  "summary",
+  "textarea",
+]);
+
+/**
+ * The events of the event dispatcher, which the `{{action}}` modifier takes, that are not the DOM event in lower case.
+ */
+const EVENT_NAMES = new Map([["doubleClick", "dblclick"]]);
+
+/**
+ * @param {Node} element
+ * @returns {boolean} the element, or what it renders, can do something on its own that `preventDefault` stops
+ */
+function hasDefault(element) {
+  let found = false;
+
+  walkTemplate(element, (node) => {
+    if (found) return SKIP_CHILDREN;
+
+    if (node.type === "GlimmerElementNode") {
+      let tag = String(node.tag);
+      let type = node.attributes?.find((/** @type {Node} */ entry) => entry.name === "type");
+      let plainButton =
+        tag === "button" &&
+        type?.value?.type === "GlimmerTextNode" &&
+        type.value.chars === "button";
+
+      if ((HAS_DEFAULT.has(tag) && !plainButton) || /^[A-Z@:]|\./.test(tag)) found = true;
+    }
+
+    if (node.type === "GlimmerMustacheStatement" || node.type === "GlimmerBlockStatement") {
+      let path = String(node.path?.original ?? "");
+
+      if (/^(yield|outlet|component)$/.test(path) || path.includes("-")) found = true;
+    }
+  });
+
+  return found;
+}
+
+/**
+ * @param {ClassicComponent} component
+ * @param {string} name
+ * @returns {number | undefined} the number of parameters of the component's method or action
+ */
+function parameterCount(component, name) {
+  for (let entry of component.members) {
+    if (entry.kind === "method" && entry.name === name) {
+      return (entry.node.value ?? entry.node).params?.length;
+    }
+
+    if (entry.kind !== "actions") continue;
+
+    for (let property of entry.node.value?.properties ?? []) {
+      let key = property.key?.name ?? property.key?.value;
+
+      if (key === name) return (property.value ?? property).params?.length;
+    }
+  }
+}
+
+/**
+ * @typedef {object} ActionModifier
+ * @property {string} event the DOM event, such as `click`
+ * @property {Node} target the action
+ * @property {Node[]} args
+ * @property {boolean} handler the action needs {@link ACTION_HANDLER}, to stop the default or the event, or to get no event
+ * @property {[string, Node | string][]} options the named arguments for the handler
+ */
+
+/**
+ * The `{{action}}` modifier listens for a click unless `on` names another event.
+ * It calls `preventDefault` unless `preventDefault=false`, stops the event with `bubbles=false`,
+ * and does not give the event to the action. `on` gives the event to the function as its last argument.
+ *
+ * @param {Node} modifier
+ * @param {Node} element
+ * @param {ClassicComponent} component
+ * @returns {ActionModifier | { reason: string }}
+ */
+export function readActionModifier(modifier, element, component) {
+  let [target, ...args] = modifier.params ?? [];
+
+  if (!target) return { reason: "the action modifier without an action" };
+
+  if (target.type === "GlimmerStringLiteral" && !NAME.test(target.value)) {
+    return { reason: `the action ${target.value} has no plain name` };
+  }
+
+  if (
+    target.type !== "GlimmerStringLiteral" &&
+    target.type !== "GlimmerPathExpression" &&
+    target.type !== "GlimmerSubExpression"
+  ) {
+    return { reason: "the action modifier with an action that is not a name, a path, or a helper" };
+  }
+
+  let event = "click";
+  /** @type {Node | undefined} */
+  let preventDefault;
+  /** @type {Node | undefined} */
+  let bubbles;
+
+  for (let pair of modifier.hash?.pairs ?? []) {
+    if (pair.key === "on" && pair.value.type === "GlimmerStringLiteral") {
+      event = EVENT_NAMES.get(pair.value.value) ?? pair.value.value.toLowerCase();
+    } else if (pair.key === "preventDefault") {
+      preventDefault = pair.value;
+    } else if (pair.key === "bubbles") {
+      bubbles = pair.value;
+    } else {
+      return { reason: `the action modifier with ${pair.key}=` };
+    }
+  }
+
+  /**
+   * The default stays when nothing on the element has one.
+   * @type {boolean | Node}
+   */
+  let prevents = false;
+
+  if (hasDefault(element)) {
+    prevents =
+      preventDefault?.type === "GlimmerBooleanLiteral"
+        ? preventDefault.value
+        : (preventDefault ?? true);
+  }
+
+  /** @type {[string, Node | string][]} */
+  let options = [];
+
+  if (prevents === false) options.push(["preventDefault", "false"]);
+  else if (prevents !== true) options.push(["preventDefault", prevents]);
+
+  let stops = bubbles !== undefined && !(bubbles.type === "GlimmerBooleanLiteral" && bubbles.value);
+
+  if (stops && bubbles) options.push(["bubbles", bubbles]);
+
+  /**
+   * A method with more parameters than the template passes reads the event as a value it does not expect.
+   */
+  let count =
+    target.type === "GlimmerStringLiteral" ? parameterCount(component, target.value) : undefined;
+  let readsEvent = count !== undefined && count > args.length;
+  let handler = prevents !== false || stops || readsEvent;
+
+  return {
+    event,
+    target,
+    args,
+    handler,
+    options: handler ? options : [],
+  };
+}
+
+/**
+ * @param {string} template
+ * @param {ClassicComponent} component
+ * @returns {boolean} an `{{action}}` modifier of the template needs {@link ACTION_HANDLER}
+ */
+export function needsActionHandler(template, component) {
+  let needed = false;
+
+  walkTemplate(parseTemplate(template), (node) => {
+    if (node.type !== "GlimmerElementNode") return;
+
+    for (let modifier of node.modifiers ?? []) {
+      if (modifier.path?.original !== "action") continue;
+
+      let read = readActionModifier(modifier, node, component);
+
+      if (!("reason" in read) && read.handler) needed = true;
+    }
+  });
+
+  return needed;
 }
 
 /**

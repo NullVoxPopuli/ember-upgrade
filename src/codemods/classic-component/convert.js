@@ -5,7 +5,7 @@ import { toGlimmer } from "./glimmer.js";
 import { findInvocations } from "./invocations.js";
 import { rewriteJQuery } from "./jquery.js";
 import { readClassicComponent } from "./read.js";
-import { rewriteTemplate } from "./template.js";
+import { needsActionHandler, rewriteTemplate } from "./template.js";
 import { classUsage, templateUsage } from "./usage.js";
 
 /** @typedef {import('./callers.js').Converted} Converted */
@@ -106,6 +106,7 @@ function analyze(candidate, template, templates) {
   let glimmer = toGlimmer(accessors.source, candidate.file, names, {
     templateReads: fromTemplate.reads,
     imports: accessors.imports,
+    actionHandler: needsActionHandler(template, component),
   });
 
   for (let reason of jquery.unreadable) glimmer.unreadable.push(reason);
