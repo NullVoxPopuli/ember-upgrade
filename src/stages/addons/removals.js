@@ -233,6 +233,11 @@ const OBSOLETE = [
   },
   { name: "ember-watson", label: "It is an ember-cli command" },
   {
+    name: "ember-cli-qunit",
+    label: "ember-qunit replaces it",
+    replaceWith: { "ember-qunit": "9.0.4" },
+  },
+  {
     name: "ember-try",
     label: "It runs ember-cli scenarios",
     files: ["config/ember-try.js"],

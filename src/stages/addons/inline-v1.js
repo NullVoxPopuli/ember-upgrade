@@ -2,6 +2,7 @@ import { existsSync, globSync, readFileSync, realpathSync } from "node:fs";
 import { join, posix } from "node:path";
 
 import { parseProgram, propertyName, walk } from "#ast.js";
+import { transform as replaceEmberGlobals } from "#stages/ember-globals/transform.js";
 import { contentForPages } from "./content-for.js";
 import { inlineStage } from "./inline.js";
 
@@ -349,7 +350,16 @@ export function planInline(name, directory, taken) {
 
     let rewritten = rewriteSource(source, { origin: file, target, imports, modules });
 
-    files.set(target, target.endsWith(".hbs") ? withHasBlockHelpers(rewritten) : rewritten);
+    /**
+     * The ember-globals stage ran before the code came into the app, so the code gets the same change here.
+     */
+    if (target.endsWith(".hbs")) {
+      rewritten = withHasBlockHelpers(rewritten);
+    } else if (/\bfrom\s*["']ember["']/.test(rewritten)) {
+      rewritten = replaceEmberGlobals(rewritten, target).code;
+    }
+
+    files.set(target, rewritten);
   }
 
   let manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
