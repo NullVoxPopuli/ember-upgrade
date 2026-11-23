@@ -1,2 +1,4 @@
 dist
+.github/
+CHANGELOG.md
 pnpm-lock.yaml
