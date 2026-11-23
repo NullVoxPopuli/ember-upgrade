@@ -1,11 +1,14 @@
-import { editPackageJson, removeDependency } from "#package-json.js";
+import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import { published } from "#process.js";
 
 const FEATURES = "config/optional-features.json";
 
 /**
- * Code that uses jQuery: an import of it, `this.$()` of a classic component, or the `Ember.$` global.
+ * Code that needs the integration: `this.$()` of a classic component, the `Ember.$` global, or an import of `@ember/jquery`.
+ * An import of the `jquery` package works without it.
  */
-const USES_JQUERY = /from\s*["'](jquery|@ember\/jquery)["']|\bthis\.\$\(|\bEmber\.\$\b/;
+const USES_INTEGRATION = /from\s*["']@ember\/jquery["']|\bthis\.\$\(|\bEmber\.\$\b/;
+const IMPORTS_JQUERY = /from\s*["']jquery["']/;
 
 /**
  * @param {import('#project.js').Project} project
@@ -18,10 +21,10 @@ function enabled(project) {
 
 /**
  * @param {import('#project.js').Project} project
- * @returns {string[]} the files that use jQuery
+ * @returns {string[]} the files that need the jQuery integration
  */
 function users(project) {
-  return project.files().filter((file) => USES_JQUERY.test(project.read(file)));
+  return project.files().filter((file) => USES_INTEGRATION.test(project.read(file)));
 }
 
 /**
@@ -46,10 +49,10 @@ export default {
     return {
       blockers: [
         {
-          title: "Code that uses jQuery",
+          title: "Code that uses the jQuery integration",
           where: files,
           action:
-            "Use the DOM API instead, or import jquery from npm where you still need it, and remove `this.$()`.",
+            "Use the DOM API instead of `this.$()` and `Ember.$`, or import jquery from npm where you still need it.",
         },
       ],
       todo: [],
@@ -57,7 +60,18 @@ export default {
   },
 
   async run(project) {
-    editPackageJson(project, (pkg) => removeDependency(pkg, "@ember/jquery"));
+    let importsJquery = project.files().some((file) => IMPORTS_JQUERY.test(project.read(file)));
+
+    editPackageJson(project, (pkg) => {
+      removeDependency(pkg, "@ember/jquery");
+
+      /**
+       * @ember/jquery brought jquery. Code that imports it now needs its own dependency.
+       */
+      if (importsJquery && !pkg.dependencies?.jquery && !pkg.devDependencies?.jquery) {
+        setDependency(pkg, "jquery", `^${published("jquery", "3")?.version ?? "3.7.1"}`);
+      }
+    });
 
     if (enabled(project)) {
       let features = JSON.parse(project.read(FEATURES));
