@@ -205,3 +205,35 @@ export default class Review extends Model {
     }
   `);
 });
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("a relationship without a type gets the one that ember-data took from the field", () => {
+  let result = explicitRelationships(
+    new Map([
+      [
+        "score-calculation",
+        `import Model, { belongsTo } from '@ember-data/model';
+export default class ScoreCalculation extends Model {
+  @belongsTo()
+  addon;
+}
+`,
+      ],
+      [
+        "addon",
+        `import Model from '@ember-data/model';\nexport default class Addon extends Model {}\n`,
+      ],
+    ]),
+  );
+
+  expect(result.files.get("score-calculation")).toMatchInlineSnapshot(`
+    "import Model, { belongsTo } from '@ember-data/model';
+    export default class ScoreCalculation extends Model {
+      @belongsTo('addon', { async: true, inverse: null })
+      addon;
+    }
+    "
+  `);
+});

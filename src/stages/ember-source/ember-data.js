@@ -22,6 +22,7 @@ function dasherize(type) {
  * @property {Node | undefined} options
  * @property {Set<string>} keys the options that the call sets
  * @property {string | null | undefined} inverse the `inverse` option, when it is a literal
+ * @property {boolean} typeMissing the call has no type, which came from the field's name
  */
 
 /**
@@ -57,9 +58,19 @@ export function readRelationships(source, file) {
       return;
     }
 
-    if (type?.type !== "Literal" || typeof type.value !== "string") return;
+    let name = key.name ?? key.value;
+    let written = type?.type === "Literal" && typeof type.value === "string";
 
-    let options = call.arguments[1]?.type === "ObjectExpression" ? call.arguments[1] : undefined;
+    /**
+     * `@belongsTo()` took the type from the field's name, which ember-data 5 does not do.
+     */
+    if (!written && type && type.type !== "ObjectExpression") return;
+
+    let options = written
+      ? call.arguments[1]?.type === "ObjectExpression"
+        ? call.arguments[1]
+        : undefined
+      : type;
     let keys = new Set(
       (options?.properties ?? []).map(
         (/** @type {Node} */ property) => property.key?.name ?? property.key?.value,
@@ -70,9 +81,16 @@ export function readRelationships(source, file) {
       (/** @type {Node} */ property) => (property.key?.name ?? property.key?.value) === "inverse",
     )?.value;
 
+    let inferred = dasherize(name);
+
     relationships.push({
-      name: key.name ?? key.value,
-      type: dasherize(type.value),
+      name,
+      type: written
+        ? dasherize(type.value)
+        : from.imported === "hasMany"
+          ? inferred.replace(/s$/, "")
+          : inferred,
+      typeMissing: !written,
       call,
       options,
       keys,
@@ -133,13 +151,12 @@ export function explicitRelationships(models) {
           unreadable.push(
             `${name}.${relationship.name}: the model ${relationship.type} is not in the app`,
           );
-          continue;
         }
 
         /**
          * A relationship back to this model is the inverse, unless it names another one.
          */
-        let back = related.filter(
+        let back = (related ?? []).filter(
           (other) =>
             other.type === name &&
             other !== relationship &&
@@ -158,14 +175,23 @@ export function explicitRelationships(models) {
         );
       }
 
-      if (add.length === 0) continue;
-
       let { call, options } = relationship;
+
+      if (relationship.typeMissing) {
+        edits.insert(
+          call.arguments[0]?.start ?? call.end - 1,
+          `'${relationship.type}'${options ? ", " : ""}`,
+        );
+      }
+
+      if (add.length === 0) continue;
 
       if (options && options.properties.length > 0) {
         edits.insert(options.properties.at(-1).end, `, ${add.join(", ")}`);
       } else if (options) {
         edits.replace(options, `{ ${add.join(", ")} }`);
+      } else if (relationship.typeMissing) {
+        edits.insert(call.end - 1, `, { ${add.join(", ")} }`);
       } else {
         edits.insert(call.arguments[0].end, `, { ${add.join(", ")} }`);
       }
