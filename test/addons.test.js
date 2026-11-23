@@ -9,6 +9,7 @@ import emberMetrics from "#stages/addons/ember-metrics.js";
 import { rewriteClickOutside } from "#stages/addons/click-outside.js";
 import inlineContent from "#stages/addons/inline-content.js";
 import { replaceTypeahead } from "#stages/addons/power-select-typeahead.js";
+import { rewritePowerSelectMultiple } from "#stages/addons/power-select.js";
 import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
@@ -728,6 +729,25 @@ export default class PageLayout extends Component {
         </PowerSelect>
       </template>
     }
+    "
+  `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("power-select-multiple becomes power-select with multiple", () => {
+  expect(
+    rewritePowerSelectMultiple(`{{#power-select-multiple options=this.categories onChange=this.pick as |category|}}
+  {{category.name}}
+{{/power-select-multiple}}
+<PowerSelectMultiple @options={{this.tags}} as |tag|>{{tag}}</PowerSelectMultiple>
+`).template,
+  ).toMatchInlineSnapshot(`
+    "{{#power-select multiple=true options=this.categories onChange=this.pick as |category|}}
+      {{category.name}}
+    {{/power-select}}
+    <PowerSelect @multiple={{true}} @options={{this.tags}} as |tag|>{{tag}}</PowerSelect>
     "
   `);
 });

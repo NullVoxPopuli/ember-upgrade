@@ -9,6 +9,7 @@ import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
 import { rewriteClickOutside } from "./click-outside.js";
+import { rewritePowerSelectMultiple } from "./power-select.js";
 import { dependencyDirectory, inlineV1Stage } from "./inline-v1.js";
 import { isObsoleteAddon } from "./removals.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
@@ -354,8 +355,10 @@ export function updateStage(name, release) {
       let todo = [];
       let codemod = TEMPLATE_CODEMODS.get(name);
 
-      for (let file of codemod ? project.files(["{app,addon,tests}/**/*.hbs"]) : []) {
-        let result = /** @type {TemplateCodemod} */ (codemod)(project.read(file));
+      for (let file of codemod ? project.files([codemod.files]) : []) {
+        let result = /** @type {{ codemod: TemplateCodemod }} */ (codemod).codemod(
+          project.read(file),
+        );
 
         if (result.unreadable.length > 0) {
           todo.push({
@@ -449,9 +452,15 @@ function isV1Addon(directory) {
 /**
  * Template changes for the breaking changes of an addon's update.
  *
- * @type {Map<string, TemplateCodemod>}
+ * @type {Map<string, { codemod: TemplateCodemod, files: string }>}
  */
-const TEMPLATE_CODEMODS = new Map([["ember-click-outside", rewriteClickOutside]]);
+const TEMPLATE_CODEMODS = new Map([
+  ["ember-click-outside", { codemod: rewriteClickOutside, files: "{app,addon,tests}/**/*.hbs" }],
+  [
+    "ember-power-select",
+    { codemod: rewritePowerSelectMultiple, files: "{app,addon,tests}/**/*.{hbs,gjs,gts}" },
+  ],
+]);
 
 /**
  * The highest major version that the update of an addon goes to, when a later stage does the next major.
