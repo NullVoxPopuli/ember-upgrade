@@ -7,6 +7,8 @@ import { COMPONENT_API } from "./args.js";
 import { macroGetter } from "./macros.js";
 import { EVENTS } from "./outer-html.js";
 import { readClassicComponent } from "./read.js";
+import { DESTROY_EVENTS, readLegacyTask, taskImports } from "#codemods/ember-concurrency/index.js";
+
 import { ACTION_HANDLER, ACTION_VALUE, AFTER_RENDER, OBSERVE } from "./template.js";
 
 /** @typedef {import('#ast.js').Node} Node */
@@ -66,7 +68,7 @@ const MACRO_MODULES = new Set(["@ember/object/computed", "ember-computed"]);
  * @property {string} source the new module
  * @property {string[]} unreadable the reasons that the conversion stopped; the source is the old one then
  * @property {string | undefined} modifier the field that the template puts on its element, such as `lifecycle`
- * @property {{ name: string, args: string[], observer?: boolean, afterRender?: boolean, keyboard?: { event: string, combo: string } }[]} helpers methods that the template calls at its start, with the paths that they track. A keyboard listener runs through the `on-key` helper of `ember-keyboard`. An observer runs through {@link OBSERVE} when a path changes, and `didRender` runs through {@link AFTER_RENDER} at the end of the template.
+ * @property {{ name: string, args: string[], observer?: boolean, afterRender?: boolean, perform?: boolean, keyboard?: { event: string, combo: string } }[]} helpers methods that the template calls at its start, with the paths that they track. A keyboard listener runs through the `on-key` helper of `ember-keyboard`. An observer runs through {@link OBSERVE} when a path changes, and `didRender` runs through {@link AFTER_RENDER} at the end of the template. A task runs through its `perform`.
  * @property {boolean} elementId the template's element needs `id={{this.elementId}}`
  */
 
@@ -470,6 +472,7 @@ export function toGlimmer(input, file, names, options) {
   }
 
   let imports = importMap(program);
+  let tasks = taskImports(program);
   /** @type {Map<string, Set<string>>} */
   let add = new Map();
   let need = (/** @type {string} */ module, /** @type {string} */ name) => {
@@ -514,6 +517,8 @@ export function toGlimmer(input, file, names, options) {
   let constructorCalls = [];
   /** @type {Member[]} */
   let elementHooks = [];
+  /** @type {string[]} */
+  let insertedCalls = [];
   let init = "";
   let actionNames = new Set(options.templateReads);
 
@@ -627,7 +632,7 @@ export function toGlimmer(input, file, names, options) {
         .map((key) => `this.${key}`);
 
       result.helpers.push({ name, args: allArgs().concat(state), afterRender: true });
-      emitMethod(entry, false, comments);
+      emitMethod(entry, true, comments);
       continue;
     }
 
@@ -797,6 +802,50 @@ export function toGlimmer(input, file, names, options) {
 
         let value = entry.value ?? "undefined";
         let from = call?.type === "CallExpression" ? imports.get(call.callee?.name) : undefined;
+        let task = readLegacyTask(source, call, tasks);
+
+        /**
+         * A Glimmer component has no events, so the hooks of a task become calls of `perform`.
+         */
+        if (task) {
+          let kept = task.modifiers
+            .filter((modifier) => !task.hooks.includes(modifier))
+            .map((modifier) => source.slice(modifier.node.callee.object.end, modifier.node.end))
+            .join("");
+
+          for (let hook of task.hooks) {
+            for (let arg of hook.args) {
+              let event = arg.type === "Literal" ? String(arg.value) : "";
+              let perform = `this${member(name)}.perform();`;
+
+              if (hook.name === "cancelOn" && DESTROY_EVENTS.has(event)) continue;
+
+              if (hook.name === "on" && event === "init") {
+                constructorCalls.push(perform);
+              } else if (hook.name === "on" && event === "didInsertElement") {
+                insertedCalls.push(perform);
+              } else if (hook.name === "on" && event === "didRender") {
+                let state = Array.from(names.tracked)
+                  .filter((key) => NAME.test(key))
+                  .map((key) => `this.${key}`);
+
+                result.helpers.push({
+                  name,
+                  args: allArgs().concat(state),
+                  afterRender: true,
+                  perform: true,
+                });
+              } else {
+                result.unreadable.push(`the task ${name} with ${hook.name}(${event})`);
+              }
+            }
+          }
+
+          body.push(
+            `${comments}\u21e5@(${source.slice(task.root.start, task.root.end)}${kept})\n\u21e5${memberName(name)};`,
+          );
+          break;
+        }
 
         if (
           from &&
@@ -879,7 +928,7 @@ export function toGlimmer(input, file, names, options) {
 
     need("@ember/runloop", "schedule");
     body.push(
-      `\u21e5/**\n\u21e5 * Runs a hook after the render, as \`didRender\` ran. The values that the template passes make it run again when they change.\n\u21e5 */\n\u21e5${AFTER_RENDER} = (name) => {\n\u21e5\u21e5schedule('afterRender', this, name);\n\u21e5};`,
+      `\u21e5/**\n\u21e5 * Runs a hook after the render, as \`didRender\` ran. The values that the template passes make it run again when they change.\n\u21e5 */\n\u21e5${AFTER_RENDER} = (run) => {\n\u21e5\u21e5schedule('afterRender', run);\n\u21e5};`,
     );
   }
 
@@ -891,7 +940,7 @@ export function toGlimmer(input, file, names, options) {
     );
   }
 
-  if (elementHooks.length > 0 || usesElement) {
+  if (elementHooks.length > 0 || insertedCalls.length > 0 || usesElement) {
     if (component.outerHtml.tagName === "") {
       result.unreadable.push("a component without an element uses the element hooks");
     }
@@ -908,6 +957,7 @@ export function toGlimmer(input, file, names, options) {
     let inserted = elementHooks
       .filter((entry) => hookOf(entry) === "didInsertElement")
       .map((entry) => `\u21e5\u21e5this${member(entry.name)}();\n`)
+      .concat(insertedCalls.map((call) => `\u21e5\u21e5${call}\n`))
       .join("");
     let removed = elementHooks
       .filter((entry) => hookOf(entry) !== "didInsertElement")

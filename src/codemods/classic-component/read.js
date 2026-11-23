@@ -119,7 +119,13 @@ function valueMember(source, name, value, node, decorators) {
   let keys = /** @type {string[]} */ ([]);
   let text = sourceOf(source, value);
 
-  if (callee === "computed" || callee === "on" || callee === "observer") {
+  /**
+   * A modifier of another call, such as `task(fn).on('init')`, is not the function of the same name.
+   */
+  let modifier =
+    value.callee?.type === "MemberExpression" && value.callee.object?.type === "CallExpression";
+
+  if (!modifier && (callee === "computed" || callee === "on" || callee === "observer")) {
     kind = callee;
 
     /**

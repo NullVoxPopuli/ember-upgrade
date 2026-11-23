@@ -408,6 +408,12 @@ function v1Record(addons) {
 }
 
 /**
+ * The highest major version that the update of an addon goes to, when a later stage does the next major.
+ * ember-concurrency 5 runs only the tasks of native classes, so the ember-concurrency stage updates to it after classic-components.
+ */
+const MAJOR_CAPS = new Map([["ember-concurrency", "4"]]);
+
+/**
  * One stage for each v1 addon with a v2 release, so that each update is its own commit.
  * The v1 addons with no v2 release go in the progress file.
  *
@@ -434,7 +440,7 @@ export const v2Addons = {
         continue;
       }
 
-      let release = published(name);
+      let release = published(name, MAJOR_CAPS.get(name));
       let inline = release?.v2 ? undefined : inlineV1Stage(project, name);
 
       if (release?.v2) {

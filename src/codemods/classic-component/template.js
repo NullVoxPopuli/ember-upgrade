@@ -70,7 +70,9 @@ export function rewriteTemplate(template, component, names, glimmer) {
     }
     if (helper.observer) return `{{this.${OBSERVE} "${helper.name}" ${helper.args.join(" ")}}}`;
     if (helper.afterRender) {
-      return `{{this.${AFTER_RENDER} "${helper.name}"${helper.args.map((arg) => ` ${arg}`).join("")}}}`;
+      let run = `this.${helper.name}${helper.perform ? ".perform" : ""}`;
+
+      return `{{this.${AFTER_RENDER} ${run}${helper.args.map((arg) => ` ${arg}`).join("")}}}`;
     }
 
     return helper.args.length > 0

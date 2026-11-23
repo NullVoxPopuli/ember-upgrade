@@ -141,6 +141,7 @@ export const apps = [
       "dynamic-components",
       "classic-components",
       "template-tag",
+      "ember-concurrency",
       "ember-source-7.4",
       "build-settings",
       "app-tree",
