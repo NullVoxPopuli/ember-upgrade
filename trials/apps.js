@@ -171,7 +171,6 @@ export const apps = [
       "app-tree",
       "declare-imports",
       "ember-nvp",
-      "undeprecate-inject",
       "lint",
     ],
     /**
