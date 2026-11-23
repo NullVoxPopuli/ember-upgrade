@@ -12,6 +12,7 @@ import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 import { explicitRelationshipOptions } from "./ember-data.js";
+import { explicitInjections } from "./injections.js";
 import { renameTitleHelpers } from "./page-title.js";
 import {
   keepArrayPrototypeExtensions,
@@ -150,6 +151,15 @@ function step(lts) {
       if (before[0] < 6 && target[0] >= 6) keepArrayPrototypeExtensions(project);
 
       if (before[0] < 4 && target[0] >= 4) {
+        if (explicitInjections(project).length > 0) {
+          todo.push({
+            title: "Implicit injections are explicit `@service` declarations now",
+            where: ["app/initializers", "app/instance-initializers"],
+            action:
+              "Check the templates of controllers that have no class. They read the injected service, and need a controller that declares it.",
+          });
+        }
+
         rewriteWithHelpers(project);
         moveHtmlSafe(project);
       }
