@@ -281,6 +281,7 @@ function hasOwnStage(name) {
       "ember-styleguide",
       "ember-svg-jar",
       "ember-web-app",
+      "ember-power-select-typeahead",
     ].includes(name)
   );
 }
