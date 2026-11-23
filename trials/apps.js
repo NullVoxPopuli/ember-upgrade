@@ -175,7 +175,10 @@ export const apps = [
     ],
     /**
      * The trial does not install after each stage, so the lockfile is behind the last stages' package.json.
-     * Ember 3's router service put the default `searchReadmes=false` in the URL. Ember 7 leaves it out, as the patch expects.
+     * The patch changes two expectations of the header search test that depended on old Ember and test helpers:
+     * - Ember 3's router service put the default `searchReadmes=false` in the URL. Ember 7 leaves it out.
+     * - `click()` of @ember/test-helpers 5 renders between mouseup and click. PowerSelect closes on mouseup,
+     *   so a full click reached a removed link, and the browser left the test page.
      */
     after: [
       ["git", "apply", join(import.meta.dirname, "ember-observer-header-search.patch")],

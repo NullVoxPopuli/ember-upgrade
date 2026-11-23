@@ -1,7 +1,13 @@
 diff --git a/tests/acceptance/header-search-test.js b/tests/acceptance/header-search-test.js
-index ba4ecbb..5440cd5 100644
+index ba4ecbb..355cb24 100644
 --- a/tests/acceptance/header-search-test.js
 +++ b/tests/acceptance/header-search-test.js
+@@ -1,4 +1,4 @@
+-import { click, fillIn, currentURL } from '@ember/test-helpers';
++import { fillIn, currentURL, triggerEvent } from '@ember/test-helpers';
+ import { module, test } from 'qunit';
+ import { setupEmberObserverTest } from '../helpers/setup-ember-observer-test';
+ import { selectChoose } from 'ember-power-select/test-support';
 @@ -39,7 +39,7 @@ module('Acceptance | header search', function (hooks) {
  
      assert.equal(
@@ -9,5 +15,34 @@ index ba4ecbb..5440cd5 100644
 -      '/?query=test&searchReadmes=false',
 +      '/?query=test',
        'Perform full search takes to index with correct query'
+     );
+   });
+@@ -122,7 +122,13 @@ module('Acceptance | header search', function (hooks) {
+ 
+     await fillIn('.test-header-search input', 'test');
+ 
+-    await click(findByText('.test-search-result-addon-link', 'addon-test'));
++    /**
++     * Only the link's own click. PowerSelect chooses on mouseup and closes, which removes the link before a full click reaches it.
++     */
++    await triggerEvent(
++      findByText('.test-search-result-addon-link', 'addon-test'),
++      'click'
++    );
+ 
+     assert.equal(
+       currentURL(),
+@@ -132,11 +138,11 @@ module('Acceptance | header search', function (hooks) {
+ 
+     await fillIn('.test-header-search input', 'foo');
+ 
+-    await click('.test-search-result-jump-to-full-search-link');
++    await triggerEvent('.test-search-result-jump-to-full-search-link', 'click');
+ 
+     assert.equal(
+       currentURL(),
+-      '/?query=foo&searchReadmes=false',
++      '/?query=foo',
+       'Link goes to main search with query'
      );
    });
