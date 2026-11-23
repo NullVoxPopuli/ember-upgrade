@@ -1,5 +1,7 @@
 import { findInvocations, rangeOf } from "#codemods/classic-component/invocations.js";
 import { moveImports } from "#codemods/move-imports.js";
+import { parseProgram } from "#ast.js";
+import { Edits } from "#edits.js";
 
 /**
  * Ember 4 removed `{{#with}}`. It rendered its block only for a truthy value, which `{{#if}}` around `{{#let}}` does.
@@ -80,6 +82,49 @@ export function moveHtmlSafe(project) {
       "@ember/template",
       (name) => name === "htmlSafe" || name === "isHTMLSafe",
     );
+
+    if (output !== source) project.write(file, output);
+  }
+}
+
+/**
+ * ember-source 7 removed the `inject` export of `@ember/service`. `service` has the same behavior since Ember 4.1.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @returns {string}
+ */
+export function useServiceImport(source, file) {
+  if (!/\binject\b/.test(source) || !source.includes("@ember/service")) return source;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let edits = new Edits(source);
+
+  for (let node of program.body) {
+    if (node.type !== "ImportDeclaration" || node.source.value !== "@ember/service") continue;
+
+    for (let specifier of node.specifiers) {
+      if (specifier.type !== "ImportSpecifier" || specifier.imported.name !== "inject") continue;
+
+      let local = specifier.local.name;
+
+      edits.replace(specifier, local === "service" ? "service" : `service as ${local}`);
+    }
+  }
+
+  return edits.size > 0 ? edits.apply() : source;
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ */
+export function useServiceImports(project) {
+  for (let file of project.files(["{app,addon,tests}/**/*.{js,ts,gjs,gts}"])) {
+    let source = project.read(file);
+    let output = useServiceImport(source, file);
 
     if (output !== source) project.write(file, output);
   }

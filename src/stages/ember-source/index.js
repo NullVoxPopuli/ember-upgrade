@@ -12,7 +12,7 @@ import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 import { renameTitleHelpers } from "./page-title.js";
-import { moveHtmlSafe, rewriteWithHelpers } from "./with-helper.js";
+import { moveHtmlSafe, rewriteWithHelpers, useServiceImports } from "./removed-apis.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
 
@@ -130,6 +130,7 @@ function step(lts) {
       }
 
       if (target[0] >= 7) {
+        useServiceImports(project);
         updateEmberImporters(project);
 
         for (let [name, fallback] of Object.entries(EMBER_7_PINS)) {

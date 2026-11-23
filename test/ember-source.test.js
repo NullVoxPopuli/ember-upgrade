@@ -6,7 +6,7 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
-import { rewriteWith } from "#stages/ember-source/with-helper.js";
+import { rewriteWith, useServiceImport } from "#stages/ember-source/removed-apis.js";
 import { moveImports } from "#codemods/move-imports.js";
 
 /**
@@ -128,4 +128,20 @@ test("htmlSafe moves from @ember/string to @ember/template", () => {
       (name) => name === "htmlSafe",
     ),
   ).toBe(`import { htmlSafe } from '@ember/template';\n`);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("inject from @ember/service becomes service, with the same local name", () => {
+  expect(
+    useServiceImport(
+      `import Service, { inject as service } from '@ember/service';
+import { inject } from '@ember/service';
+`,
+      "app/services/search.js",
+    ),
+  ).toBe(`import Service, { service } from '@ember/service';
+import { service as inject } from '@ember/service';
+`);
 });
