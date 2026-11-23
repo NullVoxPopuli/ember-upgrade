@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import { explicitInjections } from "#stages/ember-source/injections.js";
+import { explicitInjections, routerServiceTransitions } from "#stages/ember-source/injections.js";
 
 /**
  * @param {Record<string, string>} files
@@ -113,6 +113,42 @@ export default class AddonsRoute extends Route {
 
       model() {
         return this.store.findAll('addon');
+      }
+    }
+    "
+  `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("the transitions of routes and controllers go through the router service", () => {
+  let app = project({
+    "app/controllers/addons/correct.js": `import Controller from '@ember/controller';
+import { action } from '@ember/object';
+
+export default class CorrectController extends Controller {
+  @action
+  cancel() {
+    this.transitionToRoute('addons.show', this.model.name);
+  }
+}
+`,
+  });
+
+  routerServiceTransitions(app);
+
+  expect(app.read("app/controllers/addons/correct.js")).toMatchInlineSnapshot(`
+    "import Controller from '@ember/controller';
+    import { action } from '@ember/object';
+    import { service } from '@ember/service';
+
+    export default class CorrectController extends Controller {
+      @service router;
+
+      @action
+      cancel() {
+        this.router.transitionTo('addons.show', this.model.name);
       }
     }
     "

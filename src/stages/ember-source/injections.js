@@ -237,3 +237,37 @@ function controllersForTemplates(project, injection, only) {
     );
   }
 }
+
+const TRANSITIONS = [
+  { files: "app/routes/**/*.{js,ts}", from: /\bthis\.(transitionTo|replaceWith)\(/g },
+  { files: "app/controllers/**/*.{js,ts}", from: /\bthis\.(transitionToRoute|replaceRoute)\(/g },
+];
+
+/**
+ * Ember 5 removed the transition methods of routes and controllers. The router service has them.
+ *
+ * @param {import('#project.js').Project} project
+ */
+export function routerServiceTransitions(project) {
+  let injection = { type: "", property: "router", service: "router" };
+
+  for (let { files, from } of TRANSITIONS) {
+    for (let file of project.files([files])) {
+      let source = project.read(file);
+      let output = source.replace(from, (_, method) => {
+        let name =
+          method === "transitionToRoute"
+            ? "transitionTo"
+            : method === "replaceRoute"
+              ? "replaceWith"
+              : method;
+
+        return `this.router.${name}(`;
+      });
+
+      if (output === source) continue;
+
+      project.write(file, declareService(output, file, injection, true));
+    }
+  }
+}
