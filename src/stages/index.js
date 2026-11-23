@@ -18,6 +18,7 @@ import {
   emberCliDeploy,
   emberDisablePrototypeExtensions,
   emberTestSelectors,
+  obsoleteAddons,
   prember,
   qunitConsoleGrouper,
 } from "./addons/removals.js";
@@ -83,6 +84,7 @@ export const stages = [
   emberCliDependencyLint,
   emberDisablePrototypeExtensions,
   qunitConsoleGrouper,
+  obsoleteAddons,
   deprecationWorkflow,
   emberMetrics,
   v2Addons,

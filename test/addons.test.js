@@ -6,7 +6,7 @@ import { addVitePlugin, removeBuildOptions } from "#config-files.js";
 import { Project } from "#project.js";
 import { parseProgress, printProgress, readProgress } from "#progress.js";
 import emberMetrics from "#stages/addons/ember-metrics.js";
-import { emberCliDeploy } from "#stages/addons/removals.js";
+import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
 import { deprecationWorkflow, emberStyleguide } from "#stages/addons/updates.js";
@@ -487,4 +487,57 @@ exports.alias = alias;
   `);
 
   expect(commonJsToEsm(`module.exports = function () {};\n`)).toBeUndefined();
+});
+
+/**
+ * From code-corps/code-corps-ember (MIT), after the vite stage, shortened.
+ */
+test("the obsolete addons go, and a shim leaves the library that it wrapped", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      name: "x",
+      devDependencies: {
+        "ember-cli-moment-shim": "^3.0.1",
+        "ember-cli-shims": "1.1.0",
+        "ember-normalize": "1.0.0",
+        moment: "^2.18.1",
+        "normalize.css": "^7.0.0",
+      },
+    }),
+    "app/app.js": "import Application from '@ember/application';\n",
+    "app/styles/app.scss": '@import "normalize.css/normalize";\n',
+  });
+  let stages = await obsoleteAddons.expand(app);
+  let ran = [];
+
+  for (let stage of stages) {
+    if (!stage.detect(app)) continue;
+
+    await stage.run(app);
+    ran.push(stage.name);
+  }
+
+  expect(ran).toEqual(["ember-cli-shims", "ember-cli-moment-shim", "ember-normalize"]);
+  expect(app.packageJson.devDependencies).toEqual({
+    moment: "^2.18.1",
+    "normalize.css": "^7.0.0",
+  });
+  expect(app.read("app/app.js")).toBe("import Application from '@ember/application';\n");
+});
+
+test("without ember-normalize, the app imports normalize.css", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      name: "x",
+      devDependencies: { "ember-normalize": "1.0.0", "normalize.css": "^7.0.0" },
+    }),
+    "app/app.js": "import Application from '@ember/application';\n",
+  });
+  let stage = (await obsoleteAddons.expand(app)).find((entry) => entry.name === "ember-normalize");
+
+  await stage?.run(app);
+
+  expect(app.read("app/app.js")).toBe(
+    "import \"normalize.css\";\nimport Application from '@ember/application';\n",
+  );
 });
