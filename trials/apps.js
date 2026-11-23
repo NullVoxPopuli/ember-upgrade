@@ -172,7 +172,13 @@ export const apps = [
       "ember-nvp",
       "undeprecate-inject",
     ],
-    after: [["pnpm", "test"]],
+    /**
+     * The trial does not install after each stage, so the lockfile is behind the last stages' package.json.
+     */
+    after: [
+      ["pnpm", "install", "--no-frozen-lockfile"],
+      ["pnpm", "test"],
+    ],
   },
   {
     name: "super-rentals",
