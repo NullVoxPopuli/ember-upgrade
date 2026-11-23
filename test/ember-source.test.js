@@ -5,7 +5,11 @@ import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
-import { explicitRelationships } from "#stages/ember-source/ember-data.js";
+import {
+  explicitRelationships,
+  nativeArrayMethods,
+  withoutFirstAndLastObject,
+} from "#stages/ember-source/ember-data.js";
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
 import { extendsArrays, rewriteWith, useServiceImport } from "#stages/ember-source/removed-apis.js";
 import { moveImports } from "#codemods/move-imports.js";
@@ -245,4 +249,29 @@ test("an app extends arrays unless EXTEND_PROTOTYPES turns arrays off", () => {
   expect(extendsArrays("EmberENV: { EXTEND_PROTOTYPES: { Date: false, Array: false } }")).toBe(
     false,
   );
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("firstObject, lastObject and the reading array extensions become native array reads", () => {
+  let source = `import { get } from '@ember/object';
+let addon = addons.get('firstObject');
+let earliest = get(this, 'sortedVersionCompatibilities.lastObject.emberVersion');
+let names = users.toArray().mapBy('name');
+let match = list.findBy('id', item.id);
+let sorted = (versions || []).sortBy('released').reverse();
+`;
+
+  expect(nativeArrayMethods(withoutFirstAndLastObject(source, "a.js"), "a.js"))
+    .toMatchInlineSnapshot(`
+    "import { compare } from '@ember/utils';
+    import { get } from '@ember/object';
+    let addon = addons?.[0];
+    let earliest = get(get(this, 'sortedVersionCompatibilities')?.slice(-1)[0], 'emberVersion');
+    let names = users.slice().map((item) => get(item, 'name'));
+    let match = list.find((element) => get(element, 'id') === item.id);
+    let sorted = (versions || []).slice().sort((a, b) => compare(get(a, 'released'), get(b, 'released'))).reverse();
+    "
+  `);
 });

@@ -1,6 +1,7 @@
 import { parseProgram, walk } from "#ast.js";
 import { Edits } from "#edits.js";
 import { importMap } from "#codemods/imports.js";
+import { NestedEdits } from "#codemods/nested-edits.js";
 
 /** @typedef {import('#ast.js').Node} Node */
 
@@ -219,5 +220,263 @@ export function explicitRelationshipOptions(project) {
   for (let [name, source] of result.files)
     project.write(/** @type {string} */ (byName.get(name)), source);
 
+  for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
+    let before = project.read(file);
+    let after = nativeArrayMethods(withoutFirstAndLastObject(before, file), file);
+
+    if (after !== before) project.write(file, after);
+  }
+
   return result.unreadable;
+}
+
+/**
+ * Record arrays answer index reads and a few native methods, such as `slice`, but not `at`.
+ */
+const ENDS = new Map([
+  ["firstObject", "?.[0]"],
+  ["lastObject", "?.slice(-1)[0]"],
+]);
+
+/**
+ * ember-data 5 record arrays have no `firstObject` and `lastObject`. `[0]` and `slice(-1)[0]` read the same records.
+ * A `get()` path through them, such as `get(x, 'list.firstObject.name')`, splits around them.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @returns {string}
+ */
+export function withoutFirstAndLastObject(source, file) {
+  if (!/\b(first|last)Object\b/.test(source)) return source;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let imports = importMap(program);
+  let getLocal = Array.from(imports).find(
+    ([, value]) => value.module === "@ember/object" && value.imported === "get",
+  )?.[0];
+  let needsGet = false;
+  let edits = new Edits(source);
+  let text = (/** @type {Node} */ node) => source.slice(node.start, node.end);
+
+  /**
+   * @param {string} object the source of the value that the path starts at
+   * @param {string} path such as `list.firstObject.name`
+   * @returns {string | undefined}
+   */
+  let rewrite = (object, path) => {
+    let parts = path.split(".");
+
+    if (!parts.some((part) => ENDS.has(part))) return;
+
+    let output = object;
+    let pending = [];
+
+    for (let part of parts) {
+      let index = ENDS.get(part);
+
+      if (index === undefined) {
+        pending.push(part);
+        continue;
+      }
+
+      if (pending.length > 0) {
+        output = `${getLocal ?? "get"}(${output}, '${pending.join(".")}')`;
+        needsGet = true;
+        pending = [];
+      }
+
+      output = `${output}${index}`;
+    }
+
+    if (pending.length > 0) {
+      output = `${getLocal ?? "get"}(${output}, '${pending.join(".")}')`;
+      needsGet = true;
+    }
+
+    return output;
+  };
+
+  walk(program, (node) => {
+    if (node.type !== "CallExpression") return;
+
+    let path = node.arguments.at(-1);
+
+    if (path?.type !== "Literal" || typeof path.value !== "string") return;
+
+    let callee = node.callee;
+    let replaced;
+
+    if (callee.type === "Identifier" && callee.name === getLocal && node.arguments.length === 2) {
+      replaced = rewrite(text(node.arguments[0]), path.value);
+    } else if (
+      callee.type === "MemberExpression" &&
+      !callee.computed &&
+      callee.property.name === "get" &&
+      node.arguments.length === 1
+    ) {
+      replaced = rewrite(text(callee.object), path.value);
+    }
+
+    if (replaced) edits.replace(node, replaced);
+  });
+
+  if (edits.size === 0) return source;
+
+  let output = edits.apply();
+
+  if (needsGet && !getLocal) output = `import { get } from '@ember/object';\n${output}`;
+
+  return output;
+}
+
+/**
+ * The methods that Ember's array prototype extensions added, and that do not change the array.
+ * Record arrays of ember-data 5 do not have them, and Ember 6 removed them from native arrays.
+ */
+const NATIVE = new Map([
+  ["filterBy", "filter"],
+  ["rejectBy", "filter"],
+  ["findBy", "find"],
+  ["isAny", "some"],
+  ["isEvery", "every"],
+]);
+
+const READERS = new Set([
+  "mapBy",
+  "filterBy",
+  "rejectBy",
+  "findBy",
+  "isAny",
+  "isEvery",
+  "sortBy",
+  "toArray",
+  "objectAt",
+  "compact",
+  "uniq",
+]);
+
+/**
+ * Rewrites the reading array extensions, such as `list.mapBy('name')`, to native array methods,
+ * which both native arrays and record arrays have.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @returns {string}
+ */
+export function nativeArrayMethods(source, file) {
+  if (
+    !/\.(mapBy|filterBy|rejectBy|findBy|isAny|isEvery|sortBy|toArray|objectAt|compact|uniq)\(/.test(
+      source,
+    )
+  ) {
+    return source;
+  }
+
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let imports = importMap(program);
+  let localOf = (/** @type {string} */ module, /** @type {string} */ name) =>
+    Array.from(imports).find(
+      ([, value]) => value.module === module && value.imported === name,
+    )?.[0];
+  let get = localOf("@ember/object", "get");
+  let compare = localOf("@ember/utils", "compare");
+  let needs = { get: false, compare: false };
+  let edits = new NestedEdits(source);
+  let print = (/** @type {Node} */ node) => edits.print(node);
+
+  walk(program, (node) => {
+    let callee = node.type === "CallExpression" ? node.callee : undefined;
+    let method =
+      callee?.type === "MemberExpression" && !callee.computed ? callee.property.name : undefined;
+
+    if (!method || !READERS.has(method)) return;
+
+    let args = node.arguments;
+    let literal = args.every(
+      (/** @type {Node} */ arg, /** @type {number} */ index) =>
+        index > 0 || (arg.type === "Literal" && typeof arg.value === "string"),
+    );
+    let receiver = callee.object;
+    let argText = args.map((/** @type {Node} */ arg) => source.slice(arg.start, arg.end)).join(" ");
+    let item =
+      ["item", "element", "entry"].find((name) => !new RegExp(`\\b${name}\\b`).test(argText)) ??
+      "item";
+    let read = (/** @type {string} */ item) => {
+      needs.get = true;
+
+      return `${get ?? "get"}(${item}, ${print(args[0])})`;
+    };
+    let test = (/** @type {string} */ item) =>
+      args.length > 1 ? `${read(item)} === ${print(args[1])}` : read(item);
+    /** @type {(() => string) | undefined} */
+    let render;
+
+    switch (method) {
+      case "mapBy":
+        if (args.length === 1 && literal)
+          render = () => `${print(receiver)}.map((${item}) => ${read(item)})`;
+        break;
+      case "filterBy":
+      case "rejectBy":
+      case "findBy":
+      case "isAny":
+      case "isEvery": {
+        if (args.length < 1 || args.length > 2 || !literal) break;
+
+        let native = NATIVE.get(method);
+        let not = method === "rejectBy" ? "!" : "";
+
+        render = () =>
+          `${print(receiver)}.${native}((${item}) => ${not}${not && args.length > 1 ? `(${test(item)})` : test(item)})`;
+        break;
+      }
+      case "sortBy":
+        if (args.length === 0 || !args.every((/** @type {Node} */ arg) => arg.type === "Literal"))
+          break;
+
+        render = () => {
+          needs.get = true;
+          needs.compare = true;
+
+          let parts = args.map(
+            (/** @type {Node} */ arg) =>
+              `${compare ?? "compare"}(${get ?? "get"}(a, ${print(arg)}), ${get ?? "get"}(b, ${print(arg)}))`,
+          );
+
+          return `${print(receiver)}.slice().sort((a, b) => ${parts.join(" || ")})`;
+        };
+        break;
+      case "toArray":
+        if (args.length === 0) render = () => `${print(receiver)}.slice()`;
+        break;
+      case "objectAt":
+        if (args.length === 1) render = () => `${print(receiver)}[${print(args[0])}]`;
+        break;
+      case "compact":
+        if (args.length === 0)
+          render = () => `${print(receiver)}.filter((${item}) => ${item} != null)`;
+        break;
+      case "uniq":
+        if (args.length === 0) render = () => `Array.from(new Set(${print(receiver)}))`;
+        break;
+    }
+
+    if (render) edits.replace(node, render);
+  });
+
+  if (edits.size === 0) return source;
+
+  let output = edits.apply();
+  let lines = [];
+
+  if (needs.get && !get) lines.push(`import { get } from '@ember/object';`);
+  if (needs.compare && !compare) lines.push(`import { compare } from '@ember/utils';`);
+
+  return lines.length > 0 ? `${lines.join("\n")}\n${output}` : output;
 }
