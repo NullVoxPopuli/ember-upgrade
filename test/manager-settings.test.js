@@ -6,7 +6,9 @@ import { expect, test } from "vitest";
 import {
   addOverride,
   addYamlListEntry,
+  overrideRange,
   releaseAge,
+  removeOverride,
   setYamlMapEntry,
   setYamlNestedMap,
 } from "#manager-settings.js";
@@ -169,4 +171,29 @@ test("an .npmrc sets the minimum release age, and no setting is 0", () => {
 
   writeFileSync(join(root, ".npmrc"), "minimum-release-age=1440\n");
   expect(releaseAge(new Project(root))).toBe(1440);
+});
+
+/**
+ * From emberobserver/client, after the package-manager stage, shortened.
+ */
+test("an override in pnpm-workspace.yaml reads and goes like one in package.json", () => {
+  let root = mkdtempSync(join(tmpdir(), "overrides-"));
+
+  writeFileSync(
+    join(root, "pnpm-workspace.yaml"),
+    "overrides:\n  ember-basic-dropdown: 3.0.16\n  '@ember/test-waiters': '^4.1.2'\n",
+  );
+  writeFileSync(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+  writeFileSync(join(root, "package.json"), "{}\n");
+
+  let project = new Project(root);
+
+  expect(overrideRange(project, "ember-basic-dropdown")).toBe("3.0.16");
+  expect(overrideRange(project, "@ember/test-waiters")).toBe("^4.1.2");
+
+  removeOverride(project, "ember-basic-dropdown");
+
+  expect(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8")).toBe(
+    "overrides:\n  '@ember/test-waiters': '^4.1.2'\n",
+  );
 });
