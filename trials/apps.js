@@ -172,6 +172,7 @@ export const apps = [
       "ember-nvp",
       "undeprecate-inject",
     ],
+    after: [["pnpm", "test"]],
   },
   {
     name: "super-rentals",
