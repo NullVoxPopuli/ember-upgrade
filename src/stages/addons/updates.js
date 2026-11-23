@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { parseProgram } from "#ast.js";
 import { addVitePlugin, removeBuildOptions, viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
@@ -7,7 +9,7 @@ import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
 import { rewriteClickOutside } from "./click-outside.js";
-import { inlineV1Stage } from "./inline-v1.js";
+import { dependencyDirectory, inlineV1Stage } from "./inline-v1.js";
 import { isObsoleteAddon } from "./removals.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
 import { ICONS_MODULE, iconsModule, rewriteDynamicIcons } from "./svg-jar-icons.js";
@@ -428,6 +430,18 @@ function v1Record(addons) {
 }
 
 /**
+ * @param {string} directory an installed package
+ * @returns {boolean}
+ */
+function isV1Addon(directory) {
+  let manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+
+  return (
+    Boolean(manifest.keywords?.includes("ember-addon")) && manifest["ember-addon"]?.version !== 2
+  );
+}
+
+/**
  * @typedef {(template: string) => { template: string, unreadable: string[] }} TemplateCodemod
  */
 
@@ -461,7 +475,18 @@ export const v2Addons = {
     /** @type {{ name: string, note: string, links: string[] }[]} */
     let v1Only = [];
 
-    for (let name of installedV1Addons(project)) {
+    /**
+     * An addon that moves into the app brings its dependencies to the app's package.json.
+     * Its v1 addons get the same treatment, after it.
+     *
+     * @type {{ name: string, from?: string }[]}
+     */
+    let queue = installedV1Addons(project).map((name) => ({ name }));
+    let seen = new Set(queue.map((entry) => entry.name));
+
+    for (let index = 0; index < queue.length; index++) {
+      let { name, from } = queue[index];
+
       if (IGNORED.has(name) || hasOwnStage(name)) continue;
 
       let known = NO_V2_YET.get(name);
@@ -472,12 +497,22 @@ export const v2Addons = {
       }
 
       let release = published(name, MAJOR_CAPS.get(name));
-      let inline = release?.v2 ? undefined : inlineV1Stage(project, name);
+      let inline = release?.v2 ? undefined : inlineV1Stage(project, name, from);
 
       if (release?.v2) {
         stages.push(updateStage(name, release));
       } else if (inline) {
         stages.push(inline);
+
+        for (let dependency of Object.keys(inline.dependencies)) {
+          let directory = dependencyDirectory(inline.directory, dependency);
+
+          if (seen.has(dependency) || !directory || !isV1Addon(directory)) continue;
+          if (project.dependency(dependency)) continue;
+
+          seen.add(dependency);
+          queue.push({ name: dependency, from: directory });
+        }
       } else {
         v1Only.push({
           name,
