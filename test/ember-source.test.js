@@ -7,7 +7,7 @@ import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
 import { explicitRelationships } from "#stages/ember-source/ember-data.js";
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
-import { rewriteWith, useServiceImport } from "#stages/ember-source/removed-apis.js";
+import { extendsArrays, rewriteWith, useServiceImport } from "#stages/ember-source/removed-apis.js";
 import { moveImports } from "#codemods/move-imports.js";
 
 /**
@@ -236,4 +236,13 @@ export default class ScoreCalculation extends Model {
     }
     "
   `);
+});
+
+test("an app extends arrays unless EXTEND_PROTOTYPES turns arrays off", () => {
+  expect(extendsArrays("EmberENV: { EXTEND_PROTOTYPES: { Date: false } }")).toBe(true);
+  expect(extendsArrays("EmberENV: {}")).toBe(true);
+  expect(extendsArrays("EmberENV: { EXTEND_PROTOTYPES: false }")).toBe(false);
+  expect(extendsArrays("EmberENV: { EXTEND_PROTOTYPES: { Date: false, Array: false } }")).toBe(
+    false,
+  );
 });

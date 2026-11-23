@@ -233,6 +233,16 @@ const OBSOLETE = [
   },
   { name: "ember-watson", label: "It is an ember-cli command" },
   {
+    name: "ember-export-application-global",
+    label: "Ember Inspector finds the app without a global",
+    progress: {
+      note:
+        "ember-export-application-global is removed. It put the application on window, named after the modulePrefix, for debugging. " +
+        "Ember Inspector finds the app without it. Code that reads that global needs another way to the app, such as the owner.",
+      links: ["https://github.com/ember-cli/ember-export-application-global"],
+    },
+  },
+  {
     name: "ember-cli-qunit",
     label: "ember-qunit replaces it",
     replaceWith: { "ember-qunit": "9.0.4" },

@@ -2,6 +2,9 @@ import { findInvocations, rangeOf } from "#codemods/classic-component/invocation
 import { moveImports } from "#codemods/move-imports.js";
 import { parseProgram } from "#ast.js";
 import { Edits } from "#edits.js";
+import { editPackageJson, setDependency } from "#package-json.js";
+import { published } from "#process.js";
+import { recordProgress } from "#progress.js";
 
 /**
  * Ember 4 removed `{{#with}}`. It rendered its block only for a truthy value, which `{{#if}}` around `{{#let}}` does.
@@ -128,4 +131,48 @@ export function useServiceImports(project) {
 
     if (output !== source) project.write(file, output);
   }
+}
+
+const LEGACY_ARRAYS = "@nullvoxpopuli/legacy-prototype-extensions";
+
+/**
+ * @param {string} config the source of config/environment.js
+ * @returns {boolean} the app extends Array.prototype, which Ember did unless EXTEND_PROTOTYPES said otherwise
+ */
+export function extendsArrays(config) {
+  if (/EXTEND_PROTOTYPES\s*:\s*false/.test(config)) return false;
+
+  return !/EXTEND_PROTOTYPES\s*:\s*\{[^}]*\bArray\s*:\s*false/.test(config);
+}
+
+/**
+ * Ember 6 removed the array prototype extensions, such as `mapBy` and `objectAt` on native arrays.
+ * An app that used them gets them back from a library, until its code uses native array methods.
+ *
+ * @param {import('#project.js').Project} project
+ */
+export function keepArrayPrototypeExtensions(project) {
+  let config = ["config/environment.js", "config/environment.cjs"].find((file) =>
+    project.has(file),
+  );
+  let app = ["app/app.js", "app/app.ts"].find((file) => project.has(file));
+
+  if (!config || !app || !extendsArrays(project.read(config))) return;
+
+  let source = project.read(app);
+
+  if (source.includes(LEGACY_ARRAYS)) return;
+
+  project.write(app, `import "${LEGACY_ARRAYS}/array";\n${source}`);
+  editPackageJson(project, (pkg) =>
+    setDependency(pkg, LEGACY_ARRAYS, `^${published(LEGACY_ARRAYS)?.version ?? "0.2.0"}`),
+  );
+  recordProgress(project, {
+    id: LEGACY_ARRAYS,
+    status: "added",
+    note:
+      "Ember 6 removed the array prototype extensions, such as mapBy, objectAt, and firstObject on native arrays. " +
+      `app.js imports ${LEGACY_ARRAYS}/array, which adds them back. Move the code to native array methods, then remove the import and the package.`,
+    links: ["https://deprecations.emberjs.com/id/deprecate-array-prototype-extensions"],
+  });
 }

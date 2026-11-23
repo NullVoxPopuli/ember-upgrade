@@ -13,7 +13,12 @@ import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 import { explicitRelationshipOptions } from "./ember-data.js";
 import { renameTitleHelpers } from "./page-title.js";
-import { moveHtmlSafe, rewriteWithHelpers, useServiceImports } from "./removed-apis.js";
+import {
+  keepArrayPrototypeExtensions,
+  moveHtmlSafe,
+  rewriteWithHelpers,
+  useServiceImports,
+} from "./removed-apis.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
 
@@ -141,6 +146,8 @@ function step(lts) {
           });
         }
       }
+
+      if (before[0] < 6 && target[0] >= 6) keepArrayPrototypeExtensions(project);
 
       if (before[0] < 4 && target[0] >= 4) {
         rewriteWithHelpers(project);
