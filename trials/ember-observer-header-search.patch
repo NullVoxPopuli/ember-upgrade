@@ -1,0 +1,13 @@
+diff --git a/tests/acceptance/header-search-test.js b/tests/acceptance/header-search-test.js
+index ba4ecbb..5440cd5 100644
+--- a/tests/acceptance/header-search-test.js
++++ b/tests/acceptance/header-search-test.js
+@@ -39,7 +39,7 @@ module('Acceptance | header search', function (hooks) {
+ 
+     assert.equal(
+       currentURL(),
+-      '/?query=test&searchReadmes=false',
++      '/?query=test',
+       'Perform full search takes to index with correct query'
+     );
+   });

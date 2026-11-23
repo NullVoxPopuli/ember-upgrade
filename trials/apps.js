@@ -1,3 +1,5 @@
+import { join } from "node:path";
+
 /**
  * Real apps that CI upgrades on each change.
  *
@@ -173,8 +175,10 @@ export const apps = [
     ],
     /**
      * The trial does not install after each stage, so the lockfile is behind the last stages' package.json.
+     * Ember 3's router service put the default `searchReadmes=false` in the URL. Ember 7 leaves it out, as the patch expects.
      */
     after: [
+      ["git", "apply", join(import.meta.dirname, "ember-observer-header-search.patch")],
       ["pnpm", "install", "--no-frozen-lockfile"],
       ["pnpm", "test"],
     ],
