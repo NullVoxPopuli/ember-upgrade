@@ -4,6 +4,7 @@ import { join, posix } from "node:path";
 import { parseProgram, propertyName, walk } from "#ast.js";
 import { transform as replaceEmberGlobals } from "#stages/ember-globals/transform.js";
 import { parse as parseVersion } from "#stages/ember-source/index.js";
+import { stripTypes } from "#strip-types.js";
 import { contentForPages } from "./content-for.js";
 import { inlineStage } from "./inline.js";
 
@@ -559,6 +560,44 @@ function relativeTo(from, to) {
 }
 
 /**
+ * @param {Project} project
+ * @returns {boolean} the app compiles TypeScript
+ */
+function usesTypeScript(project) {
+  return project.has("tsconfig.json") || Boolean(project.dependency("typescript"));
+}
+
+/**
+ * An app without TypeScript gets the addon's TypeScript modules as JavaScript.
+ *
+ * @param {Map<string, string>} files
+ * @param {Record<string, string>} imports
+ * @returns {{ files: Map<string, string>, imports: Record<string, string> }}
+ */
+function asJavaScript(files, imports) {
+  /** @type {Map<string, string>} */
+  let renamed = new Map();
+  /** @type {Map<string, string>} */
+  let output = new Map();
+
+  for (let [file, source] of files) {
+    let stripped = /\.(ts|gts)$/.test(file) ? stripTypes(source, file) : undefined;
+    let target =
+      stripped === undefined ? file : file.replace(/\.ts$/, ".js").replace(/\.gts$/, ".gjs");
+
+    if (target !== file) renamed.set(file, target);
+
+    output.set(target, stripped ?? source);
+  }
+
+  let newImports = Object.fromEntries(
+    Object.entries(imports).map(([specifier, file]) => [specifier, renamed.get(file) ?? file]),
+  );
+
+  return { files: output, imports: newImports };
+}
+
+/**
  * Moves a v1 addon with no v2 release into the app, as ember-cli merged it:
  * its modules go to the app paths that the resolver looks up, and its templates next to their components.
  *
@@ -589,6 +628,8 @@ export function inlineV1Stage(project, name, from) {
   if (!plan) return;
 
   let { files, imports, ranges, contentFor } = plan;
+
+  if (!usesTypeScript(project)) ({ files, imports } = asJavaScript(files, imports));
 
   /**
    * A hook that needs ember-cli, such as one that calls `this.addons`, keeps the addon a v1 addon.

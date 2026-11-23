@@ -1182,11 +1182,23 @@ export function rewriteImports(source, file, { prefix, ownTypes }) {
 
   for (let node of /** @type {Node[]} */ (program.body)) {
     let specifier = node.source;
+    /** @type {string} */
     let from = specifier?.value;
 
     if (typeof from !== "string") continue;
 
     let quote = source[specifier.start];
+
+    /**
+     * Classic modules shared one namespace, so `../../initializers/ember-cli-mirage` in tests/helpers named the app's initializer.
+     */
+    if (from.startsWith(".")) {
+      let modulePath = `${prefix}/${file.replace(/^app\//, "")}`;
+      let resolved = posix.normalize(posix.join(posix.dirname(modulePath), from));
+
+      if (resolved === `${prefix}/initializers/${OLD}`) from = resolved;
+    }
+
     let isOld =
       from === OLD || from.startsWith(`${OLD}/`) || from === `${prefix}/initializers/${OLD}`;
 

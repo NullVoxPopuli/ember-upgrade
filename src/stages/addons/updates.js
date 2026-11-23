@@ -360,6 +360,20 @@ export function updateStage(name, release) {
       let todo = [];
       let codemod = TEMPLATE_CODEMODS.get(name);
 
+      /**
+       * The vite-sass stage pointed Sass imports at the v1 addon's app/styles, which a v2 addon does not have.
+       * Its package entry has the styles, through the `sass` export condition.
+       */
+      let escaped = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+      let stylePath = new RegExp(`(["'])${escaped}/app/styles/[^"']+\\1`, "g");
+
+      for (let file of project.files(["app/styles/**/*.{scss,sass}"])) {
+        let source = project.read(file);
+        let output = source.replace(stylePath, `$1${name}$1`);
+
+        if (output !== source) project.write(file, output);
+      }
+
       for (let file of codemod ? project.files([codemod.files]) : []) {
         let result = /** @type {{ codemod: TemplateCodemod }} */ (codemod).codemod(
           project.read(file),

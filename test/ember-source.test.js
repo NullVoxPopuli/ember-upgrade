@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
+import { rewriteWith } from "#stages/ember-source/with-helper.js";
 
 /**
  * @param {Record<string, unknown>} pkg
@@ -91,6 +92,27 @@ test("the title helper of ember-page-title 3 becomes page-title", () => {
     "{{page-title "Settings"}}
     {{~page-title (concat model.name " Tasks") separator=" | "}}
     <h1 title={{title}}>{{title}}</h1>
+    "
+  `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("with becomes let inside if, and nested ones too", () => {
+  expect(
+    rewriteWith(`{{#with this.model.addon as |addon|}}
+  {{#with addon.latestReview as |review|}}{{review.score}}{{/with}}
+{{else}}
+  No addon
+{{/with}}
+`),
+  ).toMatchInlineSnapshot(`
+    "{{#if this.model.addon}}{{#let this.model.addon as |addon|}}
+      {{#if addon.latestReview}}{{#let addon.latestReview as |review|}}{{review.score}}{{/let}}{{/if}}
+    {{/let}}{{else}}
+      No addon
+    {{/if}}
     "
   `);
 });

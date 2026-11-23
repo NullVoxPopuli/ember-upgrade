@@ -12,6 +12,7 @@ import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 import { renameTitleHelpers } from "./page-title.js";
+import { rewriteWithHelpers } from "./with-helper.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
 
@@ -90,6 +91,9 @@ function step(lts) {
 
     async run(project) {
       let pageTitle = parse(project.dependency("ember-page-title"));
+      let before = /** @type {[number, number, number]} */ (
+        parse(project.dependency("ember-source"))
+      );
 
       editPackageJson(project, (pkg) => {
         for (let [name, range] of Object.entries(TABLE[lts])) {
@@ -119,6 +123,8 @@ function step(lts) {
       if (pageTitle && newPageTitle && pageTitle[0] < 6 && newPageTitle[0] >= 6) {
         renameTitleHelpers(project);
       }
+
+      if (before[0] < 4 && target[0] >= 4) rewriteWithHelpers(project);
 
       if (target[0] >= 7) {
         updateEmberImporters(project);

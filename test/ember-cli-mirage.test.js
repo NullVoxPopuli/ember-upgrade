@@ -194,6 +194,22 @@ import { setupTest } from 'ember-qunit';
 `);
 });
 
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("a relative import of the mirage initializer names the app's initializer too", () => {
+  let result = rewriteImports(
+    `import { startMirage } from '../../initializers/ember-cli-mirage';\n`,
+    "tests/helpers/setup-ember-observer-test.js",
+    { prefix: "ember-observer", ownTypes: false },
+  );
+
+  expect(result.startMirage).toBe(true);
+  expect(result.source).toBe(
+    `import { startMirage } from 'ember-observer/tests/helpers/mirage';\n`,
+  );
+});
+
 test("the routes function and the makeServer function are both server configs", () => {
   expect(
     serverShape(
