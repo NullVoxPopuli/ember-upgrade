@@ -11,6 +11,7 @@ import { published } from "#process.js";
 import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
+import { explicitRelationshipOptions } from "./ember-data.js";
 import { renameTitleHelpers } from "./page-title.js";
 import { moveHtmlSafe, rewriteWithHelpers, useServiceImports } from "./removed-apis.js";
 
@@ -124,6 +125,23 @@ function step(lts) {
         renameTitleHelpers(project);
       }
 
+      /** @type {import('#types.js').Finding[]} */
+      let todo = [];
+      let emberData = parse(project.dependency("ember-data"));
+
+      if (emberData && emberData[0] >= 5) {
+        let unreadable = explicitRelationshipOptions(project);
+
+        if (unreadable.length > 0) {
+          todo.push({
+            title: "Relationships that need `async` and `inverse` options for ember-data 5",
+            where: unreadable,
+            action:
+              "Add both options. `async: true` and the inverse field were the defaults before.",
+          });
+        }
+      }
+
       if (before[0] < 4 && target[0] >= 4) {
         rewriteWithHelpers(project);
         moveHtmlSafe(project);
@@ -146,7 +164,7 @@ function step(lts) {
         }
       }
 
-      return [];
+      return todo;
     },
   };
 }

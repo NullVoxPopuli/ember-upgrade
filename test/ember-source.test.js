@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
+import { explicitRelationships } from "#stages/ember-source/ember-data.js";
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
 import { rewriteWith, useServiceImport } from "#stages/ember-source/removed-apis.js";
 import { moveImports } from "#codemods/move-imports.js";
@@ -144,4 +145,63 @@ import { inject } from '@ember/service';
   ).toBe(`import Service, { service } from '@ember/service';
 import { service as inject } from '@ember/service';
 `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("relationships get the async and inverse that ember-data used to find", () => {
+  let result = explicitRelationships(
+    new Map([
+      [
+        "addon",
+        `import Model, { belongsTo, hasMany } from '@ember-data/model';
+export default class Addon extends Model {
+  @belongsTo('version') latestAddonVersion;
+  @hasMany('version') versions;
+}
+`,
+      ],
+      [
+        "version",
+        `import Model, { belongsTo } from '@ember-data/model';
+export default class Version extends Model {
+  @belongsTo('addon', { inverse: 'versions' }) addon;
+  @belongsTo('review') review;
+}
+`,
+      ],
+      [
+        "review",
+        `import Model, { belongsTo } from '@ember-data/model';
+export default class Review extends Model {
+  @belongsTo('version') version;
+}
+`,
+      ],
+    ]),
+  );
+
+  expect(result.unreadable).toEqual([]);
+  expect(Object.fromEntries(result.files)).toMatchInlineSnapshot(`
+    {
+      "addon": "import Model, { belongsTo, hasMany } from '@ember-data/model';
+    export default class Addon extends Model {
+      @belongsTo('version', { async: true, inverse: null }) latestAddonVersion;
+      @hasMany('version', { async: true, inverse: 'addon' }) versions;
+    }
+    ",
+      "review": "import Model, { belongsTo } from '@ember-data/model';
+    export default class Review extends Model {
+      @belongsTo('version', { async: true, inverse: 'review' }) version;
+    }
+    ",
+      "version": "import Model, { belongsTo } from '@ember-data/model';
+    export default class Version extends Model {
+      @belongsTo('addon', { inverse: 'versions', async: true }) addon;
+      @belongsTo('review', { async: true, inverse: 'version' }) review;
+    }
+    ",
+    }
+  `);
 });
