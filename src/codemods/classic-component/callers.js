@@ -139,13 +139,35 @@ function rewriteInvocation(template, name, invocation, component, unreadable, ed
       added.push(` @${callback}={{fn (mut ${path})}}`);
     }
 
-    if (added.length === 0) return;
+    /**
+     * A classic component put `@class` and `@id` on its element. The Glimmer version takes them as attributes.
+     */
+    let renamed = component.hasElement
+      ? node.attributes.filter(
+          (/** @type {Node} */ attribute) =>
+            String(attribute.name).startsWith("@") &&
+            ATTRIBUTES.has(String(attribute.name).slice(1)) &&
+            !present.has(ATTRIBUTES.get(String(attribute.name).slice(1))),
+        )
+      : [];
+
+    if (added.length === 0 && renamed.length === 0) return;
 
     let range = rangeOf(node);
     let offset = range.start + 1 + angleName(name).length;
 
-    return () =>
-      `${template.slice(range.start, offset)}${added.join("")}${edits.print({ start: offset, end: range.end })}`;
+    return () => {
+      let rest = edits.print({ start: offset, end: range.end });
+
+      for (let attribute of renamed) {
+        let text = sourceOf(template, attribute);
+        let to = ATTRIBUTES.get(String(attribute.name).slice(1));
+
+        rest = rest.replace(text, `${to}${text.slice(String(attribute.name).length)}`);
+      }
+
+      return `${template.slice(range.start, offset)}${added.join("")}${rest}`;
+    };
   }
 
   let args = curlyArgs(invocation, component);

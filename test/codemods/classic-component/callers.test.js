@@ -45,3 +45,18 @@ test("curly invocations become angle brackets, with positional arguments by name
     }
   `);
 });
+
+/**
+ * From emberobserver/client, shortened.
+ */
+test("@class and @id of an angle bracket invocation become attributes", () => {
+  expect(
+    rewriteCallers(
+      `<XSelect @class="test-addon-dependencies" @id="deps" @value={{this.x}} />\n`,
+      COMPONENTS,
+    ).template,
+  ).toMatchInlineSnapshot(`
+    "<XSelect @onValueChange={{fn (mut this.x)}} class="test-addon-dependencies" id="deps" @value={{this.x}} />
+    "
+  `);
+});
