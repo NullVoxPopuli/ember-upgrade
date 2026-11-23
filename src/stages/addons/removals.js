@@ -285,6 +285,7 @@ const OBSOLETE = [
     label: "The app imports moment from npm",
     buildOptions: ["moment"],
     replaceWith: { moment: "2.30.1" },
+    after: importMomentGlobal,
   },
   {
     name: "ember-mockdate-shim",
@@ -389,6 +390,25 @@ function removeCalls(project, module) {
      * A call that spans lines stays, with its import, so that the build names it.
      */
     if (locals.some((local) => new RegExp(`\\b${local}\\b`).test(output))) continue;
+
+    project.write(file, output);
+  }
+}
+
+/**
+ * The shim also put moment on window. Code that read `window.moment` imports it now.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function importMomentGlobal(project) {
+  for (let file of project.files()) {
+    let source = project.read(file);
+
+    if (!source.includes("window.moment")) continue;
+
+    let output = source.replaceAll(/\bwindow\.moment\b/g, "moment");
+
+    if (!/^import\s+moment\b/m.test(output)) output = `import moment from 'moment';\n${output}`;
 
     project.write(file, output);
   }

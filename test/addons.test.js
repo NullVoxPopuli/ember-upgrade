@@ -785,3 +785,22 @@ test("the application template gets the wormhole of ember-basic-dropdown", () =>
     "<main>{{outlet}}</main>\n<BasicDropdownWormhole />\n",
   );
 });
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("code that read window.moment imports moment when the shim goes", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-cli-moment-shim": "^3.8.0" } }),
+    "tests/acceptance/code-search-test.js": "let date = window.moment().subtract(2, 'days');\n",
+  });
+  let stage = (await obsoleteAddons.expand(app)).find(
+    (entry) => entry.name === "ember-cli-moment-shim",
+  );
+
+  await stage?.run(app);
+
+  expect(app.read("tests/acceptance/code-search-test.js")).toBe(
+    "import moment from 'moment';\nlet date = moment().subtract(2, 'days');\n",
+  );
+});

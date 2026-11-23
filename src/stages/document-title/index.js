@@ -1,3 +1,6 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+
 import { parseProgram, walk } from "#ast.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
@@ -62,14 +65,14 @@ function titleArgument(source, fn) {
 /**
  * @param {string} source
  * @param {string} file
- * @returns {{ argument?: string, title?: string, member?: Node, unreadable?: string }}
+ * @returns {{ argument?: string, title?: string, titleFunction?: string, member?: Node, unreadable?: string }}
  */
 export function readRouteTitle(source, file) {
   let program = parseProgram(source, file);
 
   if (!program) return {};
 
-  /** @type {{ argument?: string, title?: string, member?: Node, unreadable?: string }} */
+  /** @type {{ argument?: string, title?: string, titleFunction?: string, member?: Node, unreadable?: string }} */
   let found = {};
 
   walk(program, (node) => {
@@ -99,7 +102,28 @@ export function readRouteTitle(source, file) {
         if (child.type === "Literal" && typeof child.value === "string") strings.push(child.value);
       });
 
-      found = { member: node, title: strings.at(-1) };
+      /**
+       * The function itself moves, when it uses only its tokens, so the title keeps its format.
+       */
+      let fn =
+        value?.type === "FunctionExpression" || value?.type === "ArrowFunctionExpression"
+          ? value
+          : undefined;
+      let usesThis = false;
+
+      walk(fn?.body, (child) => {
+        if (child.type === "ThisExpression") usesThis = true;
+      });
+
+      let movable = fn && fn.params.length === 1 && fn.params[0].type === "Identifier" && !usesThis;
+
+      found = {
+        member: node,
+        title: strings.at(-1),
+        titleFunction: movable
+          ? `function title(${fn.params[0].name}) ${source.slice(fn.body.start, fn.body.end)}`
+          : undefined,
+      };
       return;
     }
 
@@ -137,11 +161,34 @@ function withoutMember(source, member) {
 }
 
 /**
+ * @param {string} titleFunction the application route's `title(tokens)`, as a function declaration
+ * @returns {string} a page-title service that builds the title with it, from the route templates' titles
+ */
+export function pageTitleService(titleFunction) {
+  return `import PageTitleService from 'ember-page-title/services/page-title';
+
+/**
+ * ember-cli-document-title built the title with the application route's title(tokens),
+ * from each route's titleToken, outermost first. The route templates give those titles now.
+ */
+export default class PageTitle extends PageTitleService {
+  toString() {
+    return title(this.visibleTokens.map((token) => token.title).filter(Boolean));
+  }
+}
+
+${titleFunction.replace(/^ {2}/gm, "")}
+`;
+}
+
+/**
  * @param {import('#project.js').Project} project
  */
 function plan(project) {
-  /** @type {{ route: string, template: string, member: Node, call: string }[]} */
+  /** @type {{ route: string, template: string, member: Node, call?: string }[]} */
   let changes = [];
+  /** @type {string | undefined} */
+  let titleFunction;
   /** @type {Finding[]} */
   let blockers = [];
 
@@ -165,14 +212,17 @@ function plan(project) {
 
     let name = route.replace(/^app\/routes\//, "").replace(/\.(js|ts)$/, "");
     let call =
-      found.title !== undefined
-        ? `{{page-title ${JSON.stringify(found.title)}}}`
-        : `{{page-title ${found.argument}}}`;
+      found.titleFunction !== undefined
+        ? undefined
+        : found.title !== undefined
+          ? `{{page-title ${JSON.stringify(found.title)}}}`
+          : `{{page-title ${found.argument}}}`;
 
+    titleFunction ??= found.titleFunction;
     changes.push({ route, template: `app/templates/${name}.hbs`, member: found.member, call });
   }
 
-  return { changes, blockers };
+  return { changes, blockers, titleFunction };
 }
 
 /**
@@ -194,14 +244,23 @@ export default {
   },
 
   async run(project) {
-    for (let { route, template, member, call } of plan(project).changes) {
+    let { changes, titleFunction } = plan(project);
+
+    for (let { route, template, member, call } of changes) {
       let source = project.read(route);
 
       project.write(route, withoutMember(source, member));
 
+      if (!call) continue;
+
       let existing = project.has(template) ? project.read(template) : "{{outlet}}\n";
 
       project.write(template, `${call}\n${existing}`);
+    }
+
+    if (titleFunction && !project.has("app/services/page-title.js")) {
+      mkdirSync(join(project.directory, "app/services"), { recursive: true });
+      project.write("app/services/page-title.js", pageTitleService(titleFunction));
     }
 
     editPackageJson(project, (pkg) => {
