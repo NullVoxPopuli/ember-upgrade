@@ -1183,3 +1183,93 @@ export default class InlineCategoryList extends Component {
     "
   `);
 });
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("an argument that the component sets keeps the component's value until the caller passes a new one", () => {
+  let sources = new Map([
+    [
+      "app/components/dependency-table.js",
+      `import Component from '@ember/component';
+import { task } from 'ember-concurrency';
+
+export default class DependencyTable extends Component {
+  collapsed = false;
+
+  init() {
+    super.init(...arguments);
+    if (!this.collapsed) {
+      this.loadDependencies.perform();
+    }
+  }
+
+  @task(function* () {
+    this.set('dependencies', yield this.fetchData());
+    this.set('collapsed', false);
+  })
+  loadDependencies;
+}
+`,
+    ],
+    [
+      "app/components/dependency-table.hbs",
+      `{{#if this.collapsed}}<button {{on "click" (perform this.loadDependencies)}}>Show</button>{{else}}{{this.dependencies.length}}{{/if}}\n`,
+    ],
+    [
+      "app/templates/addon.hbs",
+      `<DependencyTable @fetchData={{this.fetch}} @collapsed={{true}} />\n<DependencyTable @fetchData={{this.fetch}} @collapsed={{this.collapsed}} />\n`,
+    ],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/dependency-table.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { task } from 'ember-concurrency';
+    import { tracked } from '@glimmer/tracking';
+
+    export default class DependencyTable extends Component {
+      constructor(owner, args) {
+        super(owner, args);
+        if (!this.collapsed) {
+          this.loadDependencies.perform();
+        }
+      }
+
+      @tracked dependencies;
+
+      @tracked localCollapsed;
+
+      get collapsed() {
+        let own = this.localCollapsed;
+
+        return own && own.arg === this.args.collapsed ? own.value : this.args.collapsed ?? false;
+      }
+
+      set collapsed(value) {
+        this.localCollapsed = { arg: this.args.collapsed, value };
+        this.args.onCollapsedChange?.(value);
+      }
+
+      @task(function* () {
+        this.dependencies = yield this.args.fetchData();
+        this.collapsed = false;
+      })
+      loadDependencies;
+    }
+    "
+  `);
+  expect(result.files.get("app/components/dependency-table.hbs")).toMatchInlineSnapshot(`
+    "<div ...attributes>
+    {{#if this.collapsed}}<button {{on "click" (perform this.loadDependencies)}}>Show</button>{{else}}{{this.dependencies.length}}{{/if}}
+    </div>
+    "
+  `);
+  expect(result.files.get("app/templates/addon.hbs")).toMatchInlineSnapshot(`
+    "<DependencyTable @fetchData={{this.fetch}} @collapsed={{true}} />
+    <DependencyTable @onCollapsedChange={{fn (mut this.collapsed)}} @fetchData={{this.fetch}} @collapsed={{this.collapsed}} />
+    "
+  `);
+});
