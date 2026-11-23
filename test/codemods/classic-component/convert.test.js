@@ -710,3 +710,85 @@ export default Component.extend({
     }
   `);
 });
+
+/**
+ * From code-corps-ember (MIT), shortened.
+ */
+test("an observer runs from the template when a value that it observes changes", () => {
+  let sources = new Map([
+    [
+      "app/components/selected-item.js",
+      `import Component from '@ember/component';
+import { get, observer, set } from '@ember/object';
+
+export default Component.extend({
+  dropdownOpen: false,
+  tooltipShown: false,
+
+  dropdownOpened: observer('dropdownOpen', 'user.name', function() {
+    set(this, 'tooltipShown', !get(this, 'dropdownOpen'));
+  }),
+});
+`,
+    ],
+    ["app/components/selected-item.hbs", `{{#if this.tooltipShown}}Tip{{/if}}\n`],
+    [
+      "app/components/other-item.js",
+      `import Component from '@ember/component';
+import { observer } from '@ember/object';
+
+export default Component.extend({
+  watchItems: observer('items.[]', function() {}),
+});
+`,
+    ],
+    [
+      "app/templates/application.hbs",
+      `<SelectedItem @dropdownOpen={{this.open}} @user={{this.user}} />\n`,
+    ],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([
+    { file: "app/components/other-item.js", reasons: ["the observer watchItems of items.[]"] },
+  ]);
+  expect(result.files.get("app/components/selected-item.hbs")).toMatchInlineSnapshot(`
+    "<div ...attributes>
+    {{this.observe "dropdownOpened" this.dropdownOpen @user.name}}
+    {{#if this.tooltipShown}}Tip{{/if}}
+    </div>
+    "
+  `);
+  expect(result.files.get("app/components/selected-item.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { get, set } from '@ember/object';
+    import { tracked } from '@glimmer/tracking';
+
+    export default class SelectedItem extends Component {
+      get dropdownOpen() {
+        return this.args.dropdownOpen ?? false;
+      }
+
+      @tracked tooltipShown = false;
+
+      dropdownOpened() {
+        set(this, 'tooltipShown', !get(this, 'dropdownOpen'));
+      }
+
+      /**
+       * Runs an observer when a value that it observes changes, as the classic observer did. It does not run on the first render.
+       */
+      observed = new Map();
+
+      observe = (name, ...values) => {
+        let last = this.observed.get(name);
+
+        this.observed.set(name, values);
+
+        if (last && values.some((value, index) => value !== last[index])) this[name]();
+      };
+    }
+    "
+  `);
+});

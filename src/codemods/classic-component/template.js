@@ -56,9 +56,11 @@ export function rewriteTemplate(template, component, names, glimmer) {
   let unreadable = [];
   let members = new Set(component.members.map((entry) => entry.name));
   let calls = glimmer.helpers.map((helper) =>
-    helper.args.length > 0
-      ? `{{this.${helper.name} ${helper.args.join(" ")}}}`
-      : `{{(this.${helper.name})}}`,
+    helper.observer
+      ? `{{this.${OBSERVE} "${helper.name}" ${helper.args.join(" ")}}}`
+      : helper.args.length > 0
+        ? `{{this.${helper.name} ${helper.args.join(" ")}}}`
+        : `{{(this.${helper.name})}}`,
   );
   let outer = writeOuterHtml(template, component, {
     modifiers: glimmer.modifier ? [`{{this.${glimmer.modifier}}}`] : [],
@@ -186,6 +188,11 @@ export function rewriteTemplate(template, component, names, glimmer) {
  * The field that wraps an action for `on`, as the `{{action}}` modifier ran it.
  */
 export const ACTION_HANDLER = "handleAction";
+
+/**
+ * The field that the template calls to run the observers.
+ */
+export const OBSERVE = "observe";
 
 /**
  * The field that calls an action with a value of the event, as the `action` helper did with `value=`.
