@@ -14,6 +14,56 @@ const SELECTORS = new Map([[":selected", ":checked"]]);
 const SAME = new Set(["focus", "blur", "click", "remove"]);
 
 /**
+ * The jQuery methods that read one element next to the element, and the DOM property for each.
+ */
+const RELATIVES = new Map([
+  ["parent", "parentElement"],
+  ["next", "nextElementSibling"],
+  ["prev", "previousElementSibling"],
+]);
+
+/**
+ * The events that `trigger` runs through the element's own method, as jQuery does.
+ */
+const NATIVE_EVENTS = new Set(["blur", "focus", "click", "submit"]);
+
+/**
+ * The events that do not bubble in the DOM.
+ */
+const NOT_BUBBLING = new Set(["mouseenter", "mouseleave", "load", "scroll"]);
+
+/**
+ * @param {Node} program
+ * @param {Node} child
+ * @returns {Node | undefined}
+ */
+function parentOf(program, child) {
+  /** @type {Node | undefined} */
+  let found;
+
+  walk(program, (node, parent) => {
+    if (node === child) found = parent;
+  });
+
+  return found;
+}
+
+/**
+ * @param {Node | undefined} node
+ * @param {Node} object
+ * @returns {boolean} the node is `object[0]`
+ */
+function isFirst(node, object) {
+  return (
+    node?.type === "MemberExpression" &&
+    node.object === object &&
+    node.computed &&
+    node.property?.type === "Literal" &&
+    node.property.value === 0
+  );
+}
+
+/**
  * The jQuery methods that remove event listeners.
  * A listener on an element that the component removes goes with it, so a teardown hook can drop the call.
  */
@@ -212,6 +262,44 @@ export function rewriteJQuery(source, file, teardown) {
         if (args.length !== 1 || args[0] !== "0") break;
         edits.replace(outer, () => element);
         return;
+      case "parent":
+      case "next":
+      case "prev": {
+        if (args.length !== 0) break;
+        let property = RELATIVES.get(method);
+        let after = parentOf(program, outer);
+
+        edits.replace(
+          after && isFirst(after, outer) ? after : outer,
+          () => `${element}.${property}`,
+        );
+        return;
+      }
+      case "css": {
+        let name = outer.arguments[0];
+
+        if (args.length !== 1) break;
+
+        let read =
+          name?.type === "Literal" && /^[A-Za-z]+$/.test(String(name.value))
+            ? `.${name.value}`
+            : `[${args[0]}]`;
+
+        edits.replace(outer, () => `getComputedStyle(${element})${read}`);
+        return;
+      }
+      case "trigger": {
+        let name = outer.arguments[0];
+
+        if (args.length !== 1 || name?.type !== "Literal" || typeof name.value !== "string") break;
+
+        edits.replace(outer, () =>
+          NATIVE_EVENTS.has(name.value)
+            ? `${element}.${name.value}()`
+            : `${element}.dispatchEvent(new Event(${args[0]}${NOT_BUBBLING.has(name.value) ? "" : ", { bubbles: true }"}))`,
+        );
+        return;
+      }
       case "find":
         if (args.length !== 1 || selector) break;
         edits.replace(

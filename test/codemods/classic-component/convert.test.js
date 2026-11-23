@@ -886,3 +886,41 @@ export default Component.extend({
     "
   `);
 });
+
+test("a hook that returns this._super() at its end", () => {
+  let sources = new Map([
+    [
+      "app/components/task-details.js",
+      `import Component from '@ember/component';
+
+export default Component.extend({
+  tagName: '',
+
+  init() {
+    this.prefetch();
+    return this._super(...arguments);
+  },
+
+  prefetch() {},
+});
+`,
+    ],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/task-details.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+
+    export default class TaskDetails extends Component {
+      constructor(owner, args) {
+        super(owner, args);
+        this.prefetch();
+      }
+
+      prefetch() {}
+    }
+    "
+  `);
+});
