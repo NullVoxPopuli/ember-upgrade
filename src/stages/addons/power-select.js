@@ -65,3 +65,43 @@ export function updatePowerSelect(source, file) {
 
   return { template: output, unreadable: [] };
 }
+
+const WORMHOLE_IMPORT =
+  "import BasicDropdownWormhole from 'ember-basic-dropdown/components/basic-dropdown-wormhole';";
+
+/**
+ * ember-basic-dropdown 8 and later render dropdowns into `<BasicDropdownWormhole />`, which the app's
+ * application template has. Before, the addon added its element to index.html with contentFor.
+ *
+ * @param {import('#project.js').Project} project
+ */
+export function addBasicDropdownWormhole(project) {
+  let file = [
+    "app/templates/application.gjs",
+    "app/templates/application.gts",
+    "app/templates/application.hbs",
+  ].find((name) => project.has(name));
+
+  if (!file) {
+    project.write("app/templates/application.hbs", "{{outlet}}\n<BasicDropdownWormhole />\n");
+    return;
+  }
+
+  let source = project.read(file);
+
+  if (source.includes("BasicDropdownWormhole")) return;
+
+  if (file.endsWith(".hbs")) {
+    project.write(file, `${source.replace(/\n?$/, "\n")}<BasicDropdownWormhole />\n`);
+    return;
+  }
+
+  let close = source.lastIndexOf("</template>");
+
+  if (close === -1) return;
+
+  project.write(
+    file,
+    `${WORMHOLE_IMPORT}\n${source.slice(0, close)}<BasicDropdownWormhole />\n${source.slice(close)}`,
+  );
+}

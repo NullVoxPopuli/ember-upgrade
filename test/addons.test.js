@@ -9,7 +9,11 @@ import emberMetrics from "#stages/addons/ember-metrics.js";
 import { rewriteClickOutside } from "#stages/addons/click-outside.js";
 import inlineContent from "#stages/addons/inline-content.js";
 import { replaceTypeahead } from "#stages/addons/power-select-typeahead.js";
-import { rewritePowerSelectMultiple, updatePowerSelect } from "#stages/addons/power-select.js";
+import {
+  addBasicDropdownWormhole,
+  rewritePowerSelectMultiple,
+  updatePowerSelect,
+} from "#stages/addons/power-select.js";
 import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
@@ -766,4 +770,18 @@ test("selectChoose comes from the test-support entry of ember-power-select 9", (
     import { selectChoose } from 'ember-power-select/test-support';
     "
   `);
+});
+
+test("the application template gets the wormhole of ember-basic-dropdown", () => {
+  let app = project({
+    "package.json": "{}",
+    "app/templates/application.hbs": "<main>{{outlet}}</main>\n",
+  });
+
+  addBasicDropdownWormhole(app);
+  addBasicDropdownWormhole(app);
+
+  expect(app.read("app/templates/application.hbs")).toBe(
+    "<main>{{outlet}}</main>\n<BasicDropdownWormhole />\n",
+  );
 });
