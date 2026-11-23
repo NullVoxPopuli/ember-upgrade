@@ -1,5 +1,6 @@
 import { findInvocations, rangeOf } from "#codemods/classic-component/invocations.js";
 import { moveImports } from "#codemods/move-imports.js";
+import { importMap, updateImports } from "#codemods/imports.js";
 import { parseProgram, walk } from "#ast.js";
 import { Edits } from "#edits.js";
 import { editPackageJson, setDependency } from "#package-json.js";
@@ -250,8 +251,26 @@ const BUILT_IN_ARGUMENTS = new Set([
   "@key-up",
   "@key-down",
   "@key-press",
-  "@input",
-  "@change",
+]);
+
+/**
+ * The event handlers that a classic component took as arguments, such as `@change`, and their DOM events.
+ * Ember 7's `<Input>` ignores them, so they become `{{on}}`, which calls the handler with the event, as before.
+ */
+const EVENT_ARGUMENTS = new Map([
+  ["change", "change"],
+  ["input", "input"],
+  ["click", "click"],
+  ["doubleClick", "dblclick"],
+  ["focusIn", "focusin"],
+  ["focusOut", "focusout"],
+  ["keyDown", "keydown"],
+  ["keyUp", "keyup"],
+  ["keyPress", "keypress"],
+  ["mouseDown", "mousedown"],
+  ["mouseUp", "mouseup"],
+  ["paste", "paste"],
+  ["cut", "cut"],
 ]);
 
 /**
@@ -260,9 +279,26 @@ const BUILT_IN_ARGUMENTS = new Set([
  */
 export function builtInAttributes(template) {
   return template.replace(/<(Input|Textarea)\b[^>]*>/g, (tag) =>
-    tag.replace(/(\s)@([\w-]+)=/g, (match, space, name) =>
-      BUILT_IN_ARGUMENTS.has(`@${name}`) ? match : `${space}${name === "class" ? "class" : name}=`,
-    ),
+    tag
+      .replace(/(\s)@([\w-]+)=\{\{(.*?)\}\}/g, (match, space, name, value) => {
+        let event = EVENT_ARGUMENTS.get(name);
+
+        if (!event) return match;
+
+        let handler = value.trim();
+
+        /**
+         * A helper call, such as `perform this.task`, becomes a sub-expression.
+         */
+        if (/\s/.test(handler)) handler = `(${handler})`;
+
+        return `${space}{{on "${event}" ${handler}}}`;
+      })
+      .replace(/(\s)@([\w-]+)=/g, (match, space, name) =>
+        BUILT_IN_ARGUMENTS.has(`@${name}`) || EVENT_ARGUMENTS.has(name)
+          ? match
+          : `${space}${name === "class" ? "class" : name}=`,
+      ),
   );
 }
 
@@ -272,8 +308,28 @@ export function builtInAttributes(template) {
 export function builtInAttributesInTemplates(project) {
   for (let file of project.files(["{app,addon,tests}/**/*.{hbs,gjs,gts}"])) {
     let source = project.read(file);
-    let output = builtInAttributes(source);
+    let output = withOnImport(builtInAttributes(source), file);
 
     if (output !== source) project.write(file, output);
   }
+}
+
+/**
+ * A template tag needs to import the `on` modifier that {@link builtInAttributes} added.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @returns {string}
+ */
+export function withOnImport(source, file) {
+  if (file.endsWith(".hbs") || !source.includes("{{on ")) return source;
+
+  let program = parseProgram(source, file);
+
+  if (!program || importMap(program).has("on")) return source;
+
+  return updateImports(source, file, {
+    prune: [],
+    add: new Map([["@ember/modifier", new Set(["on"])]]),
+  });
 }

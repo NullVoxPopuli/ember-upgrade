@@ -16,6 +16,7 @@ import {
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
 import {
   builtInAttributes,
+  withOnImport,
   extendsArrays,
   queryParamsList,
   rewriteWith,
@@ -420,6 +421,33 @@ test("the attributes that Input took as arguments become attributes", () => {
   ).toBe(
     `<Input @type="search" id="code-search-input" spellcheck="false" @value={{this.query}} />\n`,
   );
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("an event handler that Input took as an argument becomes the on modifier", () => {
+  expect(
+    withOnImport(
+      builtInAttributes(
+        `import perform from "ember-concurrency/helpers/perform";
+
+<template>
+  <Input @type="checkbox" id="search-readmes" @checked={{@searchReadmes}} @change={{perform this.toggleReadmeSearch}} />
+</template>
+`,
+      ),
+      "app/components/large-search.gjs",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import perform from "ember-concurrency/helpers/perform";
+    import { on } from '@ember/modifier';
+
+    <template>
+      <Input @type="checkbox" id="search-readmes" @checked={{@searchReadmes}} {{on "change" (perform this.toggleReadmeSearch)}} />
+    </template>
+    "
+  `);
 });
 
 test("the ember-data rewrites change nothing on a second step", () => {
