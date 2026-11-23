@@ -4,11 +4,14 @@ import { rewriteCallers } from "./callers.js";
 import { toGlimmer } from "./glimmer.js";
 import { findInvocations } from "./invocations.js";
 import { rewriteJQuery } from "./jquery.js";
+import { inlineMixins } from "./mixins.js";
+import { rewritePrototypeExtensions } from "./prototype-extensions.js";
 import { readClassicComponent } from "./read.js";
 import { needsActionHandler, rewriteTemplate } from "./template.js";
 import { classUsage, templateUsage } from "./usage.js";
 
 /** @typedef {import('./callers.js').Converted} Converted */
+/** @typedef {import('./mixins.js').Resolve} Resolve */
 
 /**
  * @typedef {object} Candidate
@@ -46,9 +49,12 @@ const TEARDOWN = new Set(["willDestroyElement", "willClearRender"]);
  * @param {Candidate} candidate
  * @param {string} template
  * @param {Map<string, string>} templates every template of the app, to find the arguments that callers pass
+ * @param {Resolve} resolve
  */
-function analyze(candidate, template, templates) {
-  let jquery = rewriteJQuery(candidate.source, candidate.file, TEARDOWN);
+function analyze(candidate, template, templates, resolve) {
+  let mixins = inlineMixins(candidate.source, candidate.file, resolve);
+  let extensions = rewritePrototypeExtensions(mixins.source, candidate.file);
+  let jquery = rewriteJQuery(extensions, candidate.file, TEARDOWN);
   let accessors = rewriteAccessors(jquery.source, candidate.file);
 
   if (!accessors) return;
@@ -109,6 +115,7 @@ function analyze(candidate, template, templates) {
     actionHandler: needsActionHandler(template, component),
   });
 
+  for (let reason of mixins.unreadable) glimmer.unreadable.push(reason);
   for (let reason of jquery.unreadable) glimmer.unreadable.push(reason);
 
   return { component, names, glimmer };
@@ -119,9 +126,11 @@ function analyze(candidate, template, templates) {
  * and rewrites the templates that invoke them.
  *
  * @param {Map<string, string>} sources the app's component modules and templates, by path
+ * @param {{ resolve?: Resolve }} [options] `resolve` finds the app's mixins that the components use
  * @returns {Conversion}
  */
-export function convertComponents(sources) {
+export function convertComponents(sources, options = {}) {
+  let resolve = options.resolve ?? (() => undefined);
   /** @type {Conversion} */
   let result = { files: new Map(), skipped: [], packages: new Set() };
   /** @type {Map<string, string>} */
@@ -151,7 +160,7 @@ export function convertComponents(sources) {
     let converted = new Map();
 
     for (let candidate of candidates) {
-      let analysis = analyze(candidate, templateOf(candidate), templates);
+      let analysis = analyze(candidate, templateOf(candidate), templates, resolve);
 
       if (!analysis || analysis.glimmer.unreadable.length > 0) continue;
 
@@ -178,7 +187,7 @@ export function convertComponents(sources) {
 
   for (let candidate of candidates) {
     let template = templateOf(candidate);
-    let analysis = analyze(candidate, template, templates);
+    let analysis = analyze(candidate, template, templates, resolve);
     let reasons = analysis ? analysis.glimmer.unreadable.slice() : ["does not parse"];
 
     if (!analysis || reasons.length > 0) {

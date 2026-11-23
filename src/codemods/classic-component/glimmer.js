@@ -629,7 +629,7 @@ export function toGlimmer(input, file, names, options) {
           });
         } else if (entry.keys.length === 1 && entry.keys[0] === "init") {
           constructorCalls.push(`this${member(name)}();`);
-        } else if (entry.keys.length === 1 && entry.keys[0] === "didInsertElement") {
+        } else if (entry.keys.length === 1 && ELEMENT_HOOKS.has(String(entry.keys[0]))) {
           elementHooks.push(entry);
         } else {
           result.unreadable.push(`on(${entry.keys.join(", ")})`);
@@ -761,12 +761,14 @@ export function toGlimmer(input, file, names, options) {
     need("ember-modifier", "modifier");
     result.modifier = "lifecycle";
 
+    let hookOf = (/** @type {Member} */ entry) =>
+      entry.kind === "on" ? String(entry.keys[0]) : entry.name;
     let inserted = elementHooks
-      .filter((entry) => entry.name === "didInsertElement" || entry.kind === "on")
+      .filter((entry) => hookOf(entry) === "didInsertElement")
       .map((entry) => `\u21e5\u21e5this${member(entry.name)}();\n`)
       .join("");
     let removed = elementHooks
-      .filter((entry) => entry.name === "willDestroyElement" || entry.name === "willClearRender")
+      .filter((entry) => hookOf(entry) !== "didInsertElement")
       .map((entry) => `\u21e5\u21e5\u21e5this${member(entry.name)}();\n`)
       .join("");
 
