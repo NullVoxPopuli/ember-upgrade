@@ -263,15 +263,17 @@ let match = list.findBy('id', item.id);
 let sorted = (versions || []).sortBy('released').reverse();
 `;
 
-  expect(nativeArrayMethods(withoutFirstAndLastObject(source, "a.js"), "a.js"))
-    .toMatchInlineSnapshot(`
+  expect(
+    nativeArrayMethods(withoutFirstAndLastObject(source, "a.js"), "a.js"),
+  ).toMatchInlineSnapshot(`
     "import { compare } from '@ember/utils';
+    import asArray from 'app/utils/as-array';
     import { get } from '@ember/object';
-    let addon = addons?.[0];
-    let earliest = get(get(this, 'sortedVersionCompatibilities')?.slice(-1)[0], 'emberVersion');
-    let names = users.slice().map((item) => get(item, 'name'));
-    let match = list.find((element) => get(element, 'id') === item.id);
-    let sorted = (versions || []).slice().sort((a, b) => compare(get(a, 'released'), get(b, 'released'))).reverse();
+    let addon = asArray(addons)[0];
+    let earliest = get(asArray(get(this, 'sortedVersionCompatibilities')).slice(-1)[0], 'emberVersion');
+    let names = asArray(users).slice().map((item) => get(item, 'name'));
+    let match = asArray(list).find((element) => get(element, 'id') === item.id);
+    let sorted = asArray(versions || []).slice().sort((a, b) => compare(get(a, 'released'), get(b, 'released'))).reverse();
     "
   `);
 });

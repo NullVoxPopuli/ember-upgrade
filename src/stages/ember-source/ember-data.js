@@ -1,7 +1,11 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+
 import { parseProgram, walk } from "#ast.js";
 import { Edits } from "#edits.js";
 import { importMap } from "#codemods/imports.js";
 import { NestedEdits } from "#codemods/nested-edits.js";
+import { modulePrefix } from "#module-prefix.js";
 
 /** @typedef {import('#ast.js').Node} Node */
 
@@ -220,22 +224,59 @@ export function explicitRelationshipOptions(project) {
   for (let [name, source] of result.files)
     project.write(/** @type {string} */ (byName.get(name)), source);
 
+  let from = `${modulePrefix(project)}/utils/as-array`;
+  let usesArray = false;
+
   for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
+    if (file === "app/utils/as-array.js") continue;
+
     let before = project.read(file);
-    let after = nativeArrayMethods(withoutFirstAndLastObject(before, file), file);
+    let after = nativeArrayMethods(withoutFirstAndLastObject(before, file, from), file, from);
 
     if (after !== before) project.write(file, after);
+    if (after.includes(`from '${from}'`)) usesArray = true;
+  }
+
+  if (usesArray && !project.has("app/utils/as-array.js")) {
+    mkdirSync(join(project.directory, "app/utils"), { recursive: true });
+    project.write("app/utils/as-array.js", AS_ARRAY_SOURCE);
   }
 
   return result.unreadable;
 }
 
 /**
+ * The function that the rewritten reads go through, and the module that the app gets for it.
+ */
+const ARRAY = "asArray";
+const ARRAY_MODULE = "app/utils/as-array";
+
+/**
+ * The module for apps whose async hasMany relationships and record arrays lost the array extensions.
+ */
+export const AS_ARRAY_SOURCE = `/**
+ * Reads a list as an array. A native array or an ember-data record array stays as it is.
+ * An async hasMany gives the records that it loaded, and nothing before they load.
+ */
+export default function asArray(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value;
+  if ("content" in value) return asArray(value.content);
+
+  let items = [];
+
+  value.forEach?.((item) => items.push(item));
+
+  return items;
+}
+`;
+
+/**
  * Record arrays answer index reads and a few native methods, such as `slice`, but not `at`.
  */
 const ENDS = new Map([
-  ["firstObject", "?.[0]"],
-  ["lastObject", "?.slice(-1)[0]"],
+  ["firstObject", "[0]"],
+  ["lastObject", ".slice(-1)[0]"],
 ]);
 
 /**
@@ -246,7 +287,7 @@ const ENDS = new Map([
  * @param {string} file
  * @returns {string}
  */
-export function withoutFirstAndLastObject(source, file) {
+export function withoutFirstAndLastObject(source, file, from = ARRAY_MODULE) {
   if (!/\b(first|last)Object\b/.test(source)) return source;
 
   let program = parseProgram(source, file);
@@ -258,6 +299,7 @@ export function withoutFirstAndLastObject(source, file) {
     ([, value]) => value.module === "@ember/object" && value.imported === "get",
   )?.[0];
   let needsGet = false;
+  let wrapped = false;
   let edits = new Edits(source);
   let text = (/** @type {Node} */ node) => source.slice(node.start, node.end);
 
@@ -288,7 +330,8 @@ export function withoutFirstAndLastObject(source, file) {
         pending = [];
       }
 
-      output = `${output}${index}`;
+      output = `${ARRAY}(${output})${index}`;
+      wrapped = true;
     }
 
     if (pending.length > 0) {
@@ -328,6 +371,7 @@ export function withoutFirstAndLastObject(source, file) {
   let output = edits.apply();
 
   if (needsGet && !getLocal) output = `import { get } from '@ember/object';\n${output}`;
+  if (wrapped) output = `import ${ARRAY} from '${from}';\n${output}`;
 
   return output;
 }
@@ -366,7 +410,7 @@ const READERS = new Set([
  * @param {string} file
  * @returns {string}
  */
-export function nativeArrayMethods(source, file) {
+export function nativeArrayMethods(source, file, from = ARRAY_MODULE) {
   if (
     !/\.(mapBy|filterBy|rejectBy|findBy|isAny|isEvery|sortBy|toArray|objectAt|compact|uniq)\(/.test(
       source,
@@ -386,9 +430,25 @@ export function nativeArrayMethods(source, file) {
     )?.[0];
   let get = localOf("@ember/object", "get");
   let compare = localOf("@ember/utils", "compare");
-  let needs = { get: false, compare: false };
+  let needs = { get: false, compare: false, array: false };
   let edits = new NestedEdits(source);
   let print = (/** @type {Node} */ node) => edits.print(node);
+  let list = (/** @type {Node} */ node) => {
+    let inner = node.type === "ParenthesizedExpression" ? node.expression : node;
+    let rewritten =
+      inner.type === "CallExpression" &&
+      inner.callee?.type === "MemberExpression" &&
+      READERS.has(inner.callee.property?.name);
+
+    /**
+     * A read that the codemod rewrote gives a native array already.
+     */
+    if (rewritten) return print(node);
+
+    needs.array = true;
+
+    return `${ARRAY}(${print(inner)})`;
+  };
 
   walk(program, (node) => {
     let callee = node.type === "CallExpression" ? node.callee : undefined;
@@ -420,7 +480,7 @@ export function nativeArrayMethods(source, file) {
     switch (method) {
       case "mapBy":
         if (args.length === 1 && literal)
-          render = () => `${print(receiver)}.map((${item}) => ${read(item)})`;
+          render = () => `${list(receiver)}.map((${item}) => ${read(item)})`;
         break;
       case "filterBy":
       case "rejectBy":
@@ -433,7 +493,7 @@ export function nativeArrayMethods(source, file) {
         let not = method === "rejectBy" ? "!" : "";
 
         render = () =>
-          `${print(receiver)}.${native}((${item}) => ${not}${not && args.length > 1 ? `(${test(item)})` : test(item)})`;
+          `${list(receiver)}.${native}((${item}) => ${not}${not && args.length > 1 ? `(${test(item)})` : test(item)})`;
         break;
       }
       case "sortBy":
@@ -449,21 +509,21 @@ export function nativeArrayMethods(source, file) {
               `${compare ?? "compare"}(${get ?? "get"}(a, ${print(arg)}), ${get ?? "get"}(b, ${print(arg)}))`,
           );
 
-          return `${print(receiver)}.slice().sort((a, b) => ${parts.join(" || ")})`;
+          return `${list(receiver)}.slice().sort((a, b) => ${parts.join(" || ")})`;
         };
         break;
       case "toArray":
-        if (args.length === 0) render = () => `${print(receiver)}.slice()`;
+        if (args.length === 0) render = () => `${list(receiver)}.slice()`;
         break;
       case "objectAt":
-        if (args.length === 1) render = () => `${print(receiver)}[${print(args[0])}]`;
+        if (args.length === 1) render = () => `${list(receiver)}[${print(args[0])}]`;
         break;
       case "compact":
         if (args.length === 0)
-          render = () => `${print(receiver)}.filter((${item}) => ${item} != null)`;
+          render = () => `${list(receiver)}.filter((${item}) => ${item} != null)`;
         break;
       case "uniq":
-        if (args.length === 0) render = () => `Array.from(new Set(${print(receiver)}))`;
+        if (args.length === 0) render = () => `Array.from(new Set(${list(receiver)}))`;
         break;
     }
 
@@ -477,6 +537,8 @@ export function nativeArrayMethods(source, file) {
 
   if (needs.get && !get) lines.push(`import { get } from '@ember/object';`);
   if (needs.compare && !compare) lines.push(`import { compare } from '@ember/utils';`);
+  if (needs.array && !output.includes(`import ${ARRAY} from`))
+    lines.push(`import ${ARRAY} from '${from}';`);
 
   return lines.length > 0 ? `${lines.join("\n")}\n${output}` : output;
 }
