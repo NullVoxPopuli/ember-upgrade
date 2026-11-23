@@ -12,7 +12,7 @@ import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 import { renameTitleHelpers } from "./page-title.js";
-import { rewriteWithHelpers } from "./with-helper.js";
+import { moveHtmlSafe, rewriteWithHelpers } from "./with-helper.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
 
@@ -124,7 +124,10 @@ function step(lts) {
         renameTitleHelpers(project);
       }
 
-      if (before[0] < 4 && target[0] >= 4) rewriteWithHelpers(project);
+      if (before[0] < 4 && target[0] >= 4) {
+        rewriteWithHelpers(project);
+        moveHtmlSafe(project);
+      }
 
       if (target[0] >= 7) {
         updateEmberImporters(project);

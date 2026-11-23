@@ -373,6 +373,20 @@ export function planInline(name, directory, taken, emberVersion) {
   /** @type {Record<string, string>} */
   let ranges = {};
 
+  /**
+   * Ember 4 removed the global acceptance test helpers, so a module that registers one cannot run.
+   * Nothing imports it, because the tests called the helper as a global.
+   */
+  for (let [target, source] of files) {
+    if (
+      /\bimport\s*\{[^}]*\bregister(Async)?Helper\b[^}]*\}\s*from\s*["']@ember\/test["']/.test(
+        source,
+      )
+    ) {
+      files.delete(target);
+    }
+  }
+
   let used = importedPackages(Array.from(files.values()));
 
   for (let [dependency, range] of Object.entries(manifest.dependencies ?? {})) {

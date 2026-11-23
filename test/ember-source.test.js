@@ -7,6 +7,7 @@ import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
 import { rewriteWith } from "#stages/ember-source/with-helper.js";
+import { moveImports } from "#codemods/move-imports.js";
 
 /**
  * @param {Record<string, unknown>} pkg
@@ -115,4 +116,16 @@ test("with becomes let inside if, and nested ones too", () => {
     {{/if}}
     "
   `);
+});
+
+test("htmlSafe moves from @ember/string to @ember/template", () => {
+  expect(
+    moveImports(
+      `import { htmlSafe } from '@ember/string';\n`,
+      "app/helpers/dom-purify.js",
+      "@ember/string",
+      "@ember/template",
+      (name) => name === "htmlSafe",
+    ),
+  ).toBe(`import { htmlSafe } from '@ember/template';\n`);
 });

@@ -9,7 +9,7 @@ import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
 import { rewriteClickOutside } from "./click-outside.js";
-import { rewritePowerSelectMultiple } from "./power-select.js";
+import { updatePowerSelect } from "./power-select.js";
 import { dependencyDirectory, inlineV1Stage } from "./inline-v1.js";
 import { isObsoleteAddon } from "./removals.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
@@ -377,6 +377,7 @@ export function updateStage(name, release) {
       for (let file of codemod ? project.files([codemod.files]) : []) {
         let result = /** @type {{ codemod: TemplateCodemod }} */ (codemod).codemod(
           project.read(file),
+          file,
         );
 
         if (result.unreadable.length > 0) {
@@ -465,7 +466,7 @@ function isV1Addon(directory) {
 }
 
 /**
- * @typedef {(template: string) => { template: string, unreadable: string[] }} TemplateCodemod
+ * @typedef {(source: string, file: string) => { template: string, unreadable: string[] }} TemplateCodemod
  */
 
 /**
@@ -477,7 +478,7 @@ const TEMPLATE_CODEMODS = new Map([
   ["ember-click-outside", { codemod: rewriteClickOutside, files: "{app,addon,tests}/**/*.hbs" }],
   [
     "ember-power-select",
-    { codemod: rewritePowerSelectMultiple, files: "{app,addon,tests}/**/*.{hbs,gjs,gts}" },
+    { codemod: updatePowerSelect, files: "{app,addon,tests}/**/*.{hbs,gjs,gts,js,ts}" },
   ],
 ]);
 
