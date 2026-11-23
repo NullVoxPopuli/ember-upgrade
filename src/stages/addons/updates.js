@@ -283,6 +283,7 @@ function hasOwnStage(name) {
       "ember-svg-jar",
       "ember-web-app",
       "ember-power-select-typeahead",
+      "ember-router-scroll",
     ].includes(name)
   );
 }

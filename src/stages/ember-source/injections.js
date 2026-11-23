@@ -150,6 +150,24 @@ export function explicitInjections(project) {
   /** @type {Injection[]} */
   let moved = [];
 
+  /**
+   * ember-data injected `store` into routes and controllers, until ember-data 4.
+   */
+  if (project.has("package.json") && project.dependency("ember-data")) {
+    for (let type of ["route", "controller"]) {
+      let injection = { type, property: "store", service: "store" };
+
+      for (let target of project.files([`app/${type}s/**/*.{js,ts}`])) {
+        let before = project.read(target);
+        let after = declareService(before, target, injection);
+
+        if (after !== before) project.write(target, after);
+      }
+
+      if (type === "controller") controllersForTemplates(project, injection, undefined);
+    }
+  }
+
   for (let file of project.files(["app/{initializers,instance-initializers}/**/*.{js,ts}"])) {
     let { injections, source } = readInjections(project.read(file), file);
 

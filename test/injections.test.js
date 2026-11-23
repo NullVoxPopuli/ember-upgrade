@@ -88,3 +88,33 @@ export default class IndexRoute extends Route {}
     }
   `);
 });
+
+test("routes and controllers that read the store declare it, as ember-data stopped injecting it", () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-data": "~3.28.0" } }),
+    "app/routes/addons.js": `import Route from '@ember/routing/route';
+
+export default class AddonsRoute extends Route {
+  model() {
+    return this.store.findAll('addon');
+  }
+}
+`,
+  });
+
+  explicitInjections(app);
+
+  expect(app.read("app/routes/addons.js")).toMatchInlineSnapshot(`
+    "import Route from '@ember/routing/route';
+    import { service } from '@ember/service';
+
+    export default class AddonsRoute extends Route {
+      @service store;
+
+      model() {
+        return this.store.findAll('addon');
+      }
+    }
+    "
+  `);
+});

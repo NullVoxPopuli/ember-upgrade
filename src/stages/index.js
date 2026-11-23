@@ -36,6 +36,7 @@ import emberNvp from "./ember-nvp/index.js";
 import jqueryIntegration from "./jquery-integration/index.js";
 import inlineContent from "./addons/inline-content.js";
 import powerSelectTypeahead from "./addons/power-select-typeahead.js";
+import routerScroll from "./addons/router-scroll.js";
 import documentTitle from "./document-title/index.js";
 import dynamicComponents from "./dynamic-components/index.js";
 import { classicLts, viteLts } from "./ember-source/index.js";
@@ -93,6 +94,7 @@ export const stages = [
   emberMetrics,
   /** Before v2-addons, which would update ember-power-select-typeahead's dependencies. */
   powerSelectTypeahead,
+  routerScroll,
   v2Addons,
   /**
    * Before template-tag, which needs the components that these stages add to resolve,
