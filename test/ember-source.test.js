@@ -355,6 +355,7 @@ test("the ember-data rewrites change nothing on a second step", () => {
   let source = `set(review, 'version', get(this, 'addon.latestAddonVersion'));
 let released = get(this.args, 'testResult.emberVersionCompatibilities').filter((v) => v.released);
 let first = addons.get('firstObject');
+let count = model.addons.get('length');
 let names = list.mapBy('name');
 `;
   let names = new Set(["version", "emberVersionCompatibilities"]);

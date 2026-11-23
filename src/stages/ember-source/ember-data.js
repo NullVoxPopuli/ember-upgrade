@@ -392,6 +392,14 @@ export function withoutFirstAndLastObject(source, file, from = ARRAY_MODULE) {
       node.arguments.length === 1
     ) {
       replaced = rewrite(text(callee.object), path.value);
+
+      /**
+       * Record arrays have no `get()`, and `list.get('length')` gave undefined.
+       */
+      if (!replaced && path.value === "length") {
+        replaced = `${ARRAY}(${text(callee.object)}).length`;
+        wrapped = true;
+      }
     }
 
     if (replaced) edits.replace(node, replaced);
