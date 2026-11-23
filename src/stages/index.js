@@ -34,6 +34,7 @@ import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
 import jqueryIntegration from "./jquery-integration/index.js";
+import lint from "./lint/index.js";
 import inlineContent from "./addons/inline-content.js";
 import powerSelectTypeahead from "./addons/power-select-typeahead.js";
 import routerScroll from "./addons/router-scroll.js";
@@ -137,4 +138,8 @@ export const stages = [
   declareImports,
   emberNvp,
   undeprecateInject,
+  /**
+   * Last, so that the lint errors that it records are the ones in the final code.
+   */
+  lint,
 ];
