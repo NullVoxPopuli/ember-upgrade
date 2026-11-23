@@ -792,3 +792,97 @@ export default Component.extend({
     "
   `);
 });
+
+/**
+ * From code-corps-ember (MIT), shortened.
+ */
+test("didUpdateAttrs runs when an argument changes, and didRender after the render", () => {
+  let sources = new Map([
+    [
+      "app/components/conversation-thread.js",
+      `import Component from '@ember/component';
+
+export default Component.extend({
+  isOpen: false,
+
+  didUpdateAttrs() {
+    this._super(...arguments);
+    this.scrollBottom();
+  },
+
+  didRender() {
+    this._super(...arguments);
+    this.focus();
+  },
+
+  actions: {
+    toggle() {
+      this.set('isOpen', !this.isOpen);
+    },
+  },
+});
+`,
+    ],
+    [
+      "app/components/conversation-thread.hbs",
+      `<button type="button" {{action "toggle"}}>{{if this.isOpen "Close" "Open"}}</button>\n`,
+    ],
+    ["app/templates/application.hbs", `<ConversationThread @conversation={{this.model}} />\n`],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/conversation-thread.hbs")).toMatchInlineSnapshot(`
+    "<div ...attributes>
+    {{this.observe "didUpdateAttrs" @scrollBottom @focus @conversation}}
+    <button type="button" {{on "click" this.toggle}}>{{if this.isOpen "Close" "Open"}}</button>
+    {{this.afterRender "didRender" @scrollBottom @focus @conversation this.isOpen}}
+    </div>
+    "
+  `);
+  expect(result.files.get("app/components/conversation-thread.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { tracked } from '@glimmer/tracking';
+    import { action } from '@ember/object';
+    import { schedule } from '@ember/runloop';
+
+    export default class ConversationThread extends Component {
+      @tracked isOpen = false;
+
+      didUpdateAttrs() {
+        this.args.scrollBottom();
+      }
+
+      didRender() {
+        this.args.focus();
+      }
+
+      @action
+      toggle() {
+        this.isOpen = !this.isOpen;
+      }
+
+      /**
+       * Runs an observer when a value that it observes changes, as the classic observer did. It does not run on the first render.
+       */
+      observed = new Map();
+
+      observe = (name, ...values) => {
+        let last = this.observed.get(name);
+
+        this.observed.set(name, values);
+
+        if (last && values.some((value, index) => value !== last[index])) this[name]();
+      };
+
+      /**
+       * Runs a hook after the render, as \`didRender\` ran. The values that the template passes make it run again when they change.
+       */
+      afterRender = (name) => {
+        schedule('afterRender', this, name);
+      };
+    }
+    "
+  `);
+});

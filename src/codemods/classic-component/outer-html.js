@@ -115,7 +115,7 @@ export function attributeBinding(binding) {
  *
  * @param {string} template the component's template
  * @param {ClassicComponent} component
- * @param {{ modifiers?: string[], start?: string, elementId?: boolean }} [options] more modifiers for the element, template text for the start of its body, and an `id` from `this.elementId`
+ * @param {{ modifiers?: string[], start?: string, end?: string, elementId?: boolean }} [options] more modifiers for the element, template text for the start and the end of its body, and an `id` from `this.elementId`
  * @returns {{ template: string, events: string[] }} the new template, and the methods that handle events now
  */
 export function writeOuterHtml(template, component, options = {}) {
@@ -126,8 +126,13 @@ export function writeOuterHtml(template, component, options = {}) {
     .map((member) => member.name);
 
   let start = options.start ? `${options.start}\n` : "";
+  let end = options.end ? `${options.end}\n` : "";
 
-  if (tag === "") return { template: `${start}${template}`, events: [] };
+  if (tag === "") {
+    let body = end && !template.endsWith("\n") ? `${template}\n` : template;
+
+    return { template: `${start}${body}${end}`, events: [] };
+  }
 
   /** @type {string[]} */
   let attributes = [];
@@ -151,7 +156,7 @@ export function writeOuterHtml(template, component, options = {}) {
 
   let opening = `<${tag} ${attributes.join(" ")}`;
 
-  if (VOID.has(tag) && template.trim() === "" && !start) {
+  if (VOID.has(tag) && template.trim() === "" && !start && !end) {
     return { template: `${opening} />\n`, events };
   }
 
@@ -160,5 +165,5 @@ export function writeOuterHtml(template, component, options = {}) {
    */
   let body = template.endsWith("\n") ? template : `${template}\n`;
 
-  return { template: `${opening}>\n${start}${body}</${tag}>\n`, events };
+  return { template: `${opening}>\n${start}${body}${end}</${tag}>\n`, events };
 }

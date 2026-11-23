@@ -55,16 +55,22 @@ export function rewriteTemplate(template, component, names, glimmer) {
   /** @type {string[]} */
   let unreadable = [];
   let members = new Set(component.members.map((entry) => entry.name));
-  let calls = glimmer.helpers.map((helper) =>
-    helper.observer
-      ? `{{this.${OBSERVE} "${helper.name}" ${helper.args.join(" ")}}}`
-      : helper.args.length > 0
-        ? `{{this.${helper.name} ${helper.args.join(" ")}}}`
-        : `{{(this.${helper.name})}}`,
-  );
+  let call = (/** @type {Glimmer["helpers"][number]} */ helper) => {
+    if (helper.observer) return `{{this.${OBSERVE} "${helper.name}" ${helper.args.join(" ")}}}`;
+    if (helper.afterRender) {
+      return `{{this.${AFTER_RENDER} "${helper.name}"${helper.args.map((arg) => ` ${arg}`).join("")}}}`;
+    }
+
+    return helper.args.length > 0
+      ? `{{this.${helper.name} ${helper.args.join(" ")}}}`
+      : `{{(this.${helper.name})}}`;
+  };
+  let calls = glimmer.helpers.filter((helper) => !helper.afterRender).map(call);
+  let after = glimmer.helpers.filter((helper) => helper.afterRender).map(call);
   let outer = writeOuterHtml(template, component, {
     modifiers: glimmer.modifier ? [`{{this.${glimmer.modifier}}}`] : [],
     start: calls.join(""),
+    end: after.join(""),
     elementId: glimmer.elementId,
   });
   let source = outer.template;
@@ -188,6 +194,11 @@ export function rewriteTemplate(template, component, names, glimmer) {
  * The field that wraps an action for `on`, as the `{{action}}` modifier ran it.
  */
 export const ACTION_HANDLER = "handleAction";
+
+/**
+ * The field that the end of the template calls to run `didRender` after the render.
+ */
+export const AFTER_RENDER = "afterRender";
 
 /**
  * The field that the template calls to run the observers.

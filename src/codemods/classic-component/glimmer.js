@@ -7,7 +7,7 @@ import { COMPONENT_API } from "./args.js";
 import { macroGetter } from "./macros.js";
 import { EVENTS } from "./outer-html.js";
 import { readClassicComponent } from "./read.js";
-import { ACTION_HANDLER, ACTION_VALUE, OBSERVE } from "./template.js";
+import { ACTION_HANDLER, ACTION_VALUE, AFTER_RENDER, OBSERVE } from "./template.js";
 
 /** @typedef {import('#ast.js').Node} Node */
 /** @typedef {import('./read.js').ClassicComponent} ClassicComponent */
@@ -30,11 +30,9 @@ const ELEMENT_HOOKS = new Set(["didInsertElement", "willDestroyElement", "willCl
  * Hooks that have no Glimmer replacement yet, so the conversion stops.
  */
 const UNSUPPORTED_HOOKS = new Set([
-  "didUpdateAttrs",
   "willRender",
   "willUpdate",
   "didUpdate",
-  "didRender",
   "willInsertElement",
   "didDestroyElement",
 ]);
@@ -63,7 +61,7 @@ const MACRO_MODULES = new Set(["@ember/object/computed", "ember-computed"]);
  * @property {string} source the new module
  * @property {string[]} unreadable the reasons that the conversion stopped; the source is the old one then
  * @property {string | undefined} modifier the field that the template puts on its element, such as `lifecycle`
- * @property {{ name: string, args: string[], observer?: boolean }[]} helpers methods that the template calls at its start, with the paths that they track. An observer runs through {@link OBSERVE} when a path changes.
+ * @property {{ name: string, args: string[], observer?: boolean, afterRender?: boolean }[]} helpers methods that the template calls at its start, with the paths that they track. An observer runs through {@link OBSERVE} when a path changes, and `didRender` runs through {@link AFTER_RENDER} at the end of the template.
  * @property {boolean} elementId the template's element needs `id={{this.elementId}}`
  */
 
@@ -437,6 +435,10 @@ export function toGlimmer(input, file, names, options) {
 
   let members = component.members;
   let has = (/** @type {string} */ name) => members.some((entry) => entry.name === name);
+  let allArgs = () =>
+    Array.from(names.args)
+      .filter((arg) => NAME.test(arg))
+      .map((arg) => `@${arg}`);
   /**
    * @param {string} key a dependent key, such as `model.name`
    * @returns {string} the path in the template, such as `@model.name`
@@ -546,13 +548,27 @@ export function toGlimmer(input, file, names, options) {
       continue;
     }
 
+    if (name === "didUpdateAttrs" && entry.kind === "method") {
+      result.helpers.push({ name, args: allArgs(), observer: true });
+      emitMethod(entry, false, comments);
+      continue;
+    }
+
+    /**
+     * The helper at the end of the template runs again when an argument or the component's state changes.
+     */
+    if (name === "didRender" && entry.kind === "method") {
+      let state = Array.from(names.tracked)
+        .filter((key) => NAME.test(key))
+        .map((key) => `this.${key}`);
+
+      result.helpers.push({ name, args: allArgs().concat(state), afterRender: true });
+      emitMethod(entry, false, comments);
+      continue;
+    }
+
     if (name === "didReceiveAttrs" && entry.kind === "method") {
-      result.helpers.push({
-        name,
-        args: Array.from(names.args)
-          .filter((arg) => NAME.test(arg))
-          .map((arg) => `@${arg}`),
-      });
+      result.helpers.push({ name, args: allArgs() });
       emitMethod(entry, true, comments);
       continue;
     }
@@ -775,6 +791,15 @@ export function toGlimmer(input, file, names, options) {
 
     body.push(
       `\u21e5/**\n\u21e5 * Runs an observer when a value that it observes changes, as the classic observer did. It does not run on the first render.\n\u21e5 */\n\u21e5${OBSERVE}d = new Map();\n\n\u21e5${OBSERVE} = (name, ...values) => {\n\u21e5\u21e5let last = this.${OBSERVE}d.get(name);\n\n\u21e5\u21e5this.${OBSERVE}d.set(name, values);\n\n\u21e5\u21e5if (last && values.some((value, index) => value !== last[index])) this[name]();\n\u21e5};`,
+    );
+  }
+
+  if (result.helpers.some((helper) => helper.afterRender)) {
+    if (has(AFTER_RENDER)) result.unreadable.push(`the class has a ${AFTER_RENDER} member`);
+
+    need("@ember/runloop", "schedule");
+    body.push(
+      `\u21e5/**\n\u21e5 * Runs a hook after the render, as \`didRender\` ran. The values that the template passes make it run again when they change.\n\u21e5 */\n\u21e5${AFTER_RENDER} = (name) => {\n\u21e5\u21e5schedule('afterRender', this, name);\n\u21e5};`,
     );
   }
 
