@@ -79,14 +79,15 @@ export function runUpstream(project, spec, args) {
  * Reads the latest published version of a package from the registry.
  *
  * @param {string} name
+ * @param {string} [range] reads the latest version in this range, such as `4`
  * @returns {Published | undefined} undefined when the registry does not have it
  */
-export function published(name) {
+export function published(name, range) {
   let result = spawnSync(
     "npm",
     [
       "view",
-      name,
+      range ? `${name}@${range}` : name,
       "version",
       "keywords",
       "ember-addon",
@@ -103,7 +104,11 @@ export function published(name) {
 
   if (result.status !== 0 || !result.stdout.trim()) return;
 
-  let info = JSON.parse(result.stdout);
+  let parsed = JSON.parse(result.stdout);
+  /**
+   * With a range, npm lists each version that matches, oldest first.
+   */
+  let info = Array.isArray(parsed) ? parsed[parsed.length - 1] : parsed;
   let addon = Boolean(info.keywords?.includes("ember-addon") || info["ember-addon"]);
 
   let url = typeof info.repository === "string" ? info.repository : info.repository?.url;

@@ -837,7 +837,7 @@ export default Component.extend({
     "<div ...attributes>
     {{this.observe "didUpdateAttrs" @scrollBottom @focus @conversation}}
     <button type="button" {{on "click" this.toggle}}>{{if this.isOpen "Close" "Open"}}</button>
-    {{this.afterRender "didRender" @scrollBottom @focus @conversation this.isOpen}}
+    {{this.afterRender this.didRender @scrollBottom @focus @conversation this.isOpen}}
     </div>
     "
   `);
@@ -854,6 +854,7 @@ export default Component.extend({
         this.args.scrollBottom();
       }
 
+      @action
       didRender() {
         this.args.focus();
       }
@@ -879,8 +880,8 @@ export default Component.extend({
       /**
        * Runs a hook after the render, as \`didRender\` ran. The values that the template passes make it run again when they change.
        */
-      afterRender = (name) => {
-        schedule('afterRender', this, name);
+      afterRender = (run) => {
+        schedule('afterRender', run);
       };
     }
     "
@@ -1052,6 +1053,89 @@ export default Component.extend({
   `);
   expect(result.files.get("app/components/task-assignment.hbs")).toMatchInlineSnapshot(`
     "<UserSelect @onchange={{this.changeUser}} />
+    "
+  `);
+});
+
+/**
+ * From code-corps-ember (MIT), shortened.
+ */
+test("the hooks of a task become calls of perform", () => {
+  let sources = new Map([
+    [
+      "app/components/github-repo.js",
+      `import Component from '@ember/component';
+import { task, timeout } from 'ember-concurrency';
+
+export default Component.extend({
+  poll: task(function* () {
+    yield timeout(2000);
+  }).on('didRender').cancelOn('willDestroyElement').restartable(),
+
+  load: task(function* () {
+    yield timeout(10);
+  }).on('init'),
+
+  scroll: task(function* () {}).on('didInsertElement').drop(),
+});
+`,
+    ],
+    ["app/components/github-repo.hbs", `{{#if this.poll.isRunning}}Syncing{{/if}}\n`],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/github-repo.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { task, timeout } from 'ember-concurrency';
+    import { schedule } from '@ember/runloop';
+    import { modifier } from 'ember-modifier';
+
+    export default class GithubRepo extends Component {
+      constructor(owner, args) {
+        super(owner, args);
+        this.load.perform();
+      }
+
+      element = null;
+
+      lifecycle = modifier((element) => {
+        this.element = element;
+        this.scroll.perform();
+
+        return () => {
+          this.element = null;
+        };
+      });
+
+      @(task(function* () {
+        yield timeout(2000);
+      }).restartable())
+      poll;
+
+      @(task(function* () {
+        yield timeout(10);
+      }))
+      load;
+
+      @(task(function* () {}).drop())
+      scroll;
+
+      /**
+       * Runs a hook after the render, as \`didRender\` ran. The values that the template passes make it run again when they change.
+       */
+      afterRender = (run) => {
+        schedule('afterRender', run);
+      };
+    }
+    "
+  `);
+  expect(result.files.get("app/components/github-repo.hbs")).toMatchInlineSnapshot(`
+    "<div ...attributes {{this.lifecycle}}>
+    {{#if this.poll.isRunning}}Syncing{{/if}}
+    {{this.afterRender this.poll.perform}}
+    </div>
     "
   `);
 });

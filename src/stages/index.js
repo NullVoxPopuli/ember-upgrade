@@ -27,6 +27,7 @@ import classicComponents from "./classic-components/index.js";
 import buildSettings from "./build-settings/index.js";
 import declareImports from "./declare-imports/index.js";
 import emberCli from "./ember-cli/index.js";
+import emberConcurrency from "./ember-concurrency/index.js";
 import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
@@ -101,6 +102,10 @@ export const stages = [
   dynamicComponents,
   classicComponents,
   templateTag,
+  /**
+   * After classic-components and template-tag, when the components are native classes in their final files.
+   */
+  emberConcurrency,
   svgJar,
   templateWhitespace,
   viteLts,
