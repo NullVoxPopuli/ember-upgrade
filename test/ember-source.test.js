@@ -263,9 +263,8 @@ let match = list.findBy('id', item.id);
 let sorted = (versions || []).sortBy('released').reverse();
 `;
 
-  expect(
-    nativeArrayMethods(withoutFirstAndLastObject(source, "a.js"), "a.js"),
-  ).toMatchInlineSnapshot(`
+  expect(nativeArrayMethods(withoutFirstAndLastObject(source, "a.js"), "a.js"))
+    .toMatchInlineSnapshot(`
     "import { compare } from '@ember/utils';
     import asArray from 'app/utils/as-array';
     import { get } from '@ember/object';
