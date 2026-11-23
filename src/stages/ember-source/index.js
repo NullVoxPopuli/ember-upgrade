@@ -11,6 +11,7 @@ import { published } from "#process.js";
 import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
+import { renameTitleHelpers } from "./page-title.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
 
@@ -88,6 +89,8 @@ function step(lts) {
     },
 
     async run(project) {
+      let pageTitle = parse(project.dependency("ember-page-title"));
+
       editPackageJson(project, (pkg) => {
         for (let [name, range] of Object.entries(TABLE[lts])) {
           let current = project.dependency(name);
@@ -110,6 +113,12 @@ function step(lts) {
          */
         if (target[0] >= 7) removeDependency(pkg, "ember-cli-htmlbars");
       });
+
+      let newPageTitle = parse(project.dependency("ember-page-title"));
+
+      if (pageTitle && newPageTitle && pageTitle[0] < 6 && newPageTitle[0] >= 6) {
+        renameTitleHelpers(project);
+      }
 
       if (target[0] >= 7) {
         updateEmberImporters(project);
