@@ -350,6 +350,6 @@ export const apps = [
       "dynamic-components",
       "classic-components",
     ],
-    stopsAt: { stage: "template-tag", message: "`pnpm install` failed" },
+    stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },
 ];
