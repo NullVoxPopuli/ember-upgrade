@@ -225,13 +225,21 @@ export function explicitRelationshipOptions(project) {
     project.write(/** @type {string} */ (byName.get(name)), source);
 
   let from = `${modulePrefix(project)}/utils/as-array`;
+  let relationships = relationshipNames(
+    new Map(Array.from(byName, ([name, file]) => [name, project.read(file)])),
+  );
   let usesArray = false;
 
   for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
     if (file === "app/utils/as-array.js") continue;
 
     let before = project.read(file);
-    let after = nativeArrayMethods(withoutFirstAndLastObject(before, file, from), file, from);
+    let after = unwrapRelationshipValues(
+      nativeArrayMethods(withoutFirstAndLastObject(before, file, from), file, from),
+      file,
+      relationships,
+      from,
+    );
 
     if (after !== before) project.write(file, after);
     if (after.includes(`from '${from}'`)) usesArray = true;
@@ -268,6 +276,13 @@ export default function asArray(value) {
   value.forEach?.((item) => items.push(item));
 
   return items;
+}
+
+/**
+ * Reads the record of an async belongsTo, which ember-data 5 does not take as a value of another relationship.
+ */
+export function asRecord(value) {
+  return value != null && typeof value === "object" && "content" in value ? value.content : value;
 }
 `;
 
@@ -550,4 +565,74 @@ export function nativeArrayMethods(source, file, from = ARRAY_MODULE) {
     lines.push(`import ${ARRAY} from '${from}';`);
 
   return lines.length > 0 ? `${lines.join("\n")}\n${output}` : output;
+}
+
+/**
+ * Wraps the values that the code assigns to relationships, such as `set(review, 'version', get(this, 'addon.latestVersion'))`,
+ * in asRecord(), because ember-data 5 does not take the proxy of an async belongsTo there.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @param {Set<string>} relationships the names of the relationships of the app's models
+ * @param {string} [from]
+ * @returns {string}
+ */
+export function unwrapRelationshipValues(source, file, relationships, from = ARRAY_MODULE) {
+  if (relationships.size === 0) return source;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let edits = new Edits(source);
+  let text = (/** @type {Node} */ node) => source.slice(node.start, node.end);
+  let wrap = (/** @type {Node} */ value) => {
+    if (value.type !== "CallExpression" && value.type !== "MemberExpression") return;
+
+    edits.replace(value, `asRecord(${text(value)})`);
+  };
+
+  walk(program, (node) => {
+    if (node.type === "CallExpression") {
+      let callee = node.callee;
+      let isSet =
+        (callee.type === "Identifier" && callee.name === "set" && node.arguments.length === 3) ||
+        (callee.type === "MemberExpression" &&
+          callee.property?.name === "set" &&
+          node.arguments.length === 2);
+      let key = node.arguments.at(-2);
+
+      if (isSet && key?.type === "Literal" && relationships.has(key.value))
+        wrap(node.arguments.at(-1));
+    }
+
+    if (
+      node.type === "AssignmentExpression" &&
+      node.operator === "=" &&
+      node.left.type === "MemberExpression" &&
+      !node.left.computed &&
+      relationships.has(node.left.property.name)
+    ) {
+      wrap(node.right);
+    }
+  });
+
+  if (edits.size === 0) return source;
+
+  return `import { asRecord } from '${from}';\n${edits.apply()}`;
+}
+
+/**
+ * @param {Map<string, string>} models each model's source, by name
+ * @returns {Set<string>} the names of their relationships
+ */
+export function relationshipNames(models) {
+  /** @type {Set<string>} */
+  let names = new Set();
+
+  for (let [name, source] of models) {
+    for (let relationship of readRelationships(source, `${name}.js`)) names.add(relationship.name);
+  }
+
+  return names;
 }

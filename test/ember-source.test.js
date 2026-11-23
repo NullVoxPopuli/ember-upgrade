@@ -8,6 +8,7 @@ import { classicLts, viteLts } from "#stages/ember-source/index.js";
 import {
   explicitRelationships,
   nativeArrayMethods,
+  unwrapRelationshipValues,
   withoutFirstAndLastObject,
 } from "#stages/ember-source/ember-data.js";
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
@@ -273,6 +274,27 @@ let sorted = (versions || []).sortBy('released').reverse();
     let names = asArray(users).slice().map((item) => get(item, 'name'));
     let match = asArray(list).find((element) => get(element, 'id') === item.id);
     let sorted = asArray(versions || []).slice().sort((a, b) => compare(get(a, 'released'), get(b, 'released'))).reverse();
+    "
+  `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("a value that the code assigns to a relationship reads the record of an async belongsTo", () => {
+  expect(
+    unwrapRelationshipValues(
+      `set(newReview, 'version', get(this, 'addon.latestAddonVersion'));
+set(newReview, 'score', 5);
+`,
+      "app/components/admin-addon.js",
+      new Set(["version"]),
+      "ember-observer/utils/as-array",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import { asRecord } from 'ember-observer/utils/as-array';
+    set(newReview, 'version', asRecord(get(this, 'addon.latestAddonVersion')));
+    set(newReview, 'score', 5);
     "
   `);
 });
