@@ -276,12 +276,22 @@ export function plan(project) {
 
   /**
    * ember-cli-mirage made a mirage model for each ember-data model, unless the app turned it off.
+   * An app can turn it off in one environment only, as ember-observer did outside of tests,
+   * so a model whose collection the mirage code names, such as `sizeCalculationResults`, gets one either way.
    */
-  if (!/discoverEmberDataModels\s*:\s*false/.test(environment)) {
+  let discovery = !/discoverEmberDataModels\s*:\s*false/.test(environment);
+  let mirageCode = project
+    .files(["mirage/**/*.{js,ts}"])
+    .map((file) => project.read(file))
+    .join("\n");
+
+  {
     let models = emberDataModels(project, prefix, result.todo);
 
     for (let [name, model] of models) {
       if (["js", "ts"].some((e) => project.has(`mirage/models/${name}.${e}`))) continue;
+      if (!discovery && !new RegExp(`\\b${camelize(pluralize(name))}\\b`).test(mirageCode))
+        continue;
 
       result.writes.set(
         `mirage/models/${name}.${model.ext}`,
