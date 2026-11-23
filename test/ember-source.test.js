@@ -269,7 +269,7 @@ let sorted = (versions || []).sortBy('released').reverse();
     import asArray from 'app/utils/as-array';
     import { get } from '@ember/object';
     let addon = asArray(addons)[0];
-    let earliest = get(asArray(get(this, 'sortedVersionCompatibilities')).slice(-1)[0], 'emberVersion');
+    let earliest = asArray(get(this, 'sortedVersionCompatibilities')).slice(-1)[0]?.emberVersion;
     let names = asArray(users).slice().map((item) => get(item, 'name'));
     let match = asArray(list).find((element) => get(element, 'id') === item.id);
     let sorted = asArray(versions || []).slice().sort((a, b) => compare(get(a, 'released'), get(b, 'released'))).reverse();

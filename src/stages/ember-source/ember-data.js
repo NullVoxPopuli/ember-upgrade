@@ -315,6 +315,7 @@ export function withoutFirstAndLastObject(source, file, from = ARRAY_MODULE) {
 
     let output = object;
     let pending = [];
+    let afterArray = false;
 
     for (let part of parts) {
       let index = ENDS.get(part);
@@ -325,18 +326,26 @@ export function withoutFirstAndLastObject(source, file, from = ARRAY_MODULE) {
       }
 
       if (pending.length > 0) {
-        output = `${getLocal ?? "get"}(${output}, '${pending.join(".")}')`;
-        needsGet = true;
+        output = afterArray
+          ? `${output}${pending.map((part) => `?.${part}`).join("")}`
+          : `${getLocal ?? "get"}(${output}, '${pending.join(".")}')`;
+        needsGet ||= !afterArray;
         pending = [];
       }
 
       output = `${ARRAY}(${output})${index}`;
+      afterArray = true;
       wrapped = true;
     }
 
+    /**
+     * The list can be empty, and get() asserts on undefined, so the rest of the path reads optionally.
+     */
     if (pending.length > 0) {
-      output = `${getLocal ?? "get"}(${output}, '${pending.join(".")}')`;
-      needsGet = true;
+      output = pending.every((part) => /^[A-Za-z_$][\w$]*$/.test(part))
+        ? `${output}${pending.map((part) => `?.${part}`).join("")}`
+        : `${getLocal ?? "get"}(${output} ?? {}, '${pending.join(".")}')`;
+      needsGet ||= !output.includes("?.");
     }
 
     return output;
