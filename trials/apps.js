@@ -358,6 +358,7 @@ export const apps = [
       "ember-cli-shims",
       "ember-functions-as-helper-polyfill",
       "ember-cli-code-coverage",
+      "ember-classic-decorator",
       "ember-cli-deprecation-workflow",
       "update-@ember/render-modifiers",
       "update-@html-next/vertical-collection",
