@@ -4,10 +4,10 @@ import { importMap, updateImports } from "#codemods/imports.js";
 import { NestedEdits } from "#codemods/nested-edits.js";
 
 import { COMPONENT_API } from "./args.js";
-import { macroGetter, readPath } from "./macros.js";
+import { macroGetter } from "./macros.js";
 import { EVENTS } from "./outer-html.js";
 import { readClassicComponent } from "./read.js";
-import { ACTION_HANDLER, ACTION_VALUE } from "./template.js";
+import { ACTION_HANDLER, ACTION_VALUE, OBSERVE } from "./template.js";
 
 /** @typedef {import('#ast.js').Node} Node */
 /** @typedef {import('./read.js').ClassicComponent} ClassicComponent */
@@ -63,7 +63,7 @@ const MACRO_MODULES = new Set(["@ember/object/computed", "ember-computed"]);
  * @property {string} source the new module
  * @property {string[]} unreadable the reasons that the conversion stopped; the source is the old one then
  * @property {string | undefined} modifier the field that the template puts on its element, such as `lifecycle`
- * @property {{ name: string, args: string[] }[]} helpers methods that the template calls at its start, with the paths that they track
+ * @property {{ name: string, args: string[], observer?: boolean }[]} helpers methods that the template calls at its start, with the paths that they track. An observer runs through {@link OBSERVE} when a path changes.
  * @property {boolean} elementId the template's element needs `id={{this.elementId}}`
  */
 
@@ -437,6 +437,14 @@ export function toGlimmer(input, file, names, options) {
 
   let members = component.members;
   let has = (/** @type {string} */ name) => members.some((entry) => entry.name === name);
+  /**
+   * @param {string} key a dependent key, such as `model.name`
+   * @returns {string} the path in the template, such as `@model.name`
+   */
+  let templatePath = (key) =>
+    names.args.has(key.split(".")[0] ?? key) && !has(key.split(".")[0] ?? key)
+      ? `@${key}`
+      : `this.${key}`;
   let usesElement = false;
   let usesElementId = false;
 
@@ -625,7 +633,7 @@ export function toGlimmer(input, file, names, options) {
         if (entry.observes) {
           result.helpers.push({
             name,
-            args: entry.observes.map((key) => readPath(key.replace(/\.(\[\]|@each.*)$/, ""))),
+            args: entry.observes.map((key) => templatePath(key.replace(/\.(\[\]|@each.*)$/, ""))),
           });
         } else if (entry.keys.length === 1 && entry.keys[0] === "init") {
           constructorCalls.push(`this${member(name)}();`);
@@ -641,7 +649,18 @@ export function toGlimmer(input, file, names, options) {
       }
 
       case "observer": {
-        result.unreadable.push(`the observer ${name}`);
+        /**
+         * The template sees a new array, not a change inside one.
+         */
+        let inside = entry.keys.filter((key) => /(^|\.)(\[\]|@each)(\.|$)/.test(key));
+
+        if (inside.length > 0 || entry.keys.length === 0) {
+          result.unreadable.push(`the observer ${name} of ${inside.join(", ") || "no key"}`);
+          break;
+        }
+
+        result.helpers.push({ name, args: entry.keys.map(templatePath), observer: true });
+        emitMethod(entry, false, comments);
         break;
       }
 
@@ -746,6 +765,16 @@ export function toGlimmer(input, file, names, options) {
 
     body.push(
       `\u21e5/**\n\u21e5 * Runs an action as the \`{{action}}\` modifier did, without the event.\n\u21e5 */\n\u21e5${ACTION_HANDLER} =\n\u21e5\u21e5(run, options = {}) =>\n\u21e5\u21e5(event) => {\n\u21e5\u21e5\u21e5if (options.preventDefault !== false) event.preventDefault();\n\u21e5\u21e5\u21e5if (options.bubbles === false) event.stopPropagation();\n\n\u21e5\u21e5\u21e5return run();\n\u21e5\u21e5};`,
+    );
+  }
+
+  if (result.helpers.some((helper) => helper.observer)) {
+    if (has(OBSERVE) || has(`${OBSERVE}d`)) {
+      result.unreadable.push(`the class has a ${OBSERVE} or ${OBSERVE}d member`);
+    }
+
+    body.push(
+      `\u21e5/**\n\u21e5 * Runs an observer when a value that it observes changes, as the classic observer did. It does not run on the first render.\n\u21e5 */\n\u21e5${OBSERVE}d = new Map();\n\n\u21e5${OBSERVE} = (name, ...values) => {\n\u21e5\u21e5let last = this.${OBSERVE}d.get(name);\n\n\u21e5\u21e5this.${OBSERVE}d.set(name, values);\n\n\u21e5\u21e5if (last && values.some((value, index) => value !== last[index])) this[name]();\n\u21e5};`,
     );
   }
 
