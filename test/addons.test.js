@@ -6,6 +6,7 @@ import { addVitePlugin, removeBuildOptions } from "#config-files.js";
 import { Project } from "#project.js";
 import { parseProgress, printProgress, readProgress } from "#progress.js";
 import emberMetrics from "#stages/addons/ember-metrics.js";
+import { rewriteClickOutside } from "#stages/addons/click-outside.js";
 import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
@@ -540,4 +541,36 @@ test("without ember-normalize, the app imports normalize.css", async () => {
   expect(app.read("app/app.js")).toBe(
     "import \"normalize.css\";\nimport Application from '@ember/application';\n",
   );
+});
+
+/**
+ * From code-corps/code-corps-ember (MIT), shortened.
+ */
+test("the click-outside component becomes the on-click-outside modifier on a div", () => {
+  expect(
+    rewriteClickOutside(`{{#click-outside action=(fn (mut this.showDropdown) false)}}
+  <button>Status</button>
+{{/click-outside}}
+<ClickOutside @onClickOutside={{this.hide}} @exceptSelector=".trigger" class="menu">
+  {{yield}}
+</ClickOutside>
+`),
+  ).toMatchInlineSnapshot(`
+    {
+      "template": "<div {{on-click-outside (fn (mut this.showDropdown) false)}}>
+      <button>Status</button>
+    </div>
+    <div class="menu" {{on-click-outside this.hide exceptSelector=".trigger"}}>
+      {{yield}}
+    </div>
+    ",
+      "unreadable": [],
+    }
+  `);
+});
+
+test("a click-outside with an action name stays", () => {
+  expect(
+    rewriteClickOutside(`{{#click-outside action="hide"}}x{{/click-outside}}`).unreadable,
+  ).toEqual(["click-outside with action=", "click-outside without a callback"]);
 });

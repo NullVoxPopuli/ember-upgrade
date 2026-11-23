@@ -6,6 +6,7 @@ import { editPackageJson, removeDependency, setDependency } from "#package-json.
 import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
+import { rewriteClickOutside } from "./click-outside.js";
 import { inlineV1Stage } from "./inline-v1.js";
 import { isObsoleteAddon } from "./removals.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
@@ -346,6 +347,23 @@ export function updateStage(name, release) {
         }
       });
 
+      /** @type {Finding[]} */
+      let todo = [];
+      let codemod = TEMPLATE_CODEMODS.get(name);
+
+      for (let file of codemod ? project.files(["{app,addon,tests}/**/*.hbs"]) : []) {
+        let result = /** @type {TemplateCodemod} */ (codemod)(project.read(file));
+
+        if (result.unreadable.length > 0) {
+          todo.push({
+            title: `Usage of ${name} that the update cannot change: ${result.unreadable.join("; ")}`,
+            where: [file],
+          });
+        } else if (result.template !== project.read(file)) {
+          project.write(file, result.template);
+        }
+      }
+
       if (unpinned.length > 0) {
         recordProgress(project, {
           id: `${name}: overrides`,
@@ -356,14 +374,14 @@ export function updateStage(name, release) {
         });
       }
 
-      return [
+      return todo.concat([
         {
           title: `Read the breaking changes of ${name} ${release.version}`,
           where: release.repository ? [release.repository] : [],
           action:
             "The update changes the version only. Change the code that uses the addon, if the release notes say so.",
         },
-      ];
+      ]);
     },
   };
 }
@@ -408,6 +426,17 @@ function v1Record(addons) {
     },
   };
 }
+
+/**
+ * @typedef {(template: string) => { template: string, unreadable: string[] }} TemplateCodemod
+ */
+
+/**
+ * Template changes for the breaking changes of an addon's update.
+ *
+ * @type {Map<string, TemplateCodemod>}
+ */
+const TEMPLATE_CODEMODS = new Map([["ember-click-outside", rewriteClickOutside]]);
 
 /**
  * The highest major version that the update of an addon goes to, when a later stage does the next major.
