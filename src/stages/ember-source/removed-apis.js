@@ -194,14 +194,29 @@ export function queryParamsList(source, file) {
 
   let edits = new Edits(source);
 
-  walk(program, (node) => {
+  let rewrite = (/** @type {import('#ast.js').Node} */ node) => {
     let key = node.key?.name ?? node.key?.value;
 
-    if ((node.type !== "PropertyDefinition" && node.type !== "Property") || key !== "queryParams")
-      return;
-    if (node.value?.type !== "ObjectExpression") return;
+    if (key !== "queryParams" || node.value?.type !== "ObjectExpression") return;
 
     edits.replace(node.value, `[${source.slice(node.value.start, node.value.end)}]`);
+  };
+
+  /**
+   * Only the controller's own `queryParams` is a list. The option of `transitionTo({ queryParams: {} })` stays an object.
+   */
+  walk(program, (node) => {
+    if (node.type === "PropertyDefinition") rewrite(node);
+
+    if (
+      node.type === "CallExpression" &&
+      node.callee?.type === "MemberExpression" &&
+      node.callee.property?.name === "extend"
+    ) {
+      for (let arg of node.arguments) {
+        if (arg.type === "ObjectExpression") arg.properties.forEach(rewrite);
+      }
+    }
   });
 
   return edits.size > 0 ? edits.apply() : source;

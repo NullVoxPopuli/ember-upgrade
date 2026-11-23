@@ -387,12 +387,23 @@ export class ShowController extends Controller {
 test("an object of query params becomes the one entry of the list", () => {
   expect(
     queryParamsList(
-      `export default class ShowController extends Controller {\n  queryParams = { addonSortKey: 'sort' };\n}\n`,
+      `export default class ShowController extends Controller {
+  queryParams = { addonSortKey: 'sort' };
+
+  selectList(list) {
+    this.router.transitionTo('admin.review', { queryParams: { list: list.key } });
+  }
+}
+`,
       "app/controllers/categories/show.js",
     ),
   ).toMatchInlineSnapshot(`
     "export default class ShowController extends Controller {
       queryParams = [{ addonSortKey: 'sort' }];
+
+      selectList(list) {
+        this.router.transitionTo('admin.review', { queryParams: { list: list.key } });
+      }
     }
     "
   `);
