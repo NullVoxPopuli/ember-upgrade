@@ -171,7 +171,7 @@ export const apps = [
       "app-tree",
       "declare-imports",
       "ember-nvp",
-      "undeprecate-inject",
+      "lint",
     ],
     /**
      * The trial does not install after each stage, so the lockfile is behind the last stages' package.json.
@@ -183,6 +183,7 @@ export const apps = [
     after: [
       ["git", "apply", join(import.meta.dirname, "ember-observer-header-search.patch")],
       ["pnpm", "install", "--no-frozen-lockfile"],
+      ["pnpm", "lint"],
       ["pnpm", "test"],
     ],
   },
@@ -203,6 +204,7 @@ export const apps = [
       "declare-imports",
       "ember-nvp",
       "undeprecate-inject",
+      "lint",
     ],
     /**
      * The upgraded app must pass its own tests, not only build.
@@ -243,6 +245,7 @@ export const apps = [
       "declare-imports",
       "ember-nvp",
       "undeprecate-inject",
+      "lint",
     ],
     /**
      * The upgraded app must pass its own tests, not only build.

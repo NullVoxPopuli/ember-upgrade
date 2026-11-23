@@ -1,5 +1,11 @@
 import { buildFile } from "#config-files.js";
-import { packageManager, runUpstream } from "#process.js";
+import { install, packageManager, runUpstream } from "#process.js";
+import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
+
+/**
+ * The flat config that the eslint-bundled layer writes.
+ */
+const FLAT_CONFIG = "eslint.config.js";
 
 /** @type {import('#types.js').Stage} */
 export default {
@@ -53,9 +59,26 @@ export default {
 
     if (pm === "npm" || pm === "pnpm") args.push("--packageManager", pm);
 
-    if (!runUpstream(project, "ember.nvp@2.9.2", args)) {
+    /**
+     * The ember-source stages update ESLint to a version that does not read a legacy config.
+     * ember.nvp replaces it with a flat config, and removes it, so the stage reads it first.
+     */
+    let eslintrc = readEslintrc(project);
+
+    if (!runUpstream(project, "ember.nvp@2.11.0", args)) {
       throw new Error("ember.nvp failed. Its output is above.");
     }
+
+    if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];
+
+    if (!install(project)) throw new Error("The install after ember.nvp failed.");
+
+    let source = withFlatSettings(
+      project.read(FLAT_CONFIG),
+      flatSettings(eslintrc, await flatRulesOf(project, FLAT_CONFIG)),
+    );
+
+    if (source) project.write(FLAT_CONFIG, source);
 
     return [];
   },
