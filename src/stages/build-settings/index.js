@@ -456,7 +456,17 @@ export default {
       });
     }
 
-    removeBuildOptions(project, ["babel", "autoImport"]);
+    /**
+     * Vite minifies, fingerprints, and writes source maps with its own settings.
+     */
+    removeBuildOptions(project, [
+      "babel",
+      "autoImport",
+      "fingerprint",
+      "minifyJS",
+      "minifyCSS",
+      "sourcemaps",
+    ]);
 
     return todo;
   },

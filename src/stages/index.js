@@ -33,6 +33,9 @@ import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
+import jqueryIntegration from "./jquery-integration/index.js";
+import inlineContent from "./addons/inline-content.js";
+import documentTitle from "./document-title/index.js";
 import dynamicComponents from "./dynamic-components/index.js";
 import { classicLts, viteLts } from "./ember-source/index.js";
 import packageManager from "./package-manager/index.js";
@@ -96,9 +99,14 @@ export const stages = [
   emberAutoFocus,
   emberErrorRoute,
   emberCliHead,
+  inlineContent,
   emberApiActions,
   macroDecorators,
   pods,
+  /**
+   * After pods, so that each route's template is at app/templates.
+   */
+  documentTitle,
   noImplicitThis,
   templateColocation,
   dynamicComponents,
@@ -108,6 +116,10 @@ export const stages = [
    * After classic-components and template-tag, when the components are native classes in their final files.
    */
   emberConcurrency,
+  /**
+   * After classic-components, which moves the components' jQuery calls to the DOM.
+   */
+  jqueryIntegration,
   svgJar,
   templateWhitespace,
   viteLts,

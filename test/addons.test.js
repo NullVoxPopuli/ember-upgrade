@@ -7,6 +7,7 @@ import { Project } from "#project.js";
 import { parseProgress, printProgress, readProgress } from "#progress.js";
 import emberMetrics from "#stages/addons/ember-metrics.js";
 import { rewriteClickOutside } from "#stages/addons/click-outside.js";
+import inlineContent from "#stages/addons/inline-content.js";
 import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
@@ -573,4 +574,125 @@ test("a click-outside with an action name stays", () => {
   expect(
     rewriteClickOutside(`{{#click-outside action="hide"}}x{{/click-outside}}`).unreadable,
   ).toEqual(["click-outside with action=", "click-outside without a callback"]);
+});
+
+/**
+ * From emberobserver/client (MIT), after the vite stage, shortened.
+ */
+test("the classic decorator and the percy snapshots go with their addons", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-classic-decorator": "^1.0.8", "ember-percy": "^1.6.0" },
+    }),
+    "app/routes/admin.js": `import classic from 'ember-classic-decorator';
+import Route from '@ember/routing/route';
+
+@classic
+export default class AdminRoute extends Route {}
+`,
+    "tests/acceptance/index-test.js": `import { visit } from '@ember/test-helpers';
+import { percySnapshot } from 'ember-percy';
+
+test('index', async function () {
+  await visit('/');
+  await percySnapshot('/index');
+});
+`,
+  });
+
+  for (let stage of await obsoleteAddons.expand(app)) {
+    if (stage.detect(app)) await stage.run(app);
+  }
+
+  expect(app.read("app/routes/admin.js")).toMatchInlineSnapshot(`
+    "import Route from '@ember/routing/route';
+
+    export default class AdminRoute extends Route {}
+    "
+  `);
+  expect(app.read("tests/acceptance/index-test.js")).toMatchInlineSnapshot(`
+    "import { visit } from '@ember/test-helpers';
+
+    test('index', async function () {
+      await visit('/');
+    });
+    "
+  `);
+});
+
+/**
+ * From emberobserver/client (MIT), after the vite stage, shortened.
+ */
+test("the snippets of ember-cli-inline-content go into index.html", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-cli-inline-content": "^0.4.1" } }),
+    "ember-cli-build.js": `'use strict';
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const parseFlag = require('./config/parse-flag');
+const env = EmberApp.env();
+const broccoliAssetRevDefaults = require('broccoli-asset-rev/lib/default-options');
+
+module.exports = async function (defaults) {
+  let options = {
+    inlineContent: {},
+    fingerprint: {
+      extensions: broccoliAssetRevDefaults.extensions.concat(['svg']),
+    },
+  };
+
+  if (parseFlag('FAVICON', true)) {
+    options.inlineContent['snippets/favicon'] = 'app/snippets/favicon.html';
+  }
+
+  if (parseFlag('REPORT_ERRORS', env === 'production')) {
+    options.inlineContent['snippets/trackjs'] = 'app/snippets/trackjs.html';
+  }
+
+  options.inlineContent['snippets/perf-utils'] = 'app/snippets/perf-utils.js';
+
+  options.fingerprint.enabled = parseFlag('FINGERPRINT', env === 'production');
+
+  let app = new EmberApp(defaults, options);
+
+  return app.toTree();
+};
+`,
+    "app/snippets/favicon.html": '<link rel="icon" href="/favicon.png">\n',
+    "app/snippets/trackjs.html": '<script src="https://cdn.trackjs.com/agent.js"></script>\n',
+    "app/snippets/perf-utils.js": "window.performance = window.performance || {};\n",
+    "index.html": `<head>
+    {{content-for "snippets/perf-utils"}}
+    {{content-for "snippets/favicon"}}
+    {{content-for "snippets/trackjs"}}
+</head>
+`,
+  });
+
+  await inlineContent.run(app);
+  removeBuildOptions(app, ["fingerprint"]);
+
+  expect(app.read("index.html")).toMatchInlineSnapshot(`
+    "<head>
+        <script>
+        window.performance = window.performance || {};
+        </script>
+        <link rel="icon" href="/favicon.png">
+    </head>
+    "
+  `);
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+    const env = EmberApp.env();
+
+    module.exports = async function (defaults) {
+      let options = {};
+
+      let app = new EmberApp(defaults, options);
+
+      return app.toTree();
+    };
+    "
+  `);
+  expect(readProgress(app).map((entry) => entry.id)).toEqual(["ember-cli-inline-content"]);
 });

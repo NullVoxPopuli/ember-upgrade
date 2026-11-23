@@ -100,9 +100,7 @@ module.exports = async function (defaults) {
   let env = EmberApp.env();
   let isProd = env === 'production';
 
-  let app = new EmberApp(defaults, {
-    sourcemaps: { enabled: true },
-  });
+  let app = new EmberApp(defaults, {});
 
   return compatBuild(app, buildOnce, {
     staticModifiers: true,
