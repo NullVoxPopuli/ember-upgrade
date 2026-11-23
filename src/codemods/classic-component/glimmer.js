@@ -221,14 +221,25 @@ function bodyOf(source, fn, name, unreadable) {
 
   let edits = new Edits(source);
 
+  /**
+   * `return this._super(...arguments)` at the end of a hook returns nothing that Ember reads.
+   */
+  let last = body.body[body.body.length - 1];
+  let superReturn =
+    last?.type === "ReturnStatement" && isSuperCall(last.argument) ? last : undefined;
+
   for (let statement of body.body) {
-    if (statement.type === "ExpressionStatement" && isSuperCall(statement.expression)) {
+    if (
+      (statement.type === "ExpressionStatement" && isSuperCall(statement.expression)) ||
+      statement === superReturn
+    ) {
       edits.removeLine(statement);
     }
   }
 
   walk(body, (node) => {
     if (node.type === "ExpressionStatement" && isSuperCall(node.expression)) return SKIP;
+    if (node === superReturn) return SKIP;
 
     if (thisKey(node) === "_super") unreadable.push(`${name} calls _super in an expression`);
   });

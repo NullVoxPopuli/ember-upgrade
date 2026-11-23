@@ -86,3 +86,39 @@ test("the element itself from jQuery", () => {
     "
   `);
 });
+
+/**
+ * From code-corps-ember (MIT), shortened.
+ */
+test("the elements next to the element, its computed style, and triggered events", () => {
+  let source = `export default {
+  didRender() {
+    let parentBottom = this.$().parent()[0].getBoundingClientRect().bottom;
+    let next = this.$().next();
+    let height = this.$().css('height');
+    let color = this.$().css('background-color');
+    this.$('.trigger').trigger('blur');
+    this.$().trigger('mouseleave');
+    this.$().trigger('change');
+  },
+};
+`;
+
+  expect(rewriteJQuery(source, "a.js", new Set())).toMatchInlineSnapshot(`
+    {
+      "source": "export default {
+      didRender() {
+        let parentBottom = this.element.parentElement.getBoundingClientRect().bottom;
+        let next = this.element.nextElementSibling;
+        let height = getComputedStyle(this.element).height;
+        let color = getComputedStyle(this.element)['background-color'];
+        this.element.querySelector('.trigger').blur();
+        this.element.dispatchEvent(new Event('mouseleave'));
+        this.element.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+    };
+    ",
+      "unreadable": [],
+    }
+  `);
+});
