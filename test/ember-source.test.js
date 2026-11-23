@@ -350,3 +350,25 @@ test("the attributes that Input took as arguments become attributes", () => {
     `<Input @type="search" id="code-search-input" spellcheck="false" @value={{this.query}} />\n`,
   );
 });
+
+test("the ember-data rewrites change nothing on a second step", () => {
+  let source = `set(review, 'version', get(this, 'addon.latestAddonVersion'));
+let released = get(this.args, 'testResult.emberVersionCompatibilities').filter((v) => v.released);
+let first = addons.get('firstObject');
+let names = list.mapBy('name');
+`;
+  let names = new Set(["version", "emberVersionCompatibilities"]);
+  let once = (/** @type {string} */ text) =>
+    readHasManyAsArray(
+      unwrapRelationshipValues(
+        nativeArrayMethods(withoutFirstAndLastObject(text, "a.js"), "a.js"),
+        "a.js",
+        names,
+      ),
+      "a.js",
+      names,
+    );
+  let first = once(source);
+
+  expect(once(first)).toBe(first);
+});

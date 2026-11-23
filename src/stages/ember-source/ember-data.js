@@ -595,6 +595,7 @@ export function unwrapRelationshipValues(source, file, relationships, from = ARR
   let text = (/** @type {Node} */ node) => source.slice(node.start, node.end);
   let wrap = (/** @type {Node} */ value) => {
     if (value.type !== "CallExpression" && value.type !== "MemberExpression") return;
+    if (value.type === "CallExpression" && value.callee?.name === "asRecord") return;
 
     edits.replace(value, `asRecord(${text(value)})`);
   };
@@ -626,7 +627,11 @@ export function unwrapRelationshipValues(source, file, relationships, from = ARR
 
   if (edits.size === 0) return source;
 
-  return `import { asRecord } from '${from}';\n${edits.apply()}`;
+  let output = edits.apply();
+
+  return /\bimport\s*\{\s*asRecord\s*\}/.test(output)
+    ? output
+    : `import { asRecord } from '${from}';\n${output}`;
 }
 
 /**
