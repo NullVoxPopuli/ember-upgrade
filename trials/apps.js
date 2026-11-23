@@ -169,8 +169,9 @@ export const apps = [
       "build-settings",
       "app-tree",
       "declare-imports",
+      "ember-nvp",
+      "undeprecate-inject",
     ],
-    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "super-rentals",
