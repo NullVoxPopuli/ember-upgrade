@@ -3,12 +3,6 @@ import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
 
 /**
- * The layers that ember.nvp selects when `--layers` is not given.
- * `--layers` replaces them, so the stage lists them with the layers that it adds.
- */
-const DEFAULT_LAYERS = ["agents-md", "inspector-support", "qunit", "readme"];
-
-/**
  * The flat config that the eslint-bundled layer writes.
  */
 const FLAT_CONFIG = "eslint.config.js";
@@ -67,18 +61,15 @@ export default {
 
     /**
      * The ember-source stages update ESLint to a version that does not read a legacy config.
-     * ember.nvp removes the legacy config for the eslint-bundled layer, so the stage reads it first.
+     * ember.nvp replaces it with a flat config, and removes it, so the stage reads it first.
      */
     let eslintrc = readEslintrc(project);
-    let layers = eslintrc ? DEFAULT_LAYERS.concat("eslint-bundled") : DEFAULT_LAYERS;
 
-    for (let layer of layers) args.push("--layers", layer);
-
-    if (!runUpstream(project, "ember.nvp@2.9.2", args)) {
+    if (!runUpstream(project, "ember.nvp@2.11.0", args)) {
       throw new Error("ember.nvp failed. Its output is above.");
     }
 
-    if (!eslintrc || !project.has(FLAT_CONFIG)) return [];
+    if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];
 
     if (!install(project)) throw new Error("The install after ember.nvp failed.");
 
