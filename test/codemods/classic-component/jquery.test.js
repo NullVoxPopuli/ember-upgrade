@@ -122,3 +122,38 @@ test("the elements next to the element, its computed style, and triggered events
     }
   `);
 });
+
+test("a variable that holds an element next to the element, and triggers an event", () => {
+  let source = `export default {
+  archive() {
+    let next = this.$().next();
+    if (next) next.trigger('mouseenter');
+  },
+
+  other() {
+    let previous = this.$().prev();
+    previous.addClass('active');
+  },
+};
+`;
+
+  expect(rewriteJQuery(source, "a.js", new Set())).toMatchInlineSnapshot(`
+    {
+      "source": "export default {
+      archive() {
+        let next = this.element.nextElementSibling;
+        if (next) next.dispatchEvent(new Event('mouseenter'));
+      },
+
+      other() {
+        let previous = this.$().prev();
+        previous.addClass('active');
+      },
+    };
+    ",
+      "unreadable": [
+        "jQuery: this.$().prev()",
+      ],
+    }
+  `);
+});

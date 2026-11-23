@@ -27,6 +27,11 @@ const INDENT = "\u21e5";
 const ELEMENT_HOOKS = new Set(["didInsertElement", "willDestroyElement", "willClearRender"]);
 
 /**
+ * A listener name of `ember-keyboard`, such as `keydown:Escape`, that the `on-key` helper takes as an event and a key combo.
+ */
+const KEY_LISTENER = /^(keydown|keyup|keypress):(.+)$/;
+
+/**
  * Hooks that have no Glimmer replacement yet, so the conversion stops.
  */
 const UNSUPPORTED_HOOKS = new Set([
@@ -61,7 +66,7 @@ const MACRO_MODULES = new Set(["@ember/object/computed", "ember-computed"]);
  * @property {string} source the new module
  * @property {string[]} unreadable the reasons that the conversion stopped; the source is the old one then
  * @property {string | undefined} modifier the field that the template puts on its element, such as `lifecycle`
- * @property {{ name: string, args: string[], observer?: boolean, afterRender?: boolean }[]} helpers methods that the template calls at its start, with the paths that they track. An observer runs through {@link OBSERVE} when a path changes, and `didRender` runs through {@link AFTER_RENDER} at the end of the template.
+ * @property {{ name: string, args: string[], observer?: boolean, afterRender?: boolean, keyboard?: { event: string, combo: string } }[]} helpers methods that the template calls at its start, with the paths that they track. A keyboard listener runs through the `on-key` helper of `ember-keyboard`. An observer runs through {@link OBSERVE} when a path changes, and `didRender` runs through {@link AFTER_RENDER} at the end of the template.
  * @property {boolean} elementId the template's element needs `id={{this.elementId}}`
  */
 
@@ -281,6 +286,38 @@ function methodHeader(source, node, fn, key) {
 }
 
 /**
+ * @param {Node | undefined} fn
+ * @param {string} key
+ * @returns {boolean} whether the function only calls `this[key]` with its own parameters
+ */
+function forwards(fn, key) {
+  if (fn?.type !== "FunctionExpression" || fn.body.body.length !== 1) return false;
+
+  let statement = fn.body.body[0];
+  let call = statement.type === "ReturnStatement" ? statement.argument : statement.expression;
+  let callee = call?.type === "CallExpression" ? call.callee : undefined;
+
+  if (
+    callee?.type !== "MemberExpression" ||
+    callee.computed ||
+    callee.object.type !== "ThisExpression" ||
+    callee.property.name !== key
+  ) {
+    return false;
+  }
+
+  let params = fn.params.map((/** @type {Node} */ param) => param.name);
+
+  return (
+    call.arguments.length === params.length &&
+    call.arguments.every(
+      (/** @type {Node} */ arg, /** @type {number} */ index) =>
+        arg.type === "Identifier" && arg.name === params[index],
+    )
+  );
+}
+
+/**
  * @param {string} source
  * @param {Member} entry
  * @returns {{ fn: Node, key: string } | undefined} the function of a method member, and its key as written
@@ -480,8 +517,24 @@ export function toGlimmer(input, file, names, options) {
   let init = "";
   let actionNames = new Set(options.templateReads);
 
+  /**
+   * The actions that only call the method of the same name, which becomes the action.
+   */
+  /** @type {Set<string>} */
+  let forwarded = new Set();
+
   for (let entry of members) {
     if (entry.kind === "method" && EVENTS.has(entry.name)) actionNames.add(entry.name);
+    if (entry.kind !== "actions") continue;
+
+    for (let property of entry.node.value.properties ?? []) {
+      let key = property.key?.name ?? property.key?.value;
+
+      if (typeof key === "string" && has(key) && forwards(property.value, key)) {
+        forwarded.add(key);
+        actionNames.add(key);
+      }
+    }
   }
 
   let emitMethod = (
@@ -599,6 +652,7 @@ export function toGlimmer(input, file, names, options) {
             continue;
           }
 
+          if (forwarded.has(key)) continue;
           if (has(key)) result.unreadable.push(`the action ${key} has the name of a member`);
 
           emitMethod(
@@ -666,6 +720,15 @@ export function toGlimmer(input, file, names, options) {
           constructorCalls.push(`this${member(name)}();`);
         } else if (entry.keys.length === 1 && ELEMENT_HOOKS.has(String(entry.keys[0]))) {
           elementHooks.push(entry);
+        } else if (has("keyboardActivated") && entry.keys.every((key) => KEY_LISTENER.test(key))) {
+          for (let key of entry.keys) {
+            let [, event, combo] = /** @type {RegExpExecArray} */ (KEY_LISTENER.exec(key));
+
+            result.helpers.push({ name, args: [], keyboard: { event, combo } });
+          }
+
+          emitMethod(entry, true, comments);
+          break;
         } else {
           result.unreadable.push(`on(${entry.keys.join(", ")})`);
           break;
@@ -793,6 +856,12 @@ export function toGlimmer(input, file, names, options) {
     body.push(
       `\u21e5/**\n\u21e5 * Runs an action as the \`{{action}}\` modifier did, without the event.\n\u21e5 */\n\u21e5${ACTION_HANDLER} =\n\u21e5\u21e5(run, options = {}) =>\n\u21e5\u21e5(event) => {\n\u21e5\u21e5\u21e5if (options.preventDefault !== false) event.preventDefault();\n\u21e5\u21e5\u21e5if (options.bubbles === false) event.stopPropagation();\n\n\u21e5\u21e5\u21e5return run();\n\u21e5\u21e5};`,
     );
+  }
+
+  if (result.helpers.some((helper) => helper.keyboard)) {
+    for (let key of ["keyboardFirstResponder", "keyboardLaxPriority"]) {
+      if (has(key)) result.unreadable.push(`the ${key} property of ember-keyboard`);
+    }
   }
 
   if (result.helpers.some((helper) => helper.observer)) {
