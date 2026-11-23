@@ -1,7 +1,8 @@
 import { parseProgram, walk } from "#ast.js";
 import { removeBuildOptions } from "#config-files.js";
 import { Edits } from "#edits.js";
-import { editPackageJson, removeDependency } from "#package-json.js";
+import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
 
 /** @typedef {import('#ast.js').Node} Node */
@@ -58,6 +59,8 @@ export default {
   async run(project) {
     let todo = leftovers(project);
 
+    let waits = false;
+
     for (let file of project.files(SOURCES)) {
       let source = project.read(file);
 
@@ -66,16 +69,31 @@ export default {
       let output = transform(source, file);
 
       if (output !== source) project.write(file, output);
+      if (output.includes("waitForFetch")) waits = true;
     }
 
-    editPackageJson(project, (pkg) => removeDependency(pkg, "ember-fetch"));
+    editPackageJson(project, (pkg) => {
+      removeDependency(pkg, "ember-fetch");
+
+      if (
+        waits &&
+        !pkg.dependencies?.["@ember/test-waiters"] &&
+        !pkg.devDependencies?.["@ember/test-waiters"]
+      ) {
+        setDependency(
+          pkg,
+          "@ember/test-waiters",
+          `^${published("@ember/test-waiters")?.version ?? "4.1.2"}`,
+        );
+      }
+    });
     removeBuildOptions(project, ["ember-fetch"]);
 
     recordProgress(project, {
       id: "ember-fetch",
       status: "removed",
       note:
-        "ember-fetch is removed, and the code uses the global fetch. " +
+        "ember-fetch is removed, and the code uses the global fetch, through waitForFetch of @ember/test-waiters, so that tests wait for each request. " +
         "ember-fetch rejected some responses that fetch resolves, so check the error handling of each call.",
       links: ["https://rfcs.emberjs.com/id/1065-remove-ember-fetch"],
     });
@@ -110,8 +128,20 @@ export function transform(source, file) {
 
         let global = imported === "default" ? "fetch" : imported;
 
-        if (specifier.local.name !== global)
+        /**
+         * ember-fetch told the test helpers to wait for each request. waitForFetch does that for the global fetch.
+         */
+        if (imported === "default") {
+          let typed = /\.g?ts$/.test(file)
+            ? "input: RequestInfo | URL, init?: RequestInit"
+            : "input, init";
+
+          aliases.push(
+            `import { waitForFetch } from '@ember/test-waiters';\nconst ${specifier.local.name} = (${typed}) => waitForFetch(globalThis.fetch(input, init));`,
+          );
+        } else if (specifier.local.name !== global) {
           aliases.push(`const ${specifier.local.name} = ${global};`);
+        }
 
         return true;
       });
