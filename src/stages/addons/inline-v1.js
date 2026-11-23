@@ -2,6 +2,7 @@ import { existsSync, globSync, readFileSync, realpathSync } from "node:fs";
 import { join, posix } from "node:path";
 
 import { parseProgram, propertyName, walk } from "#ast.js";
+import { Edits } from "#edits.js";
 import { transform as replaceEmberGlobals } from "#stages/ember-globals/transform.js";
 import { parse as parseVersion } from "#stages/ember-source/index.js";
 import { stripTypes } from "#strip-types.js";
@@ -364,6 +365,8 @@ export function planInline(name, directory, taken, emberVersion) {
       }
 
       if (emberVersion) rewritten = withoutCompatibilityHelpers(rewritten, emberVersion);
+
+      rewritten = withDeprecationOwner(rewritten, target, name, addonVersion(directory));
     }
 
     files.set(target, rewritten);
@@ -401,6 +404,78 @@ export function planInline(name, directory, taken, emberVersion) {
   }
 
   return { files, imports, ranges, contentFor };
+}
+
+/**
+ * @param {string} directory
+ * @returns {string}
+ */
+function addonVersion(directory) {
+  return String(
+    JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).version ?? "0.0.0",
+  );
+}
+
+/**
+ * Ember 4 asserts that each `deprecate()` names its package in `for`, and the versions in `since`.
+ * Old addon code did not, so the inlined code names the addon.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @param {string} name the addon
+ * @param {string} version the addon's version
+ * @returns {string}
+ */
+export function withDeprecationOwner(source, file, name, version) {
+  if (!/\bdeprecate\b/.test(source)) return source;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let local = program.body
+    .filter(
+      (/** @type {Node} */ node) =>
+        node.type === "ImportDeclaration" && node.source.value === "@ember/debug",
+    )
+    .flatMap((/** @type {Node} */ node) => node.specifiers)
+    .find((/** @type {Node} */ specifier) => specifier.imported?.name === "deprecate")?.local.name;
+
+  if (!local) return source;
+
+  let edits = new Edits(source);
+
+  walk(program, (node) => {
+    if (node.type !== "CallExpression" || node.callee?.name !== local) return;
+
+    let options = node.arguments[2];
+
+    if (options?.type !== "ObjectExpression") return;
+
+    let keys = new Set(
+      options.properties.map((/** @type {Node} */ property) => property.key?.name),
+    );
+    /** @type {string[]} */
+    let add = [];
+
+    if (!keys.has("for")) add.push(`for: '${name}'`);
+    if (!keys.has("since")) add.push(`since: { available: '${version}', enabled: '${version}' }`);
+
+    if (add.length === 0) return;
+
+    let last = options.properties.at(-1);
+
+    let lineStart = last ? source.lastIndexOf("\n", last.start - 1) + 1 : 0;
+    let indent = last ? (/^[ \t]*/.exec(source.slice(lineStart))?.[0] ?? "") : "";
+    let multiline = last && source.slice(options.start, options.end).includes("\n");
+
+    if (last && multiline)
+      edits.insert(last.end, add.map((entry) => `,\n${indent}${entry}`).join(""));
+    else if (last) edits.insert(last.end, `, ${add.join(", ")}`);
+    else edits.replace(options, `{ ${add.join(", ")} }`);
+  });
+
+  return edits.size > 0 ? edits.apply() : source;
 }
 
 const COMPATIBILITY_IMPORT =
