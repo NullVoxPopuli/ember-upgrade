@@ -486,6 +486,18 @@ export function toGlimmer(input, file, names, options) {
 
   let members = component.members;
   let has = (/** @type {string} */ name) => members.some((entry) => entry.name === name);
+
+  /**
+   * A macro decorator, such as `@sort('categories', 'categorySorting')`, read the component's properties.
+   * The arguments are on `this.args` now.
+   *
+   * @param {string} decorator
+   * @returns {string}
+   */
+  let argKeys = (decorator) =>
+    decorator.replace(/(["'])([\w$]+)((?:\.[\w$@\[\]{},]+)*)\1/g, (match, quote, first, rest) =>
+      names.args.has(first) && !has(first) ? `${quote}args.${first}${rest}${quote}` : match,
+    );
   let allArgs = () =>
     Array.from(names.args)
       .filter((arg) => NAME.test(arg))
@@ -789,7 +801,7 @@ export function toGlimmer(input, file, names, options) {
 
         if (component.form === "class") {
           let text = withoutDecorators(source, entry);
-          let lines = entry.decorators.map((value) => `\u21e5@${value}\n`).join("");
+          let lines = entry.decorators.map((value) => `\u21e5@${argKeys(value)}\n`).join("");
 
           if (names.tracked.has(name) && entry.decorators.length === 0) {
             need("@glimmer/tracking", "tracked");

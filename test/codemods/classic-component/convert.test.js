@@ -1139,3 +1139,47 @@ export default Component.extend({
     "
   `);
 });
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("a macro decorator of a native class reads the arguments", () => {
+  let sources = new Map([
+    [
+      "app/components/inline-category-list.js",
+      `import { sort } from '@ember/object/computed';
+import Component from '@ember/component';
+import { tagName } from '@ember-decorators/component';
+
+@tagName('')
+export default class InlineCategoryList extends Component {
+  categorySorting = ['totalAddonCount:desc'];
+
+  @sort('categories', 'categorySorting')
+  categoriesSortedByAddonCount;
+}
+`,
+    ],
+    [
+      "app/components/inline-category-list.hbs",
+      `{{#each this.categoriesSortedByAddonCount as |category|}}{{category.name}}{{/each}}\n`,
+    ],
+    ["app/templates/addon.hbs", `<InlineCategoryList @categories={{this.addon.categories}} />\n`],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/inline-category-list.js")).toMatchInlineSnapshot(`
+    "import { sort } from '@ember/object/computed';
+    import Component from '@glimmer/component';
+
+    export default class InlineCategoryList extends Component {
+      categorySorting = ['totalAddonCount:desc'];
+
+      @sort('args.categories', 'categorySorting')
+      categoriesSortedByAddonCount;
+    }
+    "
+  `);
+});
