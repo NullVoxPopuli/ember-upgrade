@@ -43,7 +43,8 @@ test("a v1 addon with no v2 release moves into the app", async () => {
       "import Component from '@ember/component';\nimport { helper } from 'emberx-select/utils/helper';\nexport default Component.extend({});\n",
     [`${ADDON}/addon/components/x-legacy.js`]:
       "import Ember from 'ember';\nimport layout from '../templates/components/x-legacy';\nexport default Ember.Component.extend({\n  layout,\n  tagName: '',\n});\n",
-    [`${ADDON}/addon/utils/helper.js`]: "export function helper() {}\n",
+    [`${ADDON}/addon/utils/helper.js`]:
+      "import { noop } from 'lodash';\nexport function helper() {\n  noop();\n}\n",
     [`${ADDON}/addon/templates/components/x-select.hbs`]: "<select>{{yield}}</select>\n",
     [`${ADDON}/addon/templates/components/x-legacy.hbs`]: "Old\n",
     [`${ADDON}/app/components/x-select.js`]:
@@ -93,7 +94,10 @@ test("a v1 addon with no v2 release moves into the app", async () => {
     ",
         "app/addons/emberx-select/services/x-registry.js": "export default class Registry {}
     ",
-        "app/addons/emberx-select/utils/helper.js": "export function helper() {}
+        "app/addons/emberx-select/utils/helper.js": "import { noop } from 'lodash';
+    export function helper() {
+      noop();
+    }
     ",
         "app/components/category-position-dropdown.js": "import XSelect from './x-select.js';
     export default class extends XSelect {}

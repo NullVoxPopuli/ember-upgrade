@@ -366,11 +366,72 @@ export function planInline(name, directory, taken) {
   /** @type {Record<string, string>} */
   let ranges = {};
 
+  let used = importedPackages(Array.from(files.values()));
+
   for (let [dependency, range] of Object.entries(manifest.dependencies ?? {})) {
-    if (!BUILD_DEPENDENCY.test(dependency)) ranges[dependency] = String(range);
+    if (BUILD_DEPENDENCY.test(dependency)) continue;
+
+    /**
+     * A dependency that the code does not import stays out, unless it is an addon whose components templates can use.
+     */
+    if (!used.has(dependency) && !hasAppTree(directory, dependency)) continue;
+
+    ranges[dependency] = String(range);
   }
 
   return { files, imports, ranges, contentFor };
+}
+
+/**
+ * @param {string[]} sources
+ * @returns {Set<string>} the packages that the sources import
+ */
+function importedPackages(sources) {
+  /** @type {Set<string>} */
+  let packages = new Set();
+
+  for (let source of sources) {
+    for (let match of source.matchAll(SPECIFIER)) {
+      let specifier = match[3];
+
+      if (specifier.startsWith(".")) continue;
+
+      let parts = specifier.split("/");
+
+      packages.add(specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0]);
+    }
+  }
+
+  return packages;
+}
+
+/**
+ * @param {string} directory the addon
+ * @param {string} dependency
+ * @returns {boolean} the dependency is an addon with modules that the app resolves by name, such as components
+ */
+function hasAppTree(directory, dependency) {
+  let installed = dependencyDirectory(directory, dependency);
+
+  if (!installed) return false;
+
+  let manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
+
+  return existsSync(join(installed, "app")) || Boolean(manifest["ember-addon"]?.["app-js"]);
+}
+
+/**
+ * @param {string} directory an installed package
+ * @param {string} dependency
+ * @returns {string | undefined} where the package's dependency is installed, next to it in a pnpm store or above it
+ */
+export function dependencyDirectory(directory, dependency) {
+  let depth = dependency.startsWith("@") ? 2 : 1;
+  let parent = join(directory, ...Array.from({ length: depth }, () => ".."));
+
+  for (let candidate of [join(directory, "node_modules", dependency), join(parent, dependency)]) {
+    if (existsSync(join(candidate, "package.json"))) return realpathSync(candidate);
+  }
 }
 
 /**
@@ -451,10 +512,11 @@ function relativeTo(from, to) {
  *
  * @param {Project} project
  * @param {string} name
- * @returns {import('#types.js').Stage | undefined} undefined when the addon is not only code that the app can hold
+ * @param {string} [from] where the addon is installed, when it is a dependency of another addon and not of the app
+ * @returns {(import('#types.js').Stage & { dependencies: Record<string, string>, directory: string }) | undefined} undefined when the addon is not only code that the app can hold
  */
-export function inlineV1Stage(project, name) {
-  let installed = join(project.directory, "node_modules", name);
+export function inlineV1Stage(project, name, from) {
+  let installed = from ?? join(project.directory, "node_modules", name);
 
   if (!existsSync(join(installed, "package.json"))) return;
 
@@ -476,7 +538,7 @@ export function inlineV1Stage(project, name) {
    */
   if (contentFor && !contentForPages(project, directory)) return;
 
-  return inlineStage({
+  let stage = inlineStage({
     name,
     label: `Move ${name}, a v1 addon with no v2 release, into the app`,
     files: Object.fromEntries(files),
@@ -487,4 +549,6 @@ export function inlineV1Stage(project, name) {
       ? `${name} is a v1 addon with no v2 release, so its code is in the app now, where ember-cli merged it, and the HTML that its contentFor hook added is in the app's HTML files.`
       : `${name} is a v1 addon with no v2 release, so its code is in the app now, where ember-cli merged it.`,
   });
+
+  return Object.assign(stage, { dependencies: ranges, directory });
 }

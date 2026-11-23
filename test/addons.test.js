@@ -8,6 +8,8 @@ import { parseProgress, printProgress, readProgress } from "#progress.js";
 import emberMetrics from "#stages/addons/ember-metrics.js";
 import { rewriteClickOutside } from "#stages/addons/click-outside.js";
 import inlineContent from "#stages/addons/inline-content.js";
+import { replaceTypeahead } from "#stages/addons/power-select-typeahead.js";
+import { rewritePowerSelectMultiple } from "#stages/addons/power-select.js";
 import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
@@ -695,4 +697,57 @@ module.exports = async function (defaults) {
     "
   `);
   expect(readProgress(app).map((entry) => entry.id)).toEqual(["ember-cli-inline-content"]);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("the typeahead becomes a power select with the search field in the trigger", () => {
+  expect(
+    replaceTypeahead(
+      `import Component from '@glimmer/component';
+import PowerSelectTypeahead from "ember-power-select-typeahead/components/power-select-typeahead";
+
+export default class PageLayout extends Component {
+  <template>
+    <PowerSelectTypeahead @search={{this.search}} @onChange={{this.go}} as |name|>
+      {{name}}
+    </PowerSelectTypeahead>
+  </template>
+}
+`,
+      "app/components/page-layout.gjs",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import PowerSelect from "ember-power-select/components/power-select";
+
+    export default class PageLayout extends Component {
+      <template>
+        <PowerSelect @searchEnabled={{true}} @searchFieldPosition="trigger" @search={{this.search}} @onChange={{this.go}} as |name|>
+          {{name}}
+        </PowerSelect>
+      </template>
+    }
+    "
+  `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("power-select-multiple becomes power-select with multiple", () => {
+  expect(
+    rewritePowerSelectMultiple(`{{#power-select-multiple options=this.categories onChange=this.pick as |category|}}
+  {{category.name}}
+{{/power-select-multiple}}
+<PowerSelectMultiple @options={{this.tags}} as |tag|>{{tag}}</PowerSelectMultiple>
+`).template,
+  ).toMatchInlineSnapshot(`
+    "{{#power-select multiple=true options=this.categories onChange=this.pick as |category|}}
+      {{category.name}}
+    {{/power-select}}
+    <PowerSelect @multiple={{true}} @options={{this.tags}} as |tag|>{{tag}}</PowerSelect>
+    "
+  `);
 });
