@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import {
   inlineV1Stage,
+  withDeprecationOwner,
   withHasBlockHelpers,
   withoutCompatibilityHelpers,
 } from "#stages/addons/inline-v1.js";
@@ -366,6 +367,36 @@ if (gte('3.6.0')) {
     if (true) {
       schedule('afterRender', null, done);
     }
+    "
+  `);
+});
+
+/**
+ * From ember-app-scheduler 7.0.1 (MIT), shortened.
+ */
+test("a deprecation of inlined code names the addon, as Ember 4 asks", () => {
+  expect(
+    withDeprecationOwner(
+      `import { deprecate } from '@ember/debug';
+
+deprecate('setupRouter is deprecated', false, {
+  id: 'ember-app-scheduler.setupRouter',
+  until: '7.0.0',
+});
+`,
+      "app/addons/ember-app-scheduler/scheduler.js",
+      "ember-app-scheduler",
+      "7.0.1",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import { deprecate } from '@ember/debug';
+
+    deprecate('setupRouter is deprecated', false, {
+      id: 'ember-app-scheduler.setupRouter',
+      until: '7.0.0',
+      for: 'ember-app-scheduler',
+      since: { available: '7.0.1', enabled: '7.0.1' },
+    });
     "
   `);
 });

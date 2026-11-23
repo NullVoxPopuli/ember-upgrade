@@ -9,7 +9,11 @@ import emberMetrics from "#stages/addons/ember-metrics.js";
 import { rewriteClickOutside } from "#stages/addons/click-outside.js";
 import inlineContent from "#stages/addons/inline-content.js";
 import { replaceTypeahead } from "#stages/addons/power-select-typeahead.js";
-import { rewritePowerSelectMultiple } from "#stages/addons/power-select.js";
+import {
+  addBasicDropdownWormhole,
+  rewritePowerSelectMultiple,
+  updatePowerSelect,
+} from "#stages/addons/power-select.js";
 import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
@@ -750,4 +754,53 @@ test("power-select-multiple becomes power-select with multiple", () => {
     <PowerSelect @multiple={{true}} @options={{this.tags}} as |tag|>{{tag}}</PowerSelect>
     "
   `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("selectChoose comes from the test-support entry of ember-power-select 9", () => {
+  expect(
+    updatePowerSelect(
+      `import { selectChoose, clickTrigger } from 'ember-power-select/test-support/helpers';\n`,
+      "tests/acceptance/header-search-test.js",
+    ).template,
+  ).toMatchInlineSnapshot(`
+    "import { clickTrigger } from 'ember-power-select/test-support/helpers';
+    import { selectChoose } from 'ember-power-select/test-support';
+    "
+  `);
+});
+
+test("the application template gets the wormhole of ember-basic-dropdown", () => {
+  let app = project({
+    "package.json": "{}",
+    "app/templates/application.hbs": "<main>{{outlet}}</main>\n",
+  });
+
+  addBasicDropdownWormhole(app);
+  addBasicDropdownWormhole(app);
+
+  expect(app.read("app/templates/application.hbs")).toBe(
+    "<main>{{outlet}}</main>\n<BasicDropdownWormhole />\n",
+  );
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("code that read window.moment imports moment when the shim goes", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-cli-moment-shim": "^3.8.0" } }),
+    "tests/acceptance/code-search-test.js": "let date = window.moment().subtract(2, 'days');\n",
+  });
+  let stage = (await obsoleteAddons.expand(app)).find(
+    (entry) => entry.name === "ember-cli-moment-shim",
+  );
+
+  await stage?.run(app);
+
+  expect(app.read("tests/acceptance/code-search-test.js")).toBe(
+    "import moment from 'moment';\nlet date = moment().subtract(2, 'days');\n",
+  );
 });

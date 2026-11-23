@@ -122,6 +122,38 @@ function isSuperCall(node) {
 }
 
 /**
+ * The accessor of an argument that the component sets, as a classic component set its own properties.
+ * The component's value lasts until the caller passes a new one. The callback tells a caller that bound the argument with `mut`.
+ * As with `set()`, the same value changes nothing, so a component can set it while it renders.
+ *
+ * @param {string} name
+ * @param {Names} names
+ * @returns {string}
+ */
+function ownArgument(name, names) {
+  let callback = /** @type {string} */ (names.callbacks.get(name));
+  let local = `local${callback.slice(2, -"Change".length)}`;
+  let read = `this.args${member(name)}`;
+  let fallback = names.defaults.get(name);
+  let value = fallback
+    ? `${read} ?? ${fallback.startsWith("() =>") ? `(${fallback})` : fallback}`
+    : read;
+
+  return [
+    `\u21e5@tracked ${local};\n`,
+    `\u21e5get ${memberName(name)}() {`,
+    `\u21e5\u21e5let own = this.${local};\n`,
+    `\u21e5\u21e5return own && own.arg === ${read} ? own.value : ${value};`,
+    `\u21e5}\n`,
+    `\u21e5set ${memberName(name)}(value) {`,
+    `\u21e5\u21e5if (value === this${member(name)}) return;\n`,
+    `\u21e5\u21e5this.${local} = { arg: ${read}, value };`,
+    `\u21e5\u21e5this.args.${callback}?.(value);`,
+    `\u21e5}`,
+  ].join("\n");
+}
+
+/**
  * The first pass: rewrites what the methods do with `this`, while the members stay where they are.
  *
  * @param {string} source
@@ -136,16 +168,6 @@ function rewriteThis(source, component, names, unreadable) {
   let text = (/** @type {Node} */ node) => edits.print(node);
 
   walk(component.chain, (node, parent) => {
-    if (node.type === "AssignmentExpression") {
-      let key = thisKey(node.left);
-      let callback = key === undefined ? undefined : names.callbacks.get(key);
-
-      if (callback && node.operator === "=") {
-        edits.replace(node, () => `this.args.${callback}?.(${text(node.right)})`);
-        return;
-      }
-    }
-
     /**
      * `get(this, 'a.b')` and `set(this, 'a.b', value)`, from the accessor rewrite, where `a` is an argument.
      */
@@ -201,7 +223,7 @@ function rewriteThis(source, component, names, unreadable) {
       }
     }
 
-    if (names.args.has(key) && !members.has(key) && !names.getters) {
+    if (names.args.has(key) && !members.has(key) && !names.getters && !names.callbacks.has(key)) {
       if (parent?.type === "AssignmentExpression" && parent.left === node) return;
 
       edits.replace(node, () => `this.args${member(key)}`);
@@ -485,7 +507,36 @@ export function toGlimmer(input, file, names, options) {
   for (let name of options.imports ?? []) need("@ember/object", name);
 
   let members = component.members;
-  let has = (/** @type {string} */ name) => members.some((entry) => entry.name === name);
+  /**
+   * An argument that the component sets gets an accessor on the class, from {@link ownArgument}.
+   */
+  let has = (/** @type {string} */ name) =>
+    names.callbacks.has(name) || members.some((entry) => entry.name === name);
+
+  /**
+   * A macro decorator, such as `@sort('categories', 'categorySorting')`, read the component's properties.
+   * The arguments are on `this.args` now.
+   *
+   * @param {string} decorator
+   * @returns {string}
+   */
+  let argKeys = (decorator) => {
+    let callee = imports.get(/^([\w$]+)[.(]/.exec(decorator)?.[1] ?? "");
+    let takesKeys =
+      MACRO_MODULES.has(callee?.module ?? "") ||
+      (callee?.module === "@ember/object" && callee.imported === "computed");
+
+    /**
+     * Only the dependent keys of a macro or `computed` name arguments. A task's body is code, which the first pass rewrote.
+     */
+    if (!takesKeys) return decorator;
+
+    return decorator.replace(
+      /(["'])([\w$]+)((?:\.[\w$@\[\]{},]+)*)\1/g,
+      (match, quote, first, rest) =>
+        names.args.has(first) && !has(first) ? `${quote}args.${first}${rest}${quote}` : match,
+    );
+  };
   let allArgs = () =>
     Array.from(names.args)
       .filter((arg) => NAME.test(arg))
@@ -578,6 +629,12 @@ export function toGlimmer(input, file, names, options) {
   for (let entry of members) {
     let comments = leadingComments(source, entry.node);
     let name = entry.name;
+
+    if (names.callbacks.has(name)) {
+      need("@glimmer/tracking", "tracked");
+      body.push(`${comments}${ownArgument(name, names)}`);
+      continue;
+    }
 
     if (names.args.has(name)) {
       let fallback = names.defaults.get(name);
@@ -789,7 +846,7 @@ export function toGlimmer(input, file, names, options) {
 
         if (component.form === "class") {
           let text = withoutDecorators(source, entry);
-          let lines = entry.decorators.map((value) => `\u21e5@${value}\n`).join("");
+          let lines = entry.decorators.map((value) => `\u21e5@${argKeys(value)}\n`).join("");
 
           if (names.tracked.has(name) && entry.decorators.length === 0) {
             need("@glimmer/tracking", "tracked");
@@ -877,6 +934,13 @@ export function toGlimmer(input, file, names, options) {
     } else {
       body.unshift(`\u21e5${memberName(name)};`);
     }
+  }
+
+  for (let name of names.callbacks.keys()) {
+    if (members.some((entry) => entry.name === name)) continue;
+
+    need("@glimmer/tracking", "tracked");
+    body.push(ownArgument(name, names));
   }
 
   /**

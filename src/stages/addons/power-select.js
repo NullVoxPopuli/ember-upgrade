@@ -1,3 +1,8 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+
+import { moveImports } from "#codemods/move-imports.js";
+
 const MULTIPLE_IMPORT =
   /^import\s+(\w+)\s+from\s*["']ember-power-select\/components\/power-select-multiple["'];?[ \t]*\n/m;
 
@@ -27,4 +32,82 @@ export function rewritePowerSelectMultiple(template) {
     .replaceAll(/\{\{(~?)\/power-select-multiple(~?)\}\}/g, "{{$1/power-select$2}}");
 
   return { template: output, unreadable: [] };
+}
+
+/**
+ * The helpers that ember-power-select 9 exports from `test-support/helpers`. The others, such as `selectChoose`, come from `test-support`.
+ */
+const HELPERS = new Set([
+  "clickTrigger",
+  "findContains",
+  "nativeMouseDown",
+  "nativeMouseUp",
+  "nativeTouch",
+  "touchTrigger",
+  "triggerKeydown",
+  "typeInSearch",
+]);
+
+/**
+ * @param {string} source a template, or a module
+ * @param {string} file
+ * @returns {{ template: string, unreadable: string[] }}
+ */
+export function updatePowerSelect(source, file) {
+  let output = /\.(js|ts)$/.test(file) ? source : rewritePowerSelectMultiple(source).template;
+
+  if (/\.(js|ts|gjs|gts)$/.test(file)) {
+    output = moveImports(
+      output,
+      file,
+      "ember-power-select/test-support/helpers",
+      "ember-power-select/test-support",
+      (name) => !HELPERS.has(name),
+    );
+  }
+
+  return { template: output, unreadable: [] };
+}
+
+const WORMHOLE_IMPORT =
+  "import BasicDropdownWormhole from 'ember-basic-dropdown/components/basic-dropdown-wormhole';";
+
+/**
+ * ember-basic-dropdown 8 and later render dropdowns into `<BasicDropdownWormhole />`, which the app's
+ * application template has. Before, the addon added its element to index.html with contentFor.
+ *
+ * @param {import('#project.js').Project} project
+ */
+export function addBasicDropdownWormhole(project) {
+  let file = [
+    "app/templates/application.gjs",
+    "app/templates/application.gts",
+    "app/templates/application.hbs",
+  ].find((name) => project.has(name));
+
+  if (!file) {
+    if (!project.has("app/app.js") && !project.has("app/app.ts")) return;
+
+    mkdirSync(join(project.directory, "app/templates"), { recursive: true });
+    project.write("app/templates/application.hbs", "{{outlet}}\n<BasicDropdownWormhole />\n");
+    return;
+  }
+
+  let source = project.read(file);
+
+  if (source.includes("BasicDropdownWormhole")) return;
+
+  if (file.endsWith(".hbs")) {
+    project.write(file, `${source.replace(/\n?$/, "\n")}<BasicDropdownWormhole />\n`);
+    return;
+  }
+
+  let close = source.lastIndexOf("</template>");
+
+  if (close === -1) return;
+
+  project.write(
+    file,
+    `${WORMHOLE_IMPORT}\n${source.slice(0, close)}<BasicDropdownWormhole />\n${source.slice(close)}`,
+  );
 }

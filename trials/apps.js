@@ -1,3 +1,5 @@
+import { join } from "node:path";
+
 /**
  * Real apps that CI upgrades on each change.
  *
@@ -67,12 +69,14 @@ export const apps = [
       "ember-cli-shims",
       "ember-cli-htmlbars-inline-precompile",
       "ember-watson",
+      "ember-export-application-global",
       "ember-cli-qunit",
       "ember-functions-as-helper-polyfill",
       "ember-cli-code-coverage",
       "ember-cli-moment-shim",
       "ember-normalize",
       "ember-metrics",
+      "ember-router-scroll",
       "ember-ajax",
       "ember-auto-focus",
       "ember-autoresize",
@@ -85,7 +89,6 @@ export const apps = [
       "update-ember-click-outside",
       "update-ember-concurrency",
       "ember-disable-proxy-controllers",
-      "ember-export-application-global",
       "update-ember-inflector",
       "update-ember-keyboard",
       "ember-link-action",
@@ -97,13 +100,11 @@ export const apps = [
       "ember-radio-button",
       "ember-responsive",
       "ember-route-action-helper",
-      "ember-router-scroll",
       "update-ember-simple-auth",
       "update-ember-simple-auth-token",
       "ember-stripe-elements",
       "ember-stripe-service",
       "update-ember-truth-helpers",
-      "ember-app-scheduler",
       "v1-addons",
       "no-implicit-this",
       "template-colocation",
@@ -117,6 +118,7 @@ export const apps = [
     sha: "94e197af754b703dee9d30df030f63f95691c4b1",
     completed: [
       "package-manager",
+      "ember-globals",
       "ember-cli",
       "ember-fetch",
       "ember-source-3.28",
@@ -134,6 +136,7 @@ export const apps = [
       "vite-sass",
       "ember-cli-deploy",
       "ember-test-selectors",
+      "ember-export-application-global",
       "ember-try",
       "ember-maybe-import-regenerator",
       "ember-cli-code-coverage",
@@ -143,18 +146,16 @@ export const apps = [
       "ember-cli-deprecation-workflow",
       "ember-metrics",
       "ember-power-select-typeahead",
+      "ember-router-scroll",
       "update-ember-cli-showdown",
       "ember-cli-test-loader",
       "update-ember-concurrency",
       "update-ember-decorators",
-      "ember-export-application-global",
       "ember-feature-flags",
       "update-ember-inflector",
       "update-ember-moment",
       "update-ember-power-select",
-      "ember-router-scroll",
       "emberx-select",
-      "ember-app-scheduler",
       "v1-addons",
       "ember-cli-inline-content",
       "document-title",
@@ -171,6 +172,18 @@ export const apps = [
       "declare-imports",
       "ember-nvp",
       "undeprecate-inject",
+    ],
+    /**
+     * The trial does not install after each stage, so the lockfile is behind the last stages' package.json.
+     * The patch changes two expectations of the header search test that depended on old Ember and test helpers:
+     * - Ember 3's router service put the default `searchReadmes=false` in the URL. Ember 7 leaves it out.
+     * - `click()` of @ember/test-helpers 5 renders between mouseup and click. PowerSelect closes on mouseup,
+     *   so a full click reached a removed link, and the browser left the test page.
+     */
+    after: [
+      ["git", "apply", join(import.meta.dirname, "ember-observer-header-search.patch")],
+      ["pnpm", "install", "--no-frozen-lockfile"],
+      ["pnpm", "test"],
     ],
   },
   {
@@ -259,6 +272,7 @@ export const apps = [
     setup: [["git", "submodule", "update", "--init", "--depth", "1"]],
     completed: [
       "package-manager",
+      "ember-globals",
       "ember-cli",
       "ember-fetch",
       "ember-composable-helpers",
@@ -278,6 +292,7 @@ export const apps = [
       "ember-scoped-css",
       "ember-cli-autoprefixer",
       "ember-cli-stylelint",
+      "ember-export-application-global",
       "ember-cli-typescript",
       "ember-cli-typescript-blueprints",
       "ember-cli-blueprint-test-helpers",
@@ -310,7 +325,6 @@ export const apps = [
       "update-ember-cookies",
       "update-ember-decorators",
       "ember-diff-attrs",
-      "ember-export-application-global",
       "ember-feature-flags",
       "update-ember-flatpickr",
       "ember-g-recaptcha",
@@ -361,6 +375,7 @@ export const apps = [
       "vite",
       "ember-test-selectors",
       "ember-cli-shims",
+      "ember-export-application-global",
       "ember-functions-as-helper-polyfill",
       "ember-cli-code-coverage",
       "ember-classic-decorator",
@@ -375,7 +390,6 @@ export const apps = [
       "ember-could-get-used-to-this",
       "update-ember-decorators",
       "update-ember-drag-drop",
-      "ember-export-application-global",
       "ember-in-viewport",
       "update-ember-infinity",
       "update-ember-inflector",

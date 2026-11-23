@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 
 import { transform } from "#stages/addons/ember-fetch.js";
 
-test("the default import becomes the global fetch", () => {
+test("the default import becomes the global fetch, which the test helpers wait for", () => {
   expect(
     transform(
       `import Route from '@ember/routing/route';
@@ -16,14 +16,18 @@ export default class extends Route {
 `,
       "app/routes/index.js",
     ),
-  ).toBe(`import Route from '@ember/routing/route';
+  ).toMatchInlineSnapshot(`
+    "import Route from '@ember/routing/route';
+    import { waitForFetch } from '@ember/test-waiters';
+    const fetch = (input, init) => waitForFetch(globalThis.fetch(input, init));
 
-export default class extends Route {
-  model() {
-    return fetch('/omg.json').then((response) => response.json());
-  }
-}
-`);
+    export default class extends Route {
+      model() {
+        return fetch('/omg.json').then((response) => response.json());
+      }
+    }
+    "
+  `);
 });
 
 test("a renamed import keeps its name", () => {
@@ -32,7 +36,13 @@ test("a renamed import keeps its name", () => {
       `import emberFetch, { Headers } from 'fetch';\n\nemberFetch('/x', { headers: new Headers() });\n`,
       "app/x.js",
     ),
-  ).toBe(`const emberFetch = fetch;\n\nemberFetch('/x', { headers: new Headers() });\n`);
+  ).toMatchInlineSnapshot(`
+    "import { waitForFetch } from '@ember/test-waiters';
+    const emberFetch = (input, init) => waitForFetch(globalThis.fetch(input, init));
+
+    emberFetch('/x', { headers: new Headers() });
+    "
+  `);
 });
 
 test("the error helpers become local functions", () => {

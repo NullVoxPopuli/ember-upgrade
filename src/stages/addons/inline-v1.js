@@ -2,8 +2,10 @@ import { existsSync, globSync, readFileSync, realpathSync } from "node:fs";
 import { join, posix } from "node:path";
 
 import { parseProgram, propertyName, walk } from "#ast.js";
+import { Edits } from "#edits.js";
 import { transform as replaceEmberGlobals } from "#stages/ember-globals/transform.js";
 import { parse as parseVersion } from "#stages/ember-source/index.js";
+import { stripTypes } from "#strip-types.js";
 import { contentForPages } from "./content-for.js";
 import { inlineStage } from "./inline.js";
 
@@ -363,6 +365,8 @@ export function planInline(name, directory, taken, emberVersion) {
       }
 
       if (emberVersion) rewritten = withoutCompatibilityHelpers(rewritten, emberVersion);
+
+      rewritten = withDeprecationOwner(rewritten, target, name, addonVersion(directory));
     }
 
     files.set(target, rewritten);
@@ -371,6 +375,20 @@ export function planInline(name, directory, taken, emberVersion) {
   let manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
   /** @type {Record<string, string>} */
   let ranges = {};
+
+  /**
+   * Ember 4 removed the global acceptance test helpers, so a module that registers one cannot run.
+   * Nothing imports it, because the tests called the helper as a global.
+   */
+  for (let [target, source] of files) {
+    if (
+      /\bimport\s*\{[^}]*\bregister(Async)?Helper\b[^}]*\}\s*from\s*["']@ember\/test["']/.test(
+        source,
+      )
+    ) {
+      files.delete(target);
+    }
+  }
 
   let used = importedPackages(Array.from(files.values()));
 
@@ -386,6 +404,78 @@ export function planInline(name, directory, taken, emberVersion) {
   }
 
   return { files, imports, ranges, contentFor };
+}
+
+/**
+ * @param {string} directory
+ * @returns {string}
+ */
+function addonVersion(directory) {
+  return String(
+    JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).version ?? "0.0.0",
+  );
+}
+
+/**
+ * Ember 4 asserts that each `deprecate()` names its package in `for`, and the versions in `since`.
+ * Old addon code did not, so the inlined code names the addon.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @param {string} name the addon
+ * @param {string} version the addon's version
+ * @returns {string}
+ */
+export function withDeprecationOwner(source, file, name, version) {
+  if (!/\bdeprecate\b/.test(source)) return source;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let local = program.body
+    .filter(
+      (/** @type {Node} */ node) =>
+        node.type === "ImportDeclaration" && node.source.value === "@ember/debug",
+    )
+    .flatMap((/** @type {Node} */ node) => node.specifiers)
+    .find((/** @type {Node} */ specifier) => specifier.imported?.name === "deprecate")?.local.name;
+
+  if (!local) return source;
+
+  let edits = new Edits(source);
+
+  walk(program, (node) => {
+    if (node.type !== "CallExpression" || node.callee?.name !== local) return;
+
+    let options = node.arguments[2];
+
+    if (options?.type !== "ObjectExpression") return;
+
+    let keys = new Set(
+      options.properties.map((/** @type {Node} */ property) => property.key?.name),
+    );
+    /** @type {string[]} */
+    let add = [];
+
+    if (!keys.has("for")) add.push(`for: '${name}'`);
+    if (!keys.has("since")) add.push(`since: { available: '${version}', enabled: '${version}' }`);
+
+    if (add.length === 0) return;
+
+    let last = options.properties.at(-1);
+
+    let lineStart = last ? source.lastIndexOf("\n", last.start - 1) + 1 : 0;
+    let indent = last ? (/^[ \t]*/.exec(source.slice(lineStart))?.[0] ?? "") : "";
+    let multiline = last && source.slice(options.start, options.end).includes("\n");
+
+    if (last && multiline)
+      edits.insert(last.end, add.map((entry) => `,\n${indent}${entry}`).join(""));
+    else if (last) edits.insert(last.end, `, ${add.join(", ")}`);
+    else edits.replace(options, `{ ${add.join(", ")} }`);
+  });
+
+  return edits.size > 0 ? edits.apply() : source;
 }
 
 const COMPATIBILITY_IMPORT =
@@ -559,6 +649,44 @@ function relativeTo(from, to) {
 }
 
 /**
+ * @param {Project} project
+ * @returns {boolean} the app compiles TypeScript
+ */
+function usesTypeScript(project) {
+  return project.has("tsconfig.json") || Boolean(project.dependency("typescript"));
+}
+
+/**
+ * An app without TypeScript gets the addon's TypeScript modules as JavaScript.
+ *
+ * @param {Map<string, string>} files
+ * @param {Record<string, string>} imports
+ * @returns {{ files: Map<string, string>, imports: Record<string, string> }}
+ */
+function asJavaScript(files, imports) {
+  /** @type {Map<string, string>} */
+  let renamed = new Map();
+  /** @type {Map<string, string>} */
+  let output = new Map();
+
+  for (let [file, source] of files) {
+    let stripped = /\.(ts|gts)$/.test(file) ? stripTypes(source, file) : undefined;
+    let target =
+      stripped === undefined ? file : file.replace(/\.ts$/, ".js").replace(/\.gts$/, ".gjs");
+
+    if (target !== file) renamed.set(file, target);
+
+    output.set(target, stripped ?? source);
+  }
+
+  let newImports = Object.fromEntries(
+    Object.entries(imports).map(([specifier, file]) => [specifier, renamed.get(file) ?? file]),
+  );
+
+  return { files: output, imports: newImports };
+}
+
+/**
  * Moves a v1 addon with no v2 release into the app, as ember-cli merged it:
  * its modules go to the app paths that the resolver looks up, and its templates next to their components.
  *
@@ -589,6 +717,8 @@ export function inlineV1Stage(project, name, from) {
   if (!plan) return;
 
   let { files, imports, ranges, contentFor } = plan;
+
+  if (!usesTypeScript(project)) ({ files, imports } = asJavaScript(files, imports));
 
   /**
    * A hook that needs ember-cli, such as one that calls `this.addons`, keeps the addon a v1 addon.

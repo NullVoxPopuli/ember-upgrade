@@ -178,3 +178,32 @@ export default class Demo extends Component {
     expect(code(source)).toBe(source);
   });
 });
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("Ember.onerror becomes a listener of the window's error event", () => {
+  let result = transform(
+    `import { on } from 'rsvp';
+import Ember from 'ember';
+
+if (config.environment === 'production') {
+  Ember.onerror = function (error) {
+    console.error(error);
+  };
+}
+`,
+    "app/app.js",
+  );
+
+  expect(result.code).toMatchInlineSnapshot(`
+    "import { on } from 'rsvp';
+
+    if (config.environment === 'production') {
+      window.addEventListener("error", function ({ error }) {
+        console.error(error);
+      });
+    }
+    "
+  `);
+});

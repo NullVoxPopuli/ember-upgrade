@@ -233,6 +233,16 @@ const OBSOLETE = [
   },
   { name: "ember-watson", label: "It is an ember-cli command" },
   {
+    name: "ember-export-application-global",
+    label: "Ember Inspector finds the app without a global",
+    progress: {
+      note:
+        "ember-export-application-global is removed. It put the application on window, named after the modulePrefix, for debugging. " +
+        "Ember Inspector finds the app without it. Code that reads that global needs another way to the app, such as the owner.",
+      links: ["https://github.com/ember-cli/ember-export-application-global"],
+    },
+  },
+  {
     name: "ember-cli-qunit",
     label: "ember-qunit replaces it",
     replaceWith: { "ember-qunit": "9.0.4" },
@@ -275,6 +285,7 @@ const OBSOLETE = [
     label: "The app imports moment from npm",
     buildOptions: ["moment"],
     replaceWith: { moment: "2.30.1" },
+    after: importMomentGlobal,
   },
   {
     name: "ember-mockdate-shim",
@@ -379,6 +390,25 @@ function removeCalls(project, module) {
      * A call that spans lines stays, with its import, so that the build names it.
      */
     if (locals.some((local) => new RegExp(`\\b${local}\\b`).test(output))) continue;
+
+    project.write(file, output);
+  }
+}
+
+/**
+ * The shim also put moment on window. Code that read `window.moment` imports it now.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function importMomentGlobal(project) {
+  for (let file of project.files()) {
+    let source = project.read(file);
+
+    if (!source.includes("window.moment")) continue;
+
+    let output = source.replaceAll(/\bwindow\.moment\b/g, "moment");
+
+    if (!/^import\s+moment\b/m.test(output)) output = `import moment from 'moment';\n${output}`;
 
     project.write(file, output);
   }

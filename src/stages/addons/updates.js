@@ -9,7 +9,7 @@ import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
 import { rewriteClickOutside } from "./click-outside.js";
-import { rewritePowerSelectMultiple } from "./power-select.js";
+import { addBasicDropdownWormhole, updatePowerSelect } from "./power-select.js";
 import { dependencyDirectory, inlineV1Stage } from "./inline-v1.js";
 import { isObsoleteAddon } from "./removals.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
@@ -283,6 +283,7 @@ function hasOwnStage(name) {
       "ember-svg-jar",
       "ember-web-app",
       "ember-power-select-typeahead",
+      "ember-router-scroll",
     ].includes(name)
   );
 }
@@ -360,9 +361,28 @@ export function updateStage(name, release) {
       let todo = [];
       let codemod = TEMPLATE_CODEMODS.get(name);
 
+      if (name === "ember-power-select" || name === "ember-basic-dropdown") {
+        addBasicDropdownWormhole(project);
+      }
+
+      /**
+       * The vite-sass stage pointed Sass imports at the v1 addon's app/styles, which a v2 addon does not have.
+       * Its package entry has the styles, through the `sass` export condition.
+       */
+      let escaped = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+      let stylePath = new RegExp(`(["'])${escaped}/app/styles/[^"']+\\1`, "g");
+
+      for (let file of project.files(["app/styles/**/*.{scss,sass}"])) {
+        let source = project.read(file);
+        let output = source.replace(stylePath, `$1${name}$1`);
+
+        if (output !== source) project.write(file, output);
+      }
+
       for (let file of codemod ? project.files([codemod.files]) : []) {
         let result = /** @type {{ codemod: TemplateCodemod }} */ (codemod).codemod(
           project.read(file),
+          file,
         );
 
         if (result.unreadable.length > 0) {
@@ -451,7 +471,7 @@ function isV1Addon(directory) {
 }
 
 /**
- * @typedef {(template: string) => { template: string, unreadable: string[] }} TemplateCodemod
+ * @typedef {(source: string, file: string) => { template: string, unreadable: string[] }} TemplateCodemod
  */
 
 /**
@@ -463,7 +483,7 @@ const TEMPLATE_CODEMODS = new Map([
   ["ember-click-outside", { codemod: rewriteClickOutside, files: "{app,addon,tests}/**/*.hbs" }],
   [
     "ember-power-select",
-    { codemod: rewritePowerSelectMultiple, files: "{app,addon,tests}/**/*.{hbs,gjs,gts}" },
+    { codemod: updatePowerSelect, files: "{app,addon,tests}/**/*.{hbs,gjs,gts,js,ts}" },
   ],
 ]);
 

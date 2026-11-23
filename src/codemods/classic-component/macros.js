@@ -34,14 +34,21 @@ export function readPath(path, root = "this") {
  *
  * @param {MacroCall} call
  * @param {(key: string) => string} [root] the object that a dependent key starts at, by its first key
+ * @param {object} [options]
+ * @param {(key: string) => string} [options.read] reads a dependent key, in place of `root`
+ * @param {(path: string) => string} [options.list] reads a list, such as an async hasMany, as an array
  * @returns {Getter | undefined} undefined for a macro that has no plain getter form
  */
-export function macroGetter(call, root = () => "this") {
+export function macroGetter(
+  call,
+  root = () => "this",
+  { read, list = (path) => `(${path} ?? [])` } = {},
+) {
   let { name, args } = call;
   let keys = args.map((arg) => arg.string);
   let key = keys[0];
-  let thisPath = (/** @type {string} */ value) =>
-    readPath(value, root(value.split(".")[0] ?? value));
+  let thisPath =
+    read ?? ((/** @type {string} */ value) => readPath(value, root(value.split(".")[0] ?? value)));
   let path = key === undefined ? undefined : thisPath(key);
   /** @type {Set<string>} */
   let imports = new Set();
@@ -99,7 +106,7 @@ export function macroGetter(call, root = () => "this") {
 
       if (!path || property === undefined || args.length !== 2) return;
 
-      return { body: `(${path} ?? []).map((item) => ${readPath(property, "item")})`, imports };
+      return { body: `${list(path)}.map((item) => ${readPath(property, "item")})`, imports };
     }
     case "filterBy": {
       let property = args[1]?.string;
@@ -110,26 +117,26 @@ export function macroGetter(call, root = () => "this") {
         ? `${readPath(property, "item")} === ${args[2].text}`
         : readPath(property, "item");
 
-      return { body: `(${path} ?? []).filter((item) => ${test})`, imports };
+      return { body: `${list(path)}.filter((item) => ${test})`, imports };
     }
     case "sum":
       return path && args.length === 1
-        ? { body: `(${path} ?? []).reduce((total, value) => total + value, 0)`, imports }
+        ? { body: `${list(path)}.reduce((total, value) => total + value, 0)`, imports }
         : undefined;
     case "max":
       return path && args.length === 1
-        ? { body: `(${path} ?? []).reduce((a, b) => Math.max(a, b), -Infinity)`, imports }
+        ? { body: `${list(path)}.reduce((a, b) => Math.max(a, b), -Infinity)`, imports }
         : undefined;
     case "min":
       return path && args.length === 1
-        ? { body: `(${path} ?? []).reduce((a, b) => Math.min(a, b), Infinity)`, imports }
+        ? { body: `${list(path)}.reduce((a, b) => Math.min(a, b), Infinity)`, imports }
         : undefined;
     case "uniq":
     case "uniqBy": {
       if (!path) return;
 
       if (name === "uniq" && args.length === 1) {
-        return { body: `Array.from(new Set(${path} ?? []))`, imports };
+        return { body: `Array.from(new Set(${list(path)}))`, imports };
       }
 
       let property = args[1]?.string;
@@ -139,7 +146,7 @@ export function macroGetter(call, root = () => "this") {
       let byKey = (/** @type {string} */ item) => readPath(property, item);
 
       return {
-        body: `(${path} ?? []).filter((item, index, all) => all.findIndex((other) => ${byKey("other")} === ${byKey("item")}) === index)`,
+        body: `${list(path)}.filter((item, index, all) => all.findIndex((other) => ${byKey("other")} === ${byKey("item")}) === index)`,
         imports,
       };
     }

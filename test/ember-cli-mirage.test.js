@@ -194,6 +194,22 @@ import { setupTest } from 'ember-qunit';
 `);
 });
 
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("a relative import of the mirage initializer names the app's initializer too", () => {
+  let result = rewriteImports(
+    `import { startMirage } from '../../initializers/ember-cli-mirage';\n`,
+    "tests/helpers/setup-ember-observer-test.js",
+    { prefix: "ember-observer", ownTypes: false },
+  );
+
+  expect(result.startMirage).toBe(true);
+  expect(result.source).toBe(
+    `import { startMirage } from 'ember-observer/tests/helpers/mirage';\n`,
+  );
+});
+
 test("the routes function and the makeServer function are both server configs", () => {
   expect(
     serverShape(
@@ -348,6 +364,28 @@ export default function makeServer(environment: string) {
     });
 }
 `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("with discovery off, a model whose collection the mirage code names still gets a mirage model", () => {
+  let result = plan(
+    project({
+      "package.json": JSON.stringify({
+        name: "ember-observer",
+        devDependencies: { "ember-cli-mirage": "^1.1.6" },
+      }),
+      "config/environment.js": `module.exports = function () {\n  return { modulePrefix: 'ember-observer', 'ember-cli-mirage': { discoverEmberDataModels: false } };\n};\n`,
+      "app/models/size-calculation-result.js": `import Model, { belongsTo } from '@ember-data/model';\n\nexport default class extends Model {\n  @belongsTo('version') version;\n}\n`,
+      "app/models/readme.js": `import Model, { attr } from '@ember-data/model';\n\nexport default class Readme extends Model {\n  @attr contents;\n}\n`,
+      "mirage/config.js": `export default function () {\n  this.get('/size-calculation-results', (schema, request) => filter(schema, 'sizeCalculationResults', request));\n}\n`,
+    }),
+  );
+
+  expect(
+    Array.from(result.writes.keys()).filter((file) => file.startsWith("mirage/models/")),
+  ).toEqual(["mirage/models/size-calculation-result.js"]);
 });
 
 test("the app and the tests import mirage/ as #mirage", () => {
