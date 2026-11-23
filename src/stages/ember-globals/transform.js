@@ -372,6 +372,46 @@ export function transform(source, filePath) {
   walk(program, (node) => {
     if (node === emberImport || destructures.has(node)) return SKIP;
 
+    /**
+     * `Ember.onerror` has no module and no replacement (deprecation id ember.deprecate-import-onerror-from-ember).
+     * The browser's error event reaches the same errors, so a handler goes there.
+     */
+    let handler = node.type === "AssignmentExpression" ? node.right : undefined;
+
+    if (
+      node.type === "AssignmentExpression" &&
+      node.operator === "=" &&
+      node.left.type === "MemberExpression" &&
+      !node.left.computed &&
+      identifierName(node.left.object) === ember &&
+      node.left.property.name === "onerror" &&
+      (handler.type === "FunctionExpression" || handler.type === "ArrowFunctionExpression") &&
+      handler.params.length <= 1 &&
+      (handler.params.length === 0 || handler.params[0].type === "Identifier")
+    ) {
+      let text = source.slice(handler.start, handler.end);
+      let param = handler.params[0];
+
+      if (param) {
+        let pattern = param.name === "error" ? "{ error }" : `{ error: ${param.name} }`;
+
+        text =
+          text.slice(0, param.start - handler.start) +
+          pattern +
+          text.slice(param.end - handler.start);
+      }
+
+      edits.replace(node, `window.addEventListener("error", ${text})`);
+      todo.push({
+        title: "`Ember.onerror` is a listener of the window's error event now",
+        where: [lineOf(node)],
+        action:
+          "Check that the handler still gets the errors that it needs, such as rejected promises.",
+      });
+
+      return SKIP;
+    }
+
     if (node.type === "MemberExpression") {
       let chain = memberChain(node);
       let rootPath = chain && roots.get(chain.root);
@@ -480,7 +520,13 @@ export function transform(source, filePath) {
     }
   }
 
-  if (imports.modules.size === 0) return { code: source, todo };
+  if (imports.modules.size === 0) {
+    if (edits.size === 0) return { code: source, todo };
+
+    if (remaining === 0 && emberImport.specifiers.length === 1) edits.removeLine(emberImport);
+
+    return { code: edits.apply(), todo };
+  }
 
   let raw = source.slice(emberImport.source.start, emberImport.source.end);
   let quote = raw.startsWith("'") ? "'" : '"';
