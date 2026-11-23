@@ -1,3 +1,6 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+
 import { moveImports } from "#codemods/move-imports.js";
 
 const MULTIPLE_IMPORT =
@@ -83,6 +86,9 @@ export function addBasicDropdownWormhole(project) {
   ].find((name) => project.has(name));
 
   if (!file) {
+    if (!project.has("app/app.js") && !project.has("app/app.ts")) return;
+
+    mkdirSync(join(project.directory, "app/templates"), { recursive: true });
     project.write("app/templates/application.hbs", "{{outlet}}\n<BasicDropdownWormhole />\n");
     return;
   }
