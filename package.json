@@ -7,12 +7,12 @@
     "ember",
     "upgrade"
   ],
-  "license": "MIT",
-  "author": "NullVoxPopuli",
   "repository": {
     "type": "git",
     "url": "git@github.com:NullVoxPopuli/ember-upgrade.git"
   },
+  "license": "MIT",
+  "author": "NullVoxPopuli",
   "type": "module",
   "imports": {
     "#*": "./src/*"
@@ -34,6 +34,7 @@
     "ember-estree": "^0.9.0",
     "ember-rfc176-data": "^0.3.18",
     "prettier": "^3.8.3",
+    "release-plan": "^0.18.0",
     "rolldown": "^1.3.3",
     "typescript": "^5.9.3",
     "vitest": "^4.0.0"
