@@ -1,6 +1,6 @@
 import { findInvocations, rangeOf } from "#codemods/classic-component/invocations.js";
 import { moveImports } from "#codemods/move-imports.js";
-import { parseProgram } from "#ast.js";
+import { parseProgram, walk } from "#ast.js";
 import { Edits } from "#edits.js";
 import { editPackageJson, setDependency } from "#package-json.js";
 import { published } from "#process.js";
@@ -175,4 +175,46 @@ export function keepArrayPrototypeExtensions(project) {
       `app.js imports ${LEGACY_ARRAYS}/array, which adds them back. Move the code to native array methods, then remove the import and the package.`,
     links: ["https://deprecations.emberjs.com/id/deprecate-array-prototype-extensions"],
   });
+}
+
+/**
+ * A controller's `queryParams` is a list. An object, such as `{ addonSortKey: 'sort' }`, worked before Ember 5,
+ * and becomes the one entry of the list, which maps the property to its URL name in the same way.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @returns {string}
+ */
+export function queryParamsList(source, file) {
+  if (!source.includes("queryParams")) return source;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let edits = new Edits(source);
+
+  walk(program, (node) => {
+    let key = node.key?.name ?? node.key?.value;
+
+    if ((node.type !== "PropertyDefinition" && node.type !== "Property") || key !== "queryParams")
+      return;
+    if (node.value?.type !== "ObjectExpression") return;
+
+    edits.replace(node.value, `[${source.slice(node.value.start, node.value.end)}]`);
+  });
+
+  return edits.size > 0 ? edits.apply() : source;
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ */
+export function queryParamsLists(project) {
+  for (let file of project.files(["app/controllers/**/*.{js,ts}"])) {
+    let source = project.read(file);
+    let output = queryParamsList(source, file);
+
+    if (output !== source) project.write(file, output);
+  }
 }

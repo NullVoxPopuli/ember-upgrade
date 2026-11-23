@@ -8,11 +8,17 @@ import { classicLts, viteLts } from "#stages/ember-source/index.js";
 import {
   explicitRelationships,
   nativeArrayMethods,
+  readHasManyAsArray,
   unwrapRelationshipValues,
   withoutFirstAndLastObject,
 } from "#stages/ember-source/ember-data.js";
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
-import { extendsArrays, rewriteWith, useServiceImport } from "#stages/ember-source/removed-apis.js";
+import {
+  extendsArrays,
+  queryParamsList,
+  rewriteWith,
+  useServiceImport,
+} from "#stages/ember-source/removed-apis.js";
 import { moveImports } from "#codemods/move-imports.js";
 
 /**
@@ -295,6 +301,38 @@ set(newReview, 'score', 5);
     "import { asRecord } from 'ember-observer/utils/as-array';
     set(newReview, 'version', asRecord(get(this, 'addon.latestAddonVersion')));
     set(newReview, 'score', 5);
+    "
+  `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("a native array method on an async hasMany reads through asArray", () => {
+  expect(
+    readHasManyAsArray(
+      `let released = get(this.args, 'testResult.emberVersionCompatibilities').filter((v) => v.released);\n`,
+      "app/components/ember-version-compatibility.js",
+      new Set(["emberVersionCompatibilities"]),
+      "ember-observer/utils/as-array",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import asArray from 'ember-observer/utils/as-array';
+    let released = asArray(get(this.args, 'testResult.emberVersionCompatibilities')).filter((v) => v.released);
+    "
+  `);
+});
+
+test("an object of query params becomes the one entry of the list", () => {
+  expect(
+    queryParamsList(
+      `export default class ShowController extends Controller {\n  queryParams = { addonSortKey: 'sort' };\n}\n`,
+      "app/controllers/categories/show.js",
+    ),
+  ).toMatchInlineSnapshot(`
+    "export default class ShowController extends Controller {
+      queryParams = [{ addonSortKey: 'sort' }];
+    }
     "
   `);
 });

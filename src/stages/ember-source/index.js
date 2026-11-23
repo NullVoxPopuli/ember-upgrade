@@ -17,6 +17,7 @@ import { renameTitleHelpers } from "./page-title.js";
 import {
   keepArrayPrototypeExtensions,
   moveHtmlSafe,
+  queryParamsLists,
   rewriteWithHelpers,
   useServiceImports,
 } from "./removed-apis.js";
@@ -149,7 +150,10 @@ function step(lts) {
       }
 
       if (before[0] < 6 && target[0] >= 6) keepArrayPrototypeExtensions(project);
-      if (before[0] < 5 && target[0] >= 5) routerServiceTransitions(project);
+      if (before[0] < 5 && target[0] >= 5) {
+        routerServiceTransitions(project);
+        queryParamsLists(project);
+      }
 
       if (before[0] < 4 && target[0] >= 4) {
         if (explicitInjections(project).length > 0) {

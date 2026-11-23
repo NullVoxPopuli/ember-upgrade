@@ -28,6 +28,7 @@ function dasherize(type) {
  * @property {Set<string>} keys the options that the call sets
  * @property {string | null | undefined} inverse the `inverse` option, when it is a literal
  * @property {boolean} typeMissing the call has no type, which came from the field's name
+ * @property {string} kind `belongsTo` or `hasMany`
  */
 
 /**
@@ -96,6 +97,7 @@ export function readRelationships(source, file) {
           ? inferred.replace(/s$/, "")
           : inferred,
       typeMissing: !written,
+      kind: from.imported,
       call,
       options,
       keys,
@@ -225,19 +227,24 @@ export function explicitRelationshipOptions(project) {
     project.write(/** @type {string} */ (byName.get(name)), source);
 
   let from = `${modulePrefix(project)}/utils/as-array`;
-  let relationships = relationshipNames(
-    new Map(Array.from(byName, ([name, file]) => [name, project.read(file)])),
-  );
+  let models = new Map(Array.from(byName, ([name, file]) => [name, project.read(file)]));
+  let relationships = relationshipNames(models);
+  let hasMany = relationshipNames(models, "hasMany");
   let usesArray = false;
 
   for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
     if (file === "app/utils/as-array.js") continue;
 
     let before = project.read(file);
-    let after = unwrapRelationshipValues(
-      nativeArrayMethods(withoutFirstAndLastObject(before, file, from), file, from),
+    let after = readHasManyAsArray(
+      unwrapRelationshipValues(
+        nativeArrayMethods(withoutFirstAndLastObject(before, file, from), file, from),
+        file,
+        relationships,
+        from,
+      ),
       file,
-      relationships,
+      hasMany,
       from,
     );
 
@@ -624,15 +631,96 @@ export function unwrapRelationshipValues(source, file, relationships, from = ARR
 
 /**
  * @param {Map<string, string>} models each model's source, by name
+ * @param {"belongsTo" | "hasMany"} [kind]
  * @returns {Set<string>} the names of their relationships
  */
-export function relationshipNames(models) {
+export function relationshipNames(models, kind) {
   /** @type {Set<string>} */
   let names = new Set();
 
   for (let [name, source] of models) {
-    for (let relationship of readRelationships(source, `${name}.js`)) names.add(relationship.name);
+    for (let relationship of readRelationships(source, `${name}.js`)) {
+      if (!kind || relationship.kind === kind) names.add(relationship.name);
+    }
   }
 
   return names;
+}
+
+/**
+ * The native array methods that ember-data 4 let code call on an async hasMany, through its proxy.
+ */
+const NATIVE_READS = new Set([
+  "filter",
+  "map",
+  "find",
+  "findIndex",
+  "some",
+  "every",
+  "reduce",
+  "includes",
+  "indexOf",
+  "slice",
+  "forEach",
+  "flatMap",
+  "join",
+]);
+
+/**
+ * A native array method on an async hasMany, such as `get(this, 'result.compatibilities').filter(...)`,
+ * reads through asArray(), because ember-data 5 gives a PromiseManyArray, which has none of them.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @param {Set<string>} hasMany the names of the hasMany relationships of the app's models
+ * @param {string} [from]
+ * @returns {string}
+ */
+export function readHasManyAsArray(source, file, hasMany, from = ARRAY_MODULE) {
+  if (hasMany.size === 0) return source;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let edits = new Edits(source);
+
+  walk(program, (node) => {
+    let callee = node.type === "CallExpression" ? node.callee : undefined;
+
+    if (callee?.type !== "MemberExpression" || callee.computed) return;
+    if (!NATIVE_READS.has(callee.property.name)) return;
+
+    let object = callee.object;
+    let last;
+
+    if (object.type === "MemberExpression" && !object.computed) last = object.property.name;
+
+    let path = object.type === "CallExpression" ? object.arguments.at(-1) : undefined;
+
+    if (
+      object.type === "CallExpression" &&
+      path?.type === "Literal" &&
+      typeof path.value === "string"
+    ) {
+      let getter = object.callee;
+      let isGet =
+        (getter.type === "Identifier" && getter.name === "get") ||
+        (getter.type === "MemberExpression" && getter.property?.name === "get");
+
+      if (isGet) last = path.value.split(".").at(-1);
+    }
+
+    if (!last || !hasMany.has(last)) return;
+
+    edits.replace(object, `${ARRAY}(${source.slice(object.start, object.end)})`);
+  });
+
+  if (edits.size === 0) return source;
+
+  let output = edits.apply();
+
+  return output.includes(`import ${ARRAY} from`)
+    ? output
+    : `import ${ARRAY} from '${from}';\n${output}`;
 }
