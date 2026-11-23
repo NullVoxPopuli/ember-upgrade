@@ -254,7 +254,17 @@ export function routerServiceTransitions(project) {
   for (let { files, from } of TRANSITIONS) {
     for (let file of project.files([files])) {
       let source = project.read(file);
-      let output = source.replace(from, (_, method) => {
+      /**
+       * A route's own transitionTo in a hook replaced the transition, so code aborted the old one first.
+       * After an abort, the test helpers' visit() rejects, even though the router service starts the new one.
+       */
+      let withoutAbort = file.startsWith("app/routes/")
+        ? source.replace(
+            /^[ \t]*\w+\.abort\(\);[ \t]*\n(?=\s*(?:return\s+)?this\.(?:transitionTo|replaceWith)\()/gm,
+            "",
+          )
+        : source;
+      let output = withoutAbort.replace(from, (_, method) => {
         let name =
           method === "transitionToRoute"
             ? "transitionTo"

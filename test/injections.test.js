@@ -154,3 +154,40 @@ export default class CorrectController extends Controller {
     "
   `);
 });
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("an abort right before a redirect goes, because the router service replaces the transition", () => {
+  let app = project({
+    "app/routes/admin/review.js": `import Route from '@ember/routing/route';
+
+export default class ReviewRoute extends Route {
+  redirect(model, transition) {
+    if (!transition.to.queryParams.list) {
+      transition.abort();
+      return this.replaceWith('admin.review.index', { queryParams: { list: 'needing-review' } });
+    }
+  }
+}
+`,
+  });
+
+  routerServiceTransitions(app);
+
+  expect(app.read("app/routes/admin/review.js")).toMatchInlineSnapshot(`
+    "import Route from '@ember/routing/route';
+    import { service } from '@ember/service';
+
+    export default class ReviewRoute extends Route {
+      @service router;
+
+      redirect(model, transition) {
+        if (!transition.to.queryParams.list) {
+          return this.router.replaceWith('admin.review.index', { queryParams: { list: 'needing-review' } });
+        }
+      }
+    }
+    "
+  `);
+});
