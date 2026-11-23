@@ -4,6 +4,7 @@ import { dirname, join, posix } from "node:path";
 import { parseProgram, propertyName, walk, SKIP } from "#ast.js";
 import { removeBuildOptions } from "#config-files.js";
 import { Edits } from "#edits.js";
+import { modulePrefix } from "#module-prefix.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
@@ -247,7 +248,7 @@ export function plan(project) {
   let ext = configFile.endsWith(".ts") ? "ts" : "js";
   let configSource = project.read(configFile);
   let indent = configSource.match(/^([ \t]+)\S/m)?.[1] ?? "  ";
-  let prefix = modulePrefix(environment) ?? String(project.packageJson.name);
+  let prefix = modulePrefix(project);
   let shape = serverShape(configSource, configFile);
 
   if (!shape) {
@@ -484,23 +485,6 @@ function lockedVersion(project, name) {
   versions.sort((a, b) => b[0] - a[0] || b[1] - a[1] || b[2] - a[2]);
 
   return versions[0]?.join(".");
-}
-
-/**
- * @param {string} environment the source of config/environment.js
- * @returns {string | undefined}
- */
-function modulePrefix(environment) {
-  let program = environment ? parseProgram(environment, ENVIRONMENT) : undefined;
-  /** @type {string | undefined} */
-  let prefix;
-
-  walk(program, (node) => {
-    if (propertyName(node) === "modulePrefix" && node.value.type === "Literal")
-      prefix ??= node.value.value;
-  });
-
-  return prefix;
 }
 
 /**

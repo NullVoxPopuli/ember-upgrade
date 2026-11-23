@@ -87,6 +87,34 @@ export function rewriteJQuery(source, file, teardown) {
     let element = selector
       ? `${receiver}.element.querySelector(${cssSelector(text(source, selector))})`
       : `${receiver}.element`;
+    /**
+     * `this.$()[0]` and `this.$().get(0)` read the element itself.
+     */
+    if (
+      !selector &&
+      parent?.type === "MemberExpression" &&
+      parent.object === node &&
+      parent.computed &&
+      parent.property?.type === "Literal" &&
+      parent.property.value === 0
+    ) {
+      edits.replace(parent, () => element);
+      return;
+    }
+
+    let [first, ...others] = parent?.id?.type === "ArrayPattern" ? parent.id.elements : [];
+
+    if (
+      !selector &&
+      parent?.type === "VariableDeclarator" &&
+      parent.init === node &&
+      first?.type === "Identifier" &&
+      others.length === 0
+    ) {
+      edits.replace(parent, () => `${first.name} = ${element}`);
+      return;
+    }
+
     let call = parent?.type === "MemberExpression" && parent.object === node ? parent : undefined;
     let method = call && !call.computed ? call.property?.name : undefined;
 
@@ -180,6 +208,10 @@ export function rewriteJQuery(source, file, teardown) {
           return;
         }
         break;
+      case "get":
+        if (args.length !== 1 || args[0] !== "0") break;
+        edits.replace(outer, () => element);
+        return;
       case "find":
         if (args.length !== 1 || selector) break;
         edits.replace(

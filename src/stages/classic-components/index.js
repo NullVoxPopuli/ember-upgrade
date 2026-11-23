@@ -1,4 +1,7 @@
+import { posix } from "node:path";
+
 import { convertComponents } from "#codemods/classic-component/convert.js";
+import { modulePrefix } from "#module-prefix.js";
 import { editPackageJson, setDependency } from "#package-json.js";
 import { readProgress, recordProgress } from "#progress.js";
 
@@ -19,6 +22,26 @@ const PACKAGES = new Map([
  */
 function sources(project) {
   return new Map(project.files(FILES).map((file) => [file, project.read(file)]));
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ * @returns {import('#codemods/classic-component/mixins.js').Resolve}
+ */
+function resolver(project) {
+  let prefix = `${modulePrefix(project)}/`;
+
+  return (specifier, from) => {
+    let path;
+
+    if (specifier.startsWith(prefix)) path = `app/${specifier.slice(prefix.length)}`;
+    else if (specifier.startsWith(".")) path = posix.join(posix.dirname(from), specifier);
+    else return;
+
+    for (let file of [`${path}.js`, `${path}.ts`, `${path}/index.js`, `${path}/index.ts`]) {
+      if (project.has(file)) return { file, source: project.read(file) };
+    }
+  };
 }
 
 /**
@@ -50,7 +73,7 @@ export default {
   },
 
   async run(project) {
-    let conversion = convertComponents(sources(project));
+    let conversion = convertComponents(sources(project), { resolve: resolver(project) });
 
     for (let [file, contents] of conversion.files) project.write(file, contents);
 

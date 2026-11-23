@@ -64,3 +64,25 @@ export default {
       }
     `);
 });
+
+test("the element itself from jQuery", () => {
+  let source = `export default {
+  scroll() {
+    let first = this.$()[0];
+    let [thread] = this.$();
+    let trigger = this.$('.trigger').get(0);
+  },
+};
+`;
+
+  expect(rewriteJQuery(source, "a.js", new Set()).source).toMatchInlineSnapshot(`
+    "export default {
+      scroll() {
+        let first = this.element;
+        let thread = this.element;
+        let trigger = this.element.querySelector('.trigger');
+      },
+    };
+    "
+  `);
+});
