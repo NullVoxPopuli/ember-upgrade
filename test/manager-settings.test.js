@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import {
   addOverride,
   addYamlListEntry,
+  releaseAge,
   setYamlMapEntry,
   setYamlNestedMap,
 } from "#manager-settings.js";
@@ -145,4 +146,27 @@ test("a pnpm override goes in resolutions when package.json has them, because pn
     "ember-cli-htmlbars": "^7.0.1",
   });
   expect(readFileSync(join(directory, "pnpm-workspace.yaml"), "utf8")).not.toContain("overrides");
+});
+
+test("the minimum release age comes from the workspace of the app", () => {
+  let root = mkdtempSync(join(tmpdir(), "release-age-"));
+
+  writeFileSync(
+    join(root, "pnpm-workspace.yaml"),
+    "packages:\n  - 'ghost/*'\nminimumReleaseAge: 4320 # 3 days in minutes\n",
+  );
+  writeFileSync(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+  writeFileSync(join(root, "package.json"), "{}\n");
+
+  expect(releaseAge(new Project(root))).toBe(4320);
+});
+
+test("an .npmrc sets the minimum release age, and no setting is 0", () => {
+  let root = mkdtempSync(join(tmpdir(), "release-age-"));
+
+  writeFileSync(join(root, "package.json"), "{}\n");
+  expect(releaseAge(new Project(root))).toBe(0);
+
+  writeFileSync(join(root, ".npmrc"), "minimum-release-age=1440\n");
+  expect(releaseAge(new Project(root))).toBe(1440);
 });

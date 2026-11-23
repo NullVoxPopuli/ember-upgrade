@@ -21,6 +21,21 @@ export function workspaceRoot(project) {
 
 /**
  * @param {Project} project
+ * @returns {number} the `minimumReleaseAge` setting of pnpm in minutes, or 0
+ */
+export function releaseAge(project) {
+  let root = workspaceRoot(project);
+  let yaml = root.has(WORKSPACE_FILE) ? root.read(WORKSPACE_FILE) : "";
+  let npmrc = root.has(".npmrc") ? root.read(".npmrc") : "";
+  let value =
+    /^minimumReleaseAge:\s*(\d+)/m.exec(yaml)?.[1] ??
+    /^minimum-release-age\s*=\s*(\d+)/m.exec(npmrc)?.[1];
+
+  return Number(value ?? 0);
+}
+
+/**
+ * @param {Project} project
  * @returns {number}
  */
 export function pnpmMajor(project) {

@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { exec, install, packageManager } from "#process.js";
+import { releaseAge } from "#manager-settings.js";
+import { exec, install, packageManager, setMinimumReleaseAge } from "#process.js";
 
 /** @typedef {import('#types.js').Finding} Finding */
 /** @typedef {import('#types.js').Stage} Stage */
@@ -153,6 +154,8 @@ async function runStages(project, stages, context) {
  * @returns {Promise<"done" | "stop" | "checked">}
  */
 async function runStage(project, stage, { log, commit, options, todo }) {
+  setMinimumReleaseAge(releaseAge(project));
+
   if (!stage.detect(project)) {
     log(`- ${stage.name}: nothing to do`);
     return "done";

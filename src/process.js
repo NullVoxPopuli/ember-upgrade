@@ -76,18 +76,77 @@ export function runUpstream(project, spec, args) {
  */
 
 /**
+ * The `minimumReleaseAge` of the project's package manager, in minutes.
+ * The runner sets it before each stage, because pnpm refuses to install a version that is newer.
+ */
+let minimumReleaseAge = 0;
+
+/**
+ * @param {number} minutes
+ */
+export function setMinimumReleaseAge(minutes) {
+  minimumReleaseAge = minutes;
+}
+
+/**
+ * @param {string[]} args
+ * @returns {any} the JSON output of `npm view`, or undefined
+ */
+function npmView(args) {
+  let result = spawnSync("npm", ["view"].concat(args, ["--json"]), {
+    encoding: "utf8",
+    shell: process.platform === "win32",
+  });
+
+  if (result.status !== 0 || !result.stdout.trim()) return;
+
+  return JSON.parse(result.stdout);
+}
+
+/**
+ * @param {string} name
+ * @param {string} [range]
+ * @returns {string | undefined} the newest version in the range, and not newer than `latest`, that is older than {@link minimumReleaseAge}
+ */
+function matureVersion(name, range) {
+  let info = npmView([name, "time", "dist-tags"]);
+  let latest = info?.["dist-tags"]?.latest;
+  let matching = npmView([`${name}@${range ?? `<=${latest}`}`, "version"]);
+  let versions = Array.isArray(matching) ? matching : [matching];
+  let cutoff = Date.now() - minimumReleaseAge * 60_000;
+
+  for (let index = versions.length - 1; index >= 0; index--) {
+    let version = versions[index];
+    let time = Date.parse(info?.time?.[version] ?? "");
+
+    if (typeof version === "string" && !version.includes("-") && time <= cutoff) return version;
+  }
+}
+
+/**
  * Reads the latest published version of a package from the registry.
+ * With a {@link minimumReleaseAge}, it reads the newest version that is old enough.
  *
  * @param {string} name
  * @param {string} [range] reads the latest version in this range, such as `4`
  * @returns {Published | undefined} undefined when the registry does not have it
  */
 export function published(name, range) {
+  let spec = range ? `${name}@${range}` : name;
+
+  if (minimumReleaseAge > 0) {
+    let version = matureVersion(name, range);
+
+    if (!version) return;
+
+    spec = `${name}@${version}`;
+  }
+
   let result = spawnSync(
     "npm",
     [
       "view",
-      range ? `${name}@${range}` : name,
+      spec,
       "version",
       "keywords",
       "ember-addon",
