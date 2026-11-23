@@ -5,6 +5,7 @@ import { toGlimmer } from "./glimmer.js";
 import { findInvocations } from "./invocations.js";
 import { rewriteJQuery } from "./jquery.js";
 import { inlineMixins } from "./mixins.js";
+import { rewriteKeyboard } from "./keyboard.js";
 import { rewritePrototypeExtensions } from "./prototype-extensions.js";
 import { readClassicComponent } from "./read.js";
 import { needsActionHandler, needsActionValue, rewriteTemplate } from "./template.js";
@@ -52,7 +53,8 @@ const TEARDOWN = new Set(["willDestroyElement", "willClearRender"]);
  * @param {Resolve} resolve
  */
 function analyze(candidate, template, templates, resolve) {
-  let mixins = inlineMixins(candidate.source, candidate.file, resolve);
+  let keyboard = rewriteKeyboard(candidate.source, candidate.file);
+  let mixins = inlineMixins(keyboard, candidate.file, resolve);
   let extensions = rewritePrototypeExtensions(mixins.source, candidate.file);
   let jquery = rewriteJQuery(extensions, candidate.file, TEARDOWN);
   let accessors = rewriteAccessors(jquery.source, candidate.file);
@@ -99,6 +101,18 @@ function analyze(candidate, template, templates, resolve) {
   }
   for (let key of fromTemplate.writes) writes.add(key);
   for (let key of accessors.sets) writes.add(key);
+
+  /**
+   * The `on-key` helper in the new template reads the keyboard properties.
+   */
+  if (keyboard !== candidate.source) {
+    for (let key of ["keyboardActivated", "keyboardPriority"]) {
+      if (key === "keyboardPriority" && !passed.has(key)) continue;
+
+      reads.add(key);
+      fromTemplate.reads.add(key);
+    }
+  }
 
   let names = classifyNames(component, {
     passed,

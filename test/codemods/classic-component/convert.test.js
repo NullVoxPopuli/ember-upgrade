@@ -924,3 +924,134 @@ export default Component.extend({
     "
   `);
 });
+
+/**
+ * From code-corps-ember (MIT), shortened.
+ */
+test("the listeners of ember-keyboard become the on-key helper", () => {
+  let sources = new Map([
+    [
+      "app/components/task-card.js",
+      `import Component from '@ember/component';
+import { on } from '@ember/object/evented';
+import { set } from '@ember/object';
+import { EKMixin as EmberKeyboardMixin, keyDown, keyUp } from 'ember-keyboard';
+
+export default Component.extend(EmberKeyboardMixin, {
+  tagName: '',
+
+  triggerArchive: on(keyDown('KeyC'), function(event) {
+    event.preventDefault();
+  }),
+
+  release: on(keyUp('Escape'), function() {}),
+
+  actions: {
+    activate() {
+      set(this, 'keyboardActivated', true);
+    },
+  },
+});
+`,
+    ],
+    ["app/components/task-card.hbs", `<button {{action "activate"}}>Activate</button>\n`],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/task-card.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { set, action } from '@ember/object';
+    import { tracked } from '@glimmer/tracking';
+
+    export default class TaskCard extends Component {
+      @tracked keyboardActivated = false;
+
+      @action
+      triggerArchive(event) {
+        event.preventDefault();
+      }
+
+      @action
+      release() {}
+
+      @action
+      activate() {
+        set(this, 'keyboardActivated', true);
+      }
+
+      /**
+       * Runs an action as the \`{{action}}\` modifier did, without the event.
+       */
+      handleAction =
+        (run, options = {}) =>
+        (event) => {
+          if (options.preventDefault !== false) event.preventDefault();
+          if (options.bubbles === false) event.stopPropagation();
+
+          return run();
+        };
+    }
+    "
+  `);
+  expect(result.files.get("app/components/task-card.hbs")).toMatchInlineSnapshot(`
+    "{{on-key "KeyC" this.triggerArchive activated=this.keyboardActivated}}{{on-key "Escape" this.release event="keyup" activated=this.keyboardActivated}}
+    <button {{on "click" (this.handleAction this.activate)}}>Activate</button>
+    "
+  `);
+});
+
+/**
+ * From code-corps-ember (MIT), shortened.
+ */
+test("an action that only calls the method of its name", () => {
+  let sources = new Map([
+    [
+      "app/components/task-assignment.js",
+      `import Component from '@ember/component';
+import { inject as service } from '@ember/service';
+
+export default Component.extend({
+  tagName: '',
+  store: service(),
+
+  changeUser(user) {
+    return this.store.assign(user);
+  },
+
+  actions: {
+    changeUser(user) {
+      this.changeUser(user);
+    },
+  },
+});
+`,
+    ],
+    ["app/components/task-assignment.hbs", `<UserSelect @onchange={{action "changeUser"}} />\n`],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/task-assignment.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { inject as service } from '@ember/service';
+    import { action } from '@ember/object';
+
+    export default class TaskAssignment extends Component {
+      @service()
+      store;
+
+      @action
+      changeUser(user) {
+        return this.store.assign(user);
+      }
+    }
+    "
+  `);
+  expect(result.files.get("app/components/task-assignment.hbs")).toMatchInlineSnapshot(`
+    "<UserSelect @onchange={{this.changeUser}} />
+    "
+  `);
+});

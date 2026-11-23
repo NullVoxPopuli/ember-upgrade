@@ -56,6 +56,18 @@ export function rewriteTemplate(template, component, names, glimmer) {
   let unreadable = [];
   let members = new Set(component.members.map((entry) => entry.name));
   let call = (/** @type {Glimmer["helpers"][number]} */ helper) => {
+    if (helper.keyboard) {
+      let { event, combo } = helper.keyboard;
+      let named = event === "keydown" ? "" : ` event="${event}"`;
+
+      if (members.has("keyboardPriority")) {
+        named += " priority=this.keyboardPriority";
+      } else if (names.args.has("keyboardPriority")) {
+        named += " priority=@keyboardPriority";
+      }
+
+      return `{{on-key "${combo}" this.${helper.name}${named} activated=this.keyboardActivated}}`;
+    }
     if (helper.observer) return `{{this.${OBSERVE} "${helper.name}" ${helper.args.join(" ")}}}`;
     if (helper.afterRender) {
       return `{{this.${AFTER_RENDER} "${helper.name}"${helper.args.map((arg) => ` ${arg}`).join("")}}}`;
