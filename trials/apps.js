@@ -67,6 +67,7 @@ export const apps = [
       "ember-cli-shims",
       "ember-cli-htmlbars-inline-precompile",
       "ember-watson",
+      "ember-cli-qunit",
       "ember-functions-as-helper-polyfill",
       "ember-cli-code-coverage",
       "ember-cli-moment-shim",
