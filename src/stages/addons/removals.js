@@ -1,7 +1,13 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { removeBuildOptions } from "#config-files.js";
-import { dependencyNames, editPackageJson, removeDependency } from "#package-json.js";
+import {
+  dependencyNames,
+  editPackageJson,
+  removeDependency,
+  setDependency,
+} from "#package-json.js";
+import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
 
 /** @typedef {import('#types.js').Finding} Finding */
@@ -14,8 +20,10 @@ import { recordProgress } from "#progress.js";
  * @property {(name: string) => boolean} matches the packages to remove
  * @property {string[]} [buildOptions] the options in ember-cli-build that only these packages read
  * @property {string[]} [files] files that only these packages read
+ * @property {Record<string, string>} [replaceWith] packages that the app imports instead, with a fallback version, such as the library that a shim addon wrapped
  * @property {Omit<ProgressEntry, "id" | "status">} [progress] work that the removal leaves open
  * @property {(project: import('#project.js').Project) => Finding[]} [todo]
+ * @property {(project: import('#project.js').Project) => void} [after] changes the app after the removal
  */
 
 /**
@@ -46,6 +54,12 @@ function removalStage(removal) {
 
       editPackageJson(project, (pkg) => {
         for (let name of names) removeDependency(pkg, name);
+
+        for (let [name, fallback] of Object.entries(removal.replaceWith ?? {})) {
+          if (pkg.dependencies?.[name] || pkg.devDependencies?.[name]) continue;
+
+          setDependency(pkg, name, `^${published(name)?.version ?? fallback}`);
+        }
       });
 
       removeBuildOptions(project, removal.buildOptions ?? []);
@@ -53,6 +67,8 @@ function removalStage(removal) {
       for (let file of removal.files ?? []) {
         rmSync(join(project.directory, file), { force: true });
       }
+
+      removal.after?.(project);
 
       if (removal.progress) {
         recordProgress(
@@ -191,3 +207,130 @@ export const qunitConsoleGrouper = removalStage({
     links: ["https://github.com/simplabs/qunit-console-grouper"],
   },
 });
+
+/**
+ * Build tools that Vite replaces, and polyfills and shims for what Ember 6 and Vite do on their own.
+ * Each one has no v2 release, so the v2-addons stage cannot update it.
+ *
+ * @type {(Omit<Removal, "matches" | "label"> & { label: string })[]}
+ */
+const OBSOLETE = [
+  { name: "ember-cli-eslint", label: "It lints in the ember-cli build. Run eslint on its own" },
+  {
+    name: "ember-cli-stylelint",
+    label: "It lints in the ember-cli build. Run stylelint on its own",
+  },
+  { name: "ember-cli-release", label: "It is an ember-cli command" },
+  {
+    name: "ember-cli-uglify",
+    label: "Vite minifies the build",
+    buildOptions: ["ember-cli-uglify"],
+  },
+  { name: "ember-cli-shims", label: "ember-source has the modules that it mapped" },
+  {
+    name: "ember-cli-htmlbars-inline-precompile",
+    label: "babel-plugin-ember-template-compilation compiles `hbs` templates",
+  },
+  { name: "ember-watson", label: "It is an ember-cli command" },
+  {
+    name: "ember-cli-qunit",
+    label: "ember-qunit replaces it",
+    replaceWith: { "ember-qunit": "9.0.4" },
+  },
+  {
+    name: "ember-try",
+    label: "It runs ember-cli scenarios",
+    files: ["config/ember-try.js"],
+    progress: {
+      note: "ember-try is removed. To test against other versions, use @embroider/try.",
+      links: ["https://github.com/embroider-build/embroider/tree/main/packages/try"],
+    },
+  },
+  { name: "ember-cli-typescript", label: "Babel compiles TypeScript in the Vite build" },
+  { name: "ember-cli-typescript-blueprints", label: "It holds ember-cli blueprints" },
+  { name: "ember-cli-blueprint-test-helpers", label: "It tests ember-cli blueprints" },
+  {
+    name: "ember-maybe-import-regenerator",
+    label: "Vite builds for browsers with native generators",
+  },
+  {
+    name: "ember-angle-bracket-invocation-polyfill",
+    label: "Ember 3.10 and later have angle brackets",
+  },
+  {
+    name: "ember-functions-as-helper-polyfill",
+    label: "Ember 4.5 and later call plain functions as helpers",
+  },
+  {
+    name: "ember-cli-code-coverage",
+    label: "It instruments the ember-cli build",
+    files: [".nycrc", "config/coverage.js"],
+    progress: {
+      note: "ember-cli-code-coverage is removed, because it instruments the ember-cli build. For coverage of a Vite build, add vite-plugin-istanbul.",
+      links: ["https://github.com/iFaxity/vite-plugin-istanbul"],
+    },
+  },
+  {
+    name: "ember-cli-moment-shim",
+    label: "The app imports moment from npm",
+    buildOptions: ["moment"],
+    replaceWith: { moment: "2.30.1" },
+  },
+  {
+    name: "ember-mockdate-shim",
+    label: "The tests import mockdate from npm",
+    replaceWith: { mockdate: "3.0.5" },
+  },
+  {
+    name: "ember-normalize",
+    label: "The app imports normalize.css from npm",
+    replaceWith: { "normalize.css": "8.0.1" },
+    after: importNormalize,
+  },
+];
+
+/**
+ * ember-normalize added normalize.css to the styles. The app imports it now, unless its styles do already.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function importNormalize(project) {
+  let styles = project.files(["app/**/*.{css,scss,sass,less,js,ts}"]);
+
+  if (styles.some((file) => project.read(file).includes("normalize.css"))) return;
+
+  let app = ["app/app.js", "app/app.ts"].find((file) => project.has(file));
+
+  if (!app) return;
+
+  project.write(app, `import "normalize.css";\n${project.read(app)}`);
+}
+
+/**
+ * One stage for each obsolete addon, so that each removal is its own commit.
+ *
+ * @type {import('#types.js').StageGroup}
+ */
+export const obsoleteAddons = {
+  name: "obsolete-addons",
+  label: "Remove the addons that Vite and Ember 6 replace, one commit for each",
+
+  async expand() {
+    return OBSOLETE.map((entry) =>
+      removalStage(
+        Object.assign({}, entry, {
+          label: `Remove ${entry.name}. ${entry.label}`,
+          matches: (/** @type {string} */ name) => name === entry.name,
+        }),
+      ),
+    );
+  },
+};
+
+/**
+ * @param {string} name
+ * @returns {boolean} a removal stage handles the addon
+ */
+export function isObsoleteAddon(name) {
+  return OBSOLETE.some((entry) => entry.name === name);
+}

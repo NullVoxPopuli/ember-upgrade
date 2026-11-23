@@ -24,7 +24,7 @@ const ADDON = "node_modules/emberx-select";
 
 /**
  * From emberx-select 3.1.1 and emberobserver/client, shortened.
- * `x-legacy` imports its template as `layout`, as many v1 addons did.
+ * `x-legacy` imports its template as `layout`, and reads the `Ember` global, as many v1 addons did.
  */
 test("a v1 addon with no v2 release moves into the app", async () => {
   let app = project({
@@ -42,7 +42,7 @@ test("a v1 addon with no v2 release moves into the app", async () => {
     [`${ADDON}/addon/components/x-select.js`]:
       "import Component from '@ember/component';\nimport { helper } from 'emberx-select/utils/helper';\nexport default Component.extend({});\n",
     [`${ADDON}/addon/components/x-legacy.js`]:
-      "import Component from '@ember/component';\nimport layout from '../templates/components/x-legacy';\nexport default Component.extend({\n  layout,\n  tagName: '',\n});\n",
+      "import Ember from 'ember';\nimport layout from '../templates/components/x-legacy';\nexport default Ember.Component.extend({\n  layout,\n  tagName: '',\n});\n",
     [`${ADDON}/addon/utils/helper.js`]: "export function helper() {}\n",
     [`${ADDON}/addon/templates/components/x-select.hbs`]: "<select>{{yield}}</select>\n",
     [`${ADDON}/addon/templates/components/x-legacy.hbs`]: "Old\n",

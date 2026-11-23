@@ -157,3 +157,21 @@ test("a variable that holds an element next to the element, and triggers an even
     }
   `);
 });
+
+test("the first element that a selector matches", () => {
+  let source = `export default {
+  didRender() {
+    let frame = this.$('iframe')[0];
+  },
+};
+`;
+
+  expect(rewriteJQuery(source, "a.js", new Set()).source).toMatchInlineSnapshot(`
+    "export default {
+      didRender() {
+        let frame = this.element.querySelector('iframe');
+      },
+    };
+    "
+  `);
+});

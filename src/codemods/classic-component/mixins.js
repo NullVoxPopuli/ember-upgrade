@@ -133,14 +133,14 @@ function readMixin(source, program) {
 
   let callee = exported?.type === "CallExpression" ? exported.callee : undefined;
   let mixin = callee?.type === "MemberExpression" ? imports.get(callee.object?.name) : undefined;
+  let isMixin = mixin?.module === "@ember/object/mixin" && callee.property?.name === "create";
+  /**
+   * A classic component that another one extends gives its properties in the same way.
+   */
+  let isComponent = mixin?.module === "@ember/component" && callee.property?.name === "extend";
 
-  if (
-    !mixin ||
-    mixin.module !== "@ember/object/mixin" ||
-    mixin.imported !== "default" ||
-    callee.property?.name !== "create"
-  ) {
-    return { reason: "the default export is not Mixin.create()" };
+  if (!mixin || mixin.imported !== "default" || !(isMixin || isComponent)) {
+    return { reason: "the default export is not Mixin.create() or Component.extend()" };
   }
 
   /** @type {Node[]} */
@@ -303,7 +303,23 @@ export function inlineMixins(source, file, resolve) {
       let outer = /** @type {Record<string, unknown>} */ (component.outerHtml)[key];
 
       if (MERGED.has(key) && (own || (Array.isArray(outer) && outer.length > 0))) {
-        unreadable.push(`the mixin ${name} and the component both have ${key}`);
+        /**
+         * The reader keeps the element's properties, such as `classNames`, out of the members.
+         */
+        let ownProperty =
+          own?.node ??
+          object?.properties.find((/** @type {Node} */ entry) => keyName(entry.key) === key);
+        let merged = ownProperty
+          ? mergeProperty(resolved.source, property, source, ownProperty)
+          : undefined;
+
+        if (merged === undefined) {
+          unreadable.push(`the mixin ${name} and the component both have ${key}`);
+          continue;
+        }
+
+        superEdits.push({ node: ownProperty.value, text: merged });
+        used.push(property);
         continue;
       }
 
@@ -469,4 +485,138 @@ function relativeSpecifier(from, target) {
   let specifier = posix.relative(posix.dirname(from), target);
 
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
+}
+
+/**
+ * Ember concatenates the arrays of `classNames` and the other concatenated properties, and merges the `actions` objects.
+ *
+ * @param {string} mixinSource
+ * @param {Node} mixinProperty
+ * @param {string} source
+ * @param {Node} ownProperty
+ * @returns {string | undefined} the merged value, or undefined when the values are not literals that merge
+ */
+function mergeProperty(mixinSource, mixinProperty, source, ownProperty) {
+  let theirs = mixinProperty.value;
+  let ours = ownProperty.value;
+  let text = (/** @type {string} */ from, /** @type {Node} */ node) =>
+    from.slice(node.start, node.end);
+
+  if (theirs?.type === "ArrayExpression" && ours?.type === "ArrayExpression") {
+    let elements = theirs.elements
+      .map((/** @type {Node} */ node) => text(mixinSource, node))
+      .concat(ours.elements.map((/** @type {Node} */ node) => text(source, node)));
+
+    return `[${elements.join(", ")}]`;
+  }
+
+  if (theirs?.type !== "ObjectExpression" || ours?.type !== "ObjectExpression") return;
+
+  let names = new Set(ours.properties.map((/** @type {Node} */ node) => keyName(node.key)));
+
+  for (let node of theirs.properties) {
+    let key = keyName(node.key);
+    let mine = ours.properties.find((/** @type {Node} */ entry) => keyName(entry.key) === key);
+
+    if (node.type !== "Property" || node.computed || !key) return;
+    if (mine && callsSuper(mine)) return;
+  }
+
+  let entries = theirs.properties
+    .filter((/** @type {Node} */ node) => !names.has(keyName(node.key)))
+    .map((/** @type {Node} */ node) => text(mixinSource, node))
+    .concat(ours.properties.map((/** @type {Node} */ node) => text(source, node)));
+
+  return `{\n${entries.map((/** @type {string} */ entry) => `    ${entry},`).join("\n\n")}\n  }`;
+}
+
+/**
+ * A classic component that extends another classic component of the app, such as `StripeElement.extend({})`,
+ * gets the properties of that component, as a mixin's, and extends `Component`.
+ * The superclass of an addon stays.
+ *
+ * @param {string} source the component module
+ * @param {string} file
+ * @param {Resolve} resolve
+ * @returns {{ source: string, unreadable: string[] }}
+ */
+export function inlineSuperclass(source, file, resolve) {
+  let program = parseProgram(source, file);
+  let component = program ? readSubclass(program) : undefined;
+
+  if (!program || !component) return { source, unreadable: [] };
+
+  let { call, local, module } = component;
+  let resolved = resolve(module, file);
+
+  if (!resolved) return { source, unreadable: [] };
+
+  /**
+   * The superclass can extend another one, and use mixins.
+   */
+  let base = inlineSuperclass(resolved.source, resolved.file, resolve);
+  let baseMixins = base.unreadable.length
+    ? base
+    : inlineMixins(base.source, resolved.file, resolve);
+
+  if (baseMixins.unreadable.length > 0) {
+    return {
+      source,
+      unreadable: baseMixins.unreadable.map((reason) => `the superclass ${local}: ${reason}`),
+    };
+  }
+
+  let imports = importMap(program);
+  let componentLocal = Array.from(imports).find(
+    ([, value]) => value.module === "@ember/component" && value.imported === "default",
+  )?.[0];
+  let edits = new Edits(source);
+  let name = componentLocal ?? "Component";
+
+  edits.replace(call.callee, `${name}.extend`);
+
+  if (call.arguments.length > 0) {
+    edits.insert(call.arguments[0].start, `${local}, `);
+  } else {
+    edits.insert(call.end - 1, local);
+  }
+
+  if (!componentLocal) edits.insert(0, "import Component from '@ember/component';\n");
+
+  let rewritten = edits.apply();
+  let target = resolved.file;
+
+  return inlineMixins(rewritten, file, (specifier, from) =>
+    specifier === module && from === file
+      ? { file: target, source: baseMixins.source }
+      : resolve(specifier, from),
+  );
+}
+
+/**
+ * @param {Node} program
+ * @returns {{ call: Node, local: string, module: string } | undefined} the default export, when it is `Local.extend()` of a default import that is not `@ember/component`
+ */
+function readSubclass(program) {
+  let imports = importMap(program);
+  let exported = program.body.find(
+    (/** @type {Node} */ node) => node.type === "ExportDefaultDeclaration",
+  )?.declaration;
+
+  if (exported?.type === "Identifier") {
+    exported = declarations(program)
+      .get(exported.name)
+      ?.declarations?.find((/** @type {Node} */ entry) => entry.id?.name === exported.name)?.init;
+  }
+
+  let callee = exported?.type === "CallExpression" ? exported.callee : undefined;
+
+  if (callee?.type !== "MemberExpression" || callee.property?.name !== "extend") return;
+  if (callee.object?.type !== "Identifier") return;
+
+  let from = imports.get(callee.object.name);
+
+  if (!from || from.imported !== "default" || from.module.startsWith("@ember/")) return;
+
+  return { call: exported, local: callee.object.name, module: from.module };
 }

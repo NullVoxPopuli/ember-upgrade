@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
+import { renameTitleHelper } from "#stages/ember-source/page-title.js";
 
 /**
  * @param {Record<string, unknown>} pkg
@@ -75,4 +76,21 @@ test("an app on an LTS gets no step for it", async () => {
 
   expect(await classicLts.expand(app)).toEqual([]);
   expect((await viteLts.expand(app)).map((stage) => stage.name)).toEqual(["ember-source-7.4"]);
+});
+
+/**
+ * From code-corps/code-corps-ember (MIT), shortened.
+ */
+test("the title helper of ember-page-title 3 becomes page-title", () => {
+  expect(
+    renameTitleHelper(`{{title "Settings"}}
+{{~title (concat model.name " Tasks") separator=" | "}}
+<h1 title={{title}}>{{title}}</h1>
+`),
+  ).toMatchInlineSnapshot(`
+    "{{page-title "Settings"}}
+    {{~page-title (concat model.name " Tasks") separator=" | "}}
+    <h1 title={{title}}>{{title}}</h1>
+    "
+  `);
 });
