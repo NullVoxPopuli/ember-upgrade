@@ -124,6 +124,7 @@ function isSuperCall(node) {
 /**
  * The accessor of an argument that the component sets, as a classic component set its own properties.
  * The component's value lasts until the caller passes a new one. The callback tells a caller that bound the argument with `mut`.
+ * As with `set()`, the same value changes nothing, so a component can set it while it renders.
  *
  * @param {string} name
  * @param {Names} names
@@ -145,6 +146,7 @@ function ownArgument(name, names) {
     `\u21e5\u21e5return own && own.arg === ${read} ? own.value : ${value};`,
     `\u21e5}\n`,
     `\u21e5set ${memberName(name)}(value) {`,
+    `\u21e5\u21e5if (value === this${member(name)}) return;\n`,
     `\u21e5\u21e5this.${local} = { arg: ${read}, value };`,
     `\u21e5\u21e5this.args.${callback}?.(value);`,
     `\u21e5}`,

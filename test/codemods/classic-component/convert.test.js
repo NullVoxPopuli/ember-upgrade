@@ -1249,6 +1249,8 @@ export default class DependencyTable extends Component {
       }
 
       set collapsed(value) {
+        if (value === this.collapsed) return;
+
         this.localCollapsed = { arg: this.args.collapsed, value };
         this.args.onCollapsedChange?.(value);
       }
