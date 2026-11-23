@@ -3,7 +3,8 @@ import { join } from "node:path";
 
 import { parseProgram, walk } from "#ast.js";
 import { Edits } from "#edits.js";
-import { importMap } from "#codemods/imports.js";
+import { importMap, updateImports } from "#codemods/imports.js";
+import { macroGetter, readPath } from "#codemods/classic-component/macros.js";
 import { NestedEdits } from "#codemods/nested-edits.js";
 import { modulePrefix } from "#module-prefix.js";
 
@@ -238,7 +239,11 @@ export function explicitRelationshipOptions(project) {
     let before = project.read(file);
     let after = readHasManyAsArray(
       unwrapRelationshipValues(
-        nativeArrayMethods(withoutFirstAndLastObject(before, file, from), file, from),
+        nativeArrayMethods(
+          withoutFirstAndLastObject(arrayMacroGetters(before, file, from), file, from),
+          file,
+          from,
+        ),
         file,
         relationships,
         from,
@@ -269,7 +274,10 @@ const ARRAY_MODULE = "app/utils/as-array";
 /**
  * The module for apps whose async hasMany relationships and record arrays lost the array extensions.
  */
-export const AS_ARRAY_SOURCE = `/**
+export const AS_ARRAY_SOURCE = `import { get } from "@ember/object";
+import { compare } from "@ember/utils";
+
+/**
  * Reads a list as an array. A native array or an ember-data record array stays as it is.
  * An async hasMany gives the records that it loaded, and nothing before they load.
  */
@@ -283,6 +291,25 @@ export default function asArray(value) {
   value.forEach?.((item) => items.push(item));
 
   return items;
+}
+
+/**
+ * Sorts a list as the \`sort\` macro did, by definitions such as \`["name", "score:desc"]\`.
+ */
+export function sortBy(list, definitions) {
+  let keys = Array.from(definitions, (definition) => definition.split(":"));
+
+  return asArray(list)
+    .slice()
+    .sort((a, b) => {
+      for (let [key, direction] of keys) {
+        let result = compare(get(a, key), get(b, key));
+
+        if (result !== 0) return direction === "desc" ? -result : result;
+      }
+
+      return 0;
+    });
 }
 
 /**
@@ -678,6 +705,132 @@ const NATIVE_READS = new Set([
   "flatMap",
   "join",
 ]);
+
+/**
+ * The macros of `@ember/object/computed` that read a list. They give an empty list for a PromiseManyArray,
+ * because it is not an array.
+ */
+const ARRAY_MACROS = new Set(["sort", "mapBy", "filterBy", "uniq", "uniqBy", "sum", "max", "min"]);
+
+/**
+ * Rewrites the array macros, such as `@sort('args.categories', 'categorySorting')`, to getters
+ * that read the list through asArray(), so that an async hasMany gives its records.
+ * A Glimmer component reads its keys from `this`. Other classes read them with `get()`, which tracks them.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @param {string} [from]
+ * @returns {string}
+ */
+export function arrayMacroGetters(source, file, from = ARRAY_MODULE) {
+  if (!source.includes("@ember/object/computed")) return source;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let imports = importMap(program);
+  let get = Array.from(imports).find(
+    ([, value]) => value.module === "@ember/object" && value.imported === "get",
+  )?.[0];
+  let edits = new Edits(source);
+  let needs = { get: false, array: false, sortBy: false };
+  let print = (/** @type {Node} */ node) => source.slice(node.start, node.end);
+
+  walk(program, (node) => {
+    if (node.type !== "ClassDeclaration" && node.type !== "ClassExpression") return;
+
+    let parent =
+      node.superClass?.type === "Identifier" ? imports.get(node.superClass.name) : undefined;
+    let glimmer = parent?.module === "@glimmer/component" && parent.imported === "default";
+
+    for (let member of node.body.body) {
+      let decorator = member.decorators?.length === 1 ? member.decorators[0].expression : undefined;
+
+      if (member.type !== "PropertyDefinition" || member.value || member.static || member.computed)
+        continue;
+      if (decorator?.type !== "CallExpression" || decorator.callee.type !== "Identifier") continue;
+
+      let macro = imports.get(decorator.callee.name);
+
+      if (macro?.module !== "@ember/object/computed" || !ARRAY_MACROS.has(macro.imported)) continue;
+
+      let args = decorator.arguments.map((/** @type {Node} */ arg) => ({
+        text: print(arg),
+        string: arg.type === "Literal" && typeof arg.value === "string" ? arg.value : undefined,
+        node: arg,
+      }));
+      let quote = source[decorator.arguments[0]?.start] === '"' ? '"' : "'";
+      let read = (/** @type {string} */ key) => {
+        if (glimmer) return readPath(key);
+
+        needs.get = true;
+
+        return `${get ?? "get"}(this, ${quote}${key}${quote})`;
+      };
+      let list = (/** @type {string} */ path) => {
+        needs.array = true;
+
+        return `${ARRAY}(${path})`;
+      };
+      let key = args[0]?.string;
+      let body;
+
+      if (macro.imported === "sort" && key !== undefined) {
+        let last = args.at(-1);
+
+        if (args.length === 2 && last?.string !== undefined) {
+          needs.sortBy = true;
+          body = `sortBy(${read(key)}, ${read(last.string)})`;
+        } else if (
+          (args.length === 2 || (args.length === 3 && args[1]?.node.type === "ArrayExpression")) &&
+          last
+        ) {
+          let fn = last.node;
+          /**
+           * The macro called the comparator with the object as `this`, as an arrow function in the getter does.
+           */
+          let comparator =
+            fn.type === "FunctionExpression" &&
+            !fn.generator &&
+            !fn.async &&
+            !/\barguments\b/.test(last.text)
+              ? `(${fn.params.map(print).join(", ")}) => ${print(fn.body)}`
+              : last.text;
+
+          body = `${list(read(key))}.slice().sort(${comparator.replace(/\n/g, "\n  ")})`;
+        }
+      } else {
+        body = macroGetter({ name: macro.imported, args }, undefined, { read, list })?.body;
+      }
+
+      if (!body) continue;
+
+      let indent = /[ \t]*$/.exec(source.slice(0, member.start))?.[0] ?? "";
+
+      edits.replace(
+        { start: member.decorators[0].start, end: member.end },
+        `get ${print(member.key)}() {\n${indent}  return ${body};\n${indent}}`,
+      );
+    }
+  });
+
+  if (edits.size === 0) return source;
+
+  /** @type {Map<string, Set<string>>} */
+  let add = new Map();
+
+  if (needs.get && !get) add.set("@ember/object", new Set(["get"]));
+  if (needs.array || needs.sortBy) {
+    let names = new Set();
+
+    if (needs.array) names.add(`default:${ARRAY}`);
+    if (needs.sortBy) names.add("sortBy");
+    add.set(from, names);
+  }
+
+  return updateImports(edits.apply(), file, { prune: ["@ember/object/computed"], add });
+}
 
 /**
  * A native array method on an async hasMany, such as `get(this, 'result.compatibilities').filter(...)`,

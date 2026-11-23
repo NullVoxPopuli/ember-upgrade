@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
 import {
+  arrayMacroGetters,
   explicitRelationships,
   nativeArrayMethods,
   readHasManyAsArray,
@@ -320,6 +321,65 @@ test("a native array method on an async hasMany reads through asArray", () => {
   ).toMatchInlineSnapshot(`
     "import asArray from 'ember-observer/utils/as-array';
     let released = asArray(get(this.args, 'testResult.emberVersionCompatibilities')).filter((v) => v.released);
+    "
+  `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("an array macro becomes a getter that reads the list through asArray", () => {
+  expect(
+    arrayMacroGetters(
+      `import { sort, filterBy } from '@ember/object/computed';
+import Component from '@glimmer/component';
+import Controller from '@ember/controller';
+
+export class InlineCategoryList extends Component {
+  categorySorting = ['totalAddonCount:desc'];
+
+  @sort('args.categories', 'categorySorting')
+  categoriesSortedByAddonCount;
+}
+
+export class ShowController extends Controller {
+  @filterBy('model.addons', 'isDeprecated', false)
+  activeAddons;
+
+  @sort('activeAddons', function (a, b) {
+    return this.compare(a, b);
+  })
+  sortedAddons;
+}
+`,
+      "app/components/inline-category-list.js",
+      "ember-observer/utils/as-array",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import Controller from '@ember/controller';
+    import { get } from '@ember/object';
+    import asArray, { sortBy } from 'ember-observer/utils/as-array';
+
+    export class InlineCategoryList extends Component {
+      categorySorting = ['totalAddonCount:desc'];
+
+      get categoriesSortedByAddonCount() {
+        return sortBy(this.args?.categories, this.categorySorting);
+      }
+    }
+
+    export class ShowController extends Controller {
+      get activeAddons() {
+        return asArray(get(this, 'model.addons')).filter((item) => item.isDeprecated === false);
+      }
+
+      get sortedAddons() {
+        return asArray(get(this, 'activeAddons')).slice().sort((a, b) => {
+          return this.compare(a, b);
+        });
+      }
+    }
     "
   `);
 });
