@@ -1,4 +1,4 @@
-import { parseProgram, propertyName, walk } from "#ast.js";
+import { parseProgram, propertyName, SKIP, walk } from "#ast.js";
 import { Edits } from "#edits.js";
 
 /** @typedef {import('#ast.js').Node} Node */
@@ -51,6 +51,9 @@ export function removeProperty(edits, property) {
 
 /**
  * Removes options that the app passes to `new EmberApp(defaults, { ... })`.
+ * The options can be in a variable, such as `let options = {}`, with assignments such as
+ * `options.inlineContent['x'] = 'y'`. An `if` that only sets removed options goes too,
+ * and so does a `require` whose binding nothing reads anymore, such as a flag parser.
  *
  * @param {import('#project.js').Project} project
  * @param {string[]} names
@@ -62,30 +65,151 @@ export function removeBuildOptions(project, names) {
   if (!file) return [];
 
   let source = project.read(file);
+  let result = withoutBuildOptions(source, file, names);
+
+  if (result.source !== source) project.write(file, result.source);
+
+  return result.removed;
+}
+
+/**
+ * @param {string} source ember-cli-build
+ * @param {string} file
+ * @param {string[]} names
+ * @returns {{ source: string, removed: string[] }}
+ */
+export function withoutBuildOptions(source, file, names) {
   let program = parseProgram(source, file);
 
-  if (!program) return [];
+  if (!program) return { source, removed: [] };
 
   let edits = new Edits(source);
-  /** @type {string[]} */
-  let removed = [];
+  /** @type {Set<string>} */
+  let removed = new Set();
+  /** @type {Node | undefined} */
+  let options;
+  /** @type {string | undefined} */
+  let variable;
 
   walk(program, (node) => {
-    if (node.type !== "NewExpression" || node.arguments[1]?.type !== "ObjectExpression") return;
+    if (node.type !== "NewExpression" || !node.arguments[1]) return;
 
-    for (let property of node.arguments[1].properties) {
-      let name = propertyName(property);
+    let arg = node.arguments[1];
 
-      if (name && names.includes(name)) {
-        removeProperty(edits, property);
-        removed.push(name);
-      }
-    }
+    if (arg.type === "ObjectExpression") options = arg;
+    if (arg.type === "Identifier") variable = arg.name;
   });
 
-  if (edits.size > 0) project.write(file, edits.apply());
+  if (variable) {
+    walk(program, (node) => {
+      if (node.type === "VariableDeclarator" && node.id?.name === variable) {
+        if (node.init?.type === "ObjectExpression") options = node.init;
+      }
+    });
+  }
 
-  return removed;
+  let properties = options?.properties ?? [];
+  let matching = properties.filter((/** @type {Node} */ property) => {
+    let name = propertyName(property);
+
+    return name && names.includes(name);
+  });
+
+  if (options && matching.length > 0 && matching.length === properties.length) {
+    edits.replace(options, "{}");
+  } else {
+    for (let property of matching) removeProperty(edits, property);
+  }
+
+  for (let property of matching) removed.add(/** @type {string} */ (propertyName(property)));
+
+  /**
+   * @param {Node} statement
+   * @returns {string | undefined} the option that the statement sets, such as `inlineContent` for `options.inlineContent['x'] = 'y';`
+   */
+  let setsOption = (statement) => {
+    let target = statement.type === "ExpressionStatement" ? statement.expression : undefined;
+    let left = target?.type === "AssignmentExpression" ? target.left : undefined;
+
+    while (left?.type === "MemberExpression" && left.object?.type === "MemberExpression") {
+      left = left.object;
+    }
+
+    if (left?.type !== "MemberExpression" || left.object?.name !== variable || left.computed)
+      return;
+
+    return names.includes(left.property.name) ? left.property.name : undefined;
+  };
+
+  if (variable) {
+    walk(program, (node) => {
+      let name = setsOption(node);
+
+      if (name) {
+        edits.removeLine(node);
+        removed.add(name);
+        return;
+      }
+
+      let body =
+        node.type === "IfStatement" && !node.alternate
+          ? node.consequent.type === "BlockStatement"
+            ? node.consequent.body
+            : [node.consequent]
+          : undefined;
+
+      if (body?.length && body.every((/** @type {Node} */ statement) => setsOption(statement))) {
+        edits.removeLine(node);
+
+        for (let statement of body) removed.add(/** @type {string} */ (setsOption(statement)));
+
+        return SKIP;
+      }
+    });
+  }
+
+  if (removed.size === 0) return { source, removed: [] };
+
+  /**
+   * Removed statements leave the blank lines that separated them.
+   */
+  let output = withoutUnusedRequires(edits.apply(), file).replace(/\n([ \t]*\n){2,}/g, "\n\n");
+
+  return { source: output, removed: Array.from(removed) };
+}
+
+/**
+ * @param {string} source
+ * @param {string} file
+ * @returns {string} the source without the top-level `const x = require('y')` lines whose binding nothing reads
+ */
+function withoutUnusedRequires(source, file) {
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  /** @type {Map<string, number>} */
+  let counts = new Map();
+
+  walk(program, (node) => {
+    if (node.type === "Identifier") counts.set(node.name, (counts.get(node.name) ?? 0) + 1);
+  });
+
+  let edits = new Edits(source);
+
+  for (let statement of program.body) {
+    let declarator = statement.type === "VariableDeclaration" ? statement.declarations : [];
+    let only = declarator.length === 1 ? declarator[0] : undefined;
+    let init = only?.init;
+    let isRequire =
+      init?.type === "CallExpression" &&
+      init.callee?.name === "require" &&
+      only.id?.type === "Identifier";
+
+    if (isRequire && counts.get(only.id.name) === 1) edits.removeLine(statement);
+  }
+
+  return edits.size > 0 ? edits.apply() : source;
 }
 
 /**

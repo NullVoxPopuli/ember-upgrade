@@ -282,12 +282,107 @@ const OBSOLETE = [
     replaceWith: { mockdate: "3.0.5" },
   },
   {
+    name: "ember-classic-decorator",
+    label: "The `@classic` decorator only asserts in development",
+    after: (project) => removeDecoratorImports(project, "ember-classic-decorator"),
+  },
+  {
+    name: "ember-percy",
+    label: "It takes snapshots through ember-cli",
+    after: (project) => removeCalls(project, "ember-percy"),
+    progress: {
+      note:
+        "ember-percy is removed, and so are the percySnapshot calls in the tests. " +
+        "@percy/ember has no v2 release yet. To take snapshots again, call @percy/sdk-utils from a test helper.",
+      links: [
+        "https://github.com/percy/ember-percy",
+        "https://www.npmjs.com/package/@percy/sdk-utils",
+      ],
+    },
+  },
+  {
     name: "ember-normalize",
     label: "The app imports normalize.css from npm",
     replaceWith: { "normalize.css": "8.0.1" },
     after: importNormalize,
   },
 ];
+
+/**
+ * @param {import('#project.js').Project} project
+ * @param {string} module
+ * @returns {{ file: string, source: string, locals: string[] }[]} the files that import the module, and the local names of its imports
+ */
+function importersOf(project, module) {
+  let pattern = new RegExp(`^import\\s+(.+?)\\s+from\\s*["']${module}["'];?[ \\t]*\\n`, "m");
+
+  return project
+    .files()
+    .map((file) => ({ file, source: project.read(file) }))
+    .filter(({ source }) => pattern.test(source))
+    .map(({ file, source }) => {
+      let clause = /** @type {RegExpExecArray} */ (pattern.exec(source))[1];
+      let locals = clause
+        .replace(/[{}]/g, "")
+        .split(",")
+        .map(
+          (part) =>
+            part
+              .trim()
+              .split(/\s+as\s+/)
+              .pop() ?? "",
+        )
+        .filter(Boolean);
+
+      return { file, source: source.replace(pattern, ""), locals };
+    });
+}
+
+/**
+ * Removes the import of a decorator package, and each use of its decorators, such as `@classic`.
+ *
+ * @param {import('#project.js').Project} project
+ * @param {string} module
+ */
+function removeDecoratorImports(project, module) {
+  for (let { file, source, locals } of importersOf(project, module)) {
+    let output = source;
+
+    for (let local of locals) {
+      output = output
+        .replace(new RegExp(`^[ \\t]*@${local}[ \\t]*\\n`, "gm"), "")
+        .replace(new RegExp(`@${local}\\s+(?=(export\\s|class\\s))`, "g"), "");
+    }
+
+    project.write(file, output);
+  }
+}
+
+/**
+ * Removes the import of a package, and each statement that only calls one of its imports, such as `await percySnapshot('x');`.
+ *
+ * @param {import('#project.js').Project} project
+ * @param {string} module
+ */
+function removeCalls(project, module) {
+  for (let { file, source, locals } of importersOf(project, module)) {
+    let output = source;
+
+    for (let local of locals) {
+      output = output.replace(
+        new RegExp(`^[ \\t]*(await\\s+)?${local}\\([^;\\n]*\\);?[ \\t]*\\n`, "gm"),
+        "",
+      );
+    }
+
+    /**
+     * A call that spans lines stays, with its import, so that the build names it.
+     */
+    if (locals.some((local) => new RegExp(`\\b${local}\\b`).test(output))) continue;
+
+    project.write(file, output);
+  }
+}
 
 /**
  * ember-normalize added normalize.css to the styles. The app imports it now, unless its styles do already.
