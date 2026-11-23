@@ -132,28 +132,37 @@ export function hasOverride(project, name) {
 /**
  * @param {Project} project
  * @param {string} name
- * @returns {string | undefined} the range that package.json forces for the package
+ * @returns {string | undefined} the range that package.json or pnpm-workspace.yaml forces for the package
  */
 export function overrideRange(project, name) {
-  let pkg = JSON.parse(workspaceRoot(project).read("package.json"));
+  let root = workspaceRoot(project);
+  let pkg = JSON.parse(root.read("package.json"));
 
   for (let map of [pkg.resolutions, pkg.overrides, pkg.pnpm?.overrides]) {
     if (map && typeof map[name] === "string") return map[name];
   }
+
+  if (root.has(WORKSPACE_FILE)) return yamlMapEntry(root.read(WORKSPACE_FILE), "overrides", name);
 }
 
 /**
- * Removes the version that package.json forces for the package.
+ * Removes the version that package.json or pnpm-workspace.yaml forces for the package.
  *
  * @param {Project} project
  * @param {string} name
  */
 export function removeOverride(project, name) {
-  editPackageJson(workspaceRoot(project), (pkg) => {
+  let root = workspaceRoot(project);
+
+  editPackageJson(root, (pkg) => {
     for (let map of [pkg.resolutions, pkg.overrides, pkg.pnpm?.overrides]) {
       if (map) delete map[name];
     }
   });
+
+  if (root.has(WORKSPACE_FILE)) {
+    root.write(WORKSPACE_FILE, removeYamlMapEntry(root.read(WORKSPACE_FILE), "overrides", name));
+  }
 }
 
 /**
@@ -261,6 +270,41 @@ export function setYamlMapEntry(source, key, name, value) {
 
     return entries.map((entry, i) => (i === index ? line : entry));
   });
+}
+
+/**
+ * @param {string} source
+ * @param {string} key a block map, such as `overrides`
+ * @param {string} name
+ * @returns {string | undefined} the value of the entry, without quotes
+ */
+export function yamlMapEntry(source, key, name) {
+  /** @type {string | undefined} */
+  let value;
+
+  editBlock(source, key, (entries) => {
+    let entry = entries.find((line) => entryName(line) === name);
+
+    value = entry?.slice(entry.indexOf(":", entry.indexOf(name) + name.length) + 1).trim();
+
+    return entries;
+  });
+
+  return /** @type {string | undefined} */ (value)?.replace(/^(['"])(.*)\1$/, "$2");
+}
+
+/**
+ * @param {string} source
+ * @param {string} key
+ * @param {string} name
+ * @returns {string} the source without the entry, and without the block when it was the only one
+ */
+export function removeYamlMapEntry(source, key, name) {
+  let output = editBlock(source, key, (entries) =>
+    entries.filter((entry) => entryName(entry) !== name),
+  );
+
+  return output.replace(new RegExp(`^${key}:\\n(?=\\S|\\n|$)`, "m"), "");
 }
 
 /**

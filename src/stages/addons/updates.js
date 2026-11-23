@@ -326,7 +326,12 @@ export function updateStage(name, release) {
     },
 
     async run(project) {
-      let wanted = Object.assign({}, release.dependencies, release.peerDependencies);
+      /**
+       * An override of the addon itself, or of what it needs, can hold back the update.
+       */
+      let wanted = Object.assign({}, release.dependencies, release.peerDependencies, {
+        [name]: `^${release.version}`,
+      });
       /** @type {string[]} */
       let unpinned = [];
 

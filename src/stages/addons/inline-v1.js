@@ -3,6 +3,7 @@ import { join, posix } from "node:path";
 
 import { parseProgram, propertyName, walk } from "#ast.js";
 import { transform as replaceEmberGlobals } from "#stages/ember-globals/transform.js";
+import { parse as parseVersion } from "#stages/ember-source/index.js";
 import { contentForPages } from "./content-for.js";
 import { inlineStage } from "./inline.js";
 
@@ -270,9 +271,10 @@ function withoutExtension(path) {
  * @param {string} name
  * @param {string} directory where the addon is installed
  * @param {(file: string) => boolean} taken the project has a module at the path, with any extension
+ * @param {[number, number, number]} [emberVersion] the app's ember-source, which answers the version checks of ember-compatibility-helpers
  * @returns {Plan | undefined}
  */
-export function planInline(name, directory, taken) {
+export function planInline(name, directory, taken, emberVersion) {
   let hooks = buildHooks(directory);
 
   if (hooks.some((hook) => !INLINED_HOOKS.has(hook))) return;
@@ -355,8 +357,12 @@ export function planInline(name, directory, taken) {
      */
     if (target.endsWith(".hbs")) {
       rewritten = withHasBlockHelpers(rewritten);
-    } else if (/\bfrom\s*["']ember["']/.test(rewritten)) {
-      rewritten = replaceEmberGlobals(rewritten, target).code;
+    } else {
+      if (/\bfrom\s*["']ember["']/.test(rewritten)) {
+        rewritten = replaceEmberGlobals(rewritten, target).code;
+      }
+
+      if (emberVersion) rewritten = withoutCompatibilityHelpers(rewritten, emberVersion);
     }
 
     files.set(target, rewritten);
@@ -380,6 +386,52 @@ export function planInline(name, directory, taken) {
   }
 
   return { files, imports, ranges, contentFor };
+}
+
+const COMPATIBILITY_IMPORT =
+  /^import\s*\{([^}]*)\}\s*from\s*["']ember-compatibility-helpers["'];?[ \t]*\n/m;
+
+/**
+ * ember-compatibility-helpers is a babel plugin that answers `gte('3.22.0')` and `lte()` at build time,
+ * so the code gets the answers for the app's ember-source.
+ *
+ * @param {string} source
+ * @param {[number, number, number]} emberVersion
+ * @returns {string} the source as it was, when it uses other helpers of the package
+ */
+export function withoutCompatibilityHelpers(source, emberVersion) {
+  let match = COMPATIBILITY_IMPORT.exec(source);
+
+  if (!match) return source;
+
+  let names = match[1]
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+
+  if (names.some((name) => name !== "gte" && name !== "lte")) return source;
+
+  let compare = (/** @type {string} */ version) => {
+    let other = version.split(".").map(Number);
+
+    for (let index = 0; index < 3; index++) {
+      let difference = emberVersion[index] - (other[index] ?? 0);
+
+      if (difference !== 0) return difference;
+    }
+
+    return 0;
+  };
+  let output = source.replace(COMPATIBILITY_IMPORT, "");
+
+  for (let name of names) {
+    output = output.replace(
+      new RegExp(`\\b${name}\\(\\s*["']([\\d.]+)["']\\s*\\)`, "g"),
+      (_, version) => String(name === "gte" ? compare(version) >= 0 : compare(version) <= 0),
+    );
+  }
+
+  return new RegExp(`\\b(${names.join("|")})\\(`).test(output) ? source : output;
 }
 
 /**
@@ -521,13 +573,18 @@ export function inlineV1Stage(project, name, from) {
   if (!existsSync(join(installed, "package.json"))) return;
 
   let directory = realpathSync(installed);
-  let plan = planInline(name, directory, (file) => {
-    let base = file.replace(CODE, "");
+  let plan = planInline(
+    name,
+    directory,
+    (file) => {
+      let base = file.replace(CODE, "");
 
-    return file.endsWith(".hbs")
-      ? project.has(file)
-      : [".js", ".ts", ".gjs", ".gts"].some((extension) => project.has(base + extension));
-  });
+      return file.endsWith(".hbs")
+        ? project.has(file)
+        : [".js", ".ts", ".gjs", ".gts"].some((extension) => project.has(base + extension));
+    },
+    parseVersion(project.dependency("ember-source")),
+  );
 
   if (!plan) return;
 

@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import { inlineV1Stage, withHasBlockHelpers } from "#stages/addons/inline-v1.js";
+import {
+  inlineV1Stage,
+  withHasBlockHelpers,
+  withoutCompatibilityHelpers,
+} from "#stages/addons/inline-v1.js";
 
 /**
  * @param {Record<string, string>} files
@@ -339,4 +343,29 @@ module.exports = {
   });
 
   expect(inlineV1Stage(app, "ember-power-select-typeahead")).toBeUndefined();
+});
+
+/**
+ * From ember-app-scheduler 7.0.1 (MIT), shortened.
+ */
+test("the version checks of ember-compatibility-helpers get the answers for the app", () => {
+  expect(
+    withoutCompatibilityHelpers(
+      `import { schedule } from '@ember/runloop';
+import { gte } from 'ember-compatibility-helpers';
+
+if (gte('3.6.0')) {
+  schedule('afterRender', null, done);
+}
+`,
+      [6, 12, 0],
+    ),
+  ).toMatchInlineSnapshot(`
+    "import { schedule } from '@ember/runloop';
+
+    if (true) {
+      schedule('afterRender', null, done);
+    }
+    "
+  `);
 });
