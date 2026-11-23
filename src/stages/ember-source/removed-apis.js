@@ -218,3 +218,47 @@ export function queryParamsLists(project) {
     if (output !== source) project.write(file, output);
   }
 }
+
+/**
+ * The arguments that `<Input>` and `<Textarea>` take in Ember 4. Before, any other argument, such as `@id`
+ * or `@placeholder`, set the attribute of the element (deprecation id ember.built-in-components.legacy-arguments).
+ */
+const BUILT_IN_ARGUMENTS = new Set([
+  "@value",
+  "@checked",
+  "@type",
+  "@enter",
+  "@insert-newline",
+  "@escape-press",
+  "@focus-in",
+  "@focus-out",
+  "@key-up",
+  "@key-down",
+  "@key-press",
+  "@input",
+  "@change",
+]);
+
+/**
+ * @param {string} template
+ * @returns {string} the template, with the attributes of `<Input>` and `<Textarea>` as attributes
+ */
+export function builtInAttributes(template) {
+  return template.replace(/<(Input|Textarea)\b[^>]*>/g, (tag) =>
+    tag.replace(/(\s)@([\w-]+)=/g, (match, space, name) =>
+      BUILT_IN_ARGUMENTS.has(`@${name}`) ? match : `${space}${name === "class" ? "class" : name}=`,
+    ),
+  );
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ */
+export function builtInAttributesInTemplates(project) {
+  for (let file of project.files(["{app,addon,tests}/**/*.{hbs,gjs,gts}"])) {
+    let source = project.read(file);
+    let output = builtInAttributes(source);
+
+    if (output !== source) project.write(file, output);
+  }
+}

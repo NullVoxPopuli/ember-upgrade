@@ -15,6 +15,7 @@ import { explicitRelationshipOptions } from "./ember-data.js";
 import { explicitInjections, routerServiceTransitions } from "./injections.js";
 import { renameTitleHelpers } from "./page-title.js";
 import {
+  builtInAttributesInTemplates,
   keepArrayPrototypeExtensions,
   moveHtmlSafe,
   queryParamsLists,
@@ -167,6 +168,7 @@ function step(lts) {
 
         rewriteWithHelpers(project);
         moveHtmlSafe(project);
+        builtInAttributesInTemplates(project);
       }
 
       if (target[0] >= 7) {

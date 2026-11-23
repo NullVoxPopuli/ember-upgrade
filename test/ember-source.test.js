@@ -14,6 +14,7 @@ import {
 } from "#stages/ember-source/ember-data.js";
 import { renameTitleHelper } from "#stages/ember-source/page-title.js";
 import {
+  builtInAttributes,
   extendsArrays,
   queryParamsList,
   rewriteWith,
@@ -335,4 +336,17 @@ test("an object of query params becomes the one entry of the list", () => {
     }
     "
   `);
+});
+
+/**
+ * From emberobserver/client (MIT), shortened.
+ */
+test("the attributes that Input took as arguments become attributes", () => {
+  expect(
+    builtInAttributes(
+      `<Input @type="search" @id="code-search-input" @spellcheck="false" @value={{this.query}} />\n`,
+    ),
+  ).toBe(
+    `<Input @type="search" id="code-search-input" spellcheck="false" @value={{this.query}} />\n`,
+  );
 });
