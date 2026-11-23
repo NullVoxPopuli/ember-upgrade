@@ -117,6 +117,7 @@ export const apps = [
     sha: "94e197af754b703dee9d30df030f63f95691c4b1",
     completed: [
       "package-manager",
+      "ember-globals",
       "ember-cli",
       "ember-fetch",
       "ember-source-3.28",
@@ -266,6 +267,7 @@ export const apps = [
     setup: [["git", "submodule", "update", "--init", "--depth", "1"]],
     completed: [
       "package-manager",
+      "ember-globals",
       "ember-cli",
       "ember-fetch",
       "ember-composable-helpers",
