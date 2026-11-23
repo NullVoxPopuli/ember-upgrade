@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { inlineMixins } from "#codemods/classic-component/mixins.js";
+import { inlineMixins, inlineSuperclass } from "#codemods/classic-component/mixins.js";
 
 const MIXIN = `import Mixin from '@ember/object/mixin';
 import { computed, get } from '@ember/object';
@@ -198,5 +198,74 @@ export default Component.extend(ProgressMixin, {
       },
     });
     "
+  `);
+});
+
+/**
+ * From ember-stripe-elements 0.0.x (MIT), inlined into code-corps-ember, shortened.
+ */
+test("a subclass of a classic component of the app gets its properties, and the class names of both", () => {
+  let base = `import Component from '@ember/component';
+import { inject as service } from '@ember/service';
+
+export default Component.extend({
+  classNames: ['ember-stripe-element'],
+  type: null,
+  stripev3: service(),
+
+  didInsertElement() {
+    this._super(...arguments);
+    this.mount(this.type);
+  },
+
+  actions: {
+    blur() {},
+  },
+});
+`;
+  let source = `import StripeElement from '../addons/ember-stripe-elements/components/stripe-element';
+
+export default StripeElement.extend({
+  classNames: ['ember-stripe-card'],
+
+  type: 'card',
+
+  actions: {
+    focus() {},
+  },
+});
+`;
+  let result = inlineSuperclass(source, "app/components/stripe-card.js", (specifier) =>
+    specifier === "../addons/ember-stripe-elements/components/stripe-element"
+      ? { file: "app/addons/ember-stripe-elements/components/stripe-element.js", source: base }
+      : undefined,
+  );
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "source": "import Component from '@ember/component';
+    import { inject as service } from '@ember/service';
+
+    export default Component.extend({
+      stripev3: service(),
+
+      didInsertElement() {
+        this._super(...arguments);
+        this.mount(this.type);
+      },
+
+      classNames: ['ember-stripe-element', 'ember-stripe-card'],
+
+      type: 'card',
+
+      actions: {
+        blur() {},
+
+        focus() {},
+      },
+    });
+    ",
+      "unreadable": [],
+    }
   `);
 });

@@ -138,10 +138,9 @@ export function rewriteJQuery(source, file, teardown) {
       ? `${receiver}.element.querySelector(${cssSelector(text(source, selector))})`
       : `${receiver}.element`;
     /**
-     * `this.$()[0]` and `this.$().get(0)` read the element itself.
+     * `this.$()[0]` and `this.$().get(0)` read the element itself, and `this.$(selector)[0]` the first match.
      */
     if (
-      !selector &&
       parent?.type === "MemberExpression" &&
       parent.object === node &&
       parent.computed &&

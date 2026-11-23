@@ -4,7 +4,7 @@ import { rewriteCallers } from "./callers.js";
 import { toGlimmer } from "./glimmer.js";
 import { findInvocations } from "./invocations.js";
 import { rewriteJQuery } from "./jquery.js";
-import { inlineMixins } from "./mixins.js";
+import { inlineMixins, inlineSuperclass } from "./mixins.js";
 import { rewriteKeyboard } from "./keyboard.js";
 import { rewritePrototypeExtensions } from "./prototype-extensions.js";
 import { readClassicComponent } from "./read.js";
@@ -53,7 +53,8 @@ const TEARDOWN = new Set(["willDestroyElement", "willClearRender"]);
  * @param {Resolve} resolve
  */
 function analyze(candidate, template, templates, resolve) {
-  let keyboard = rewriteKeyboard(candidate.source, candidate.file);
+  let superclass = inlineSuperclass(candidate.source, candidate.file, resolve);
+  let keyboard = rewriteKeyboard(superclass.source, candidate.file);
   let mixins = inlineMixins(keyboard, candidate.file, resolve);
   let extensions = rewritePrototypeExtensions(mixins.source, candidate.file);
   let jquery = rewriteJQuery(extensions, candidate.file, TEARDOWN);
@@ -130,6 +131,7 @@ function analyze(candidate, template, templates, resolve) {
     actionValue: needsActionValue(template),
   });
 
+  for (let reason of superclass.unreadable) glimmer.unreadable.push(reason);
   for (let reason of mixins.unreadable) glimmer.unreadable.push(reason);
   for (let reason of jquery.unreadable) glimmer.unreadable.push(reason);
 
@@ -157,8 +159,16 @@ export function convertComponents(sources, options = {}) {
     let name = componentName(file);
 
     if (!name || file.endsWith(".d.ts")) continue;
-    if (!/@ember\/component['"]/.test(source)) continue;
-    if (!readClassicComponent(source, file)) continue;
+
+    /**
+     * A subclass of another classic component of the app becomes a classic component when it gets the superclass's properties.
+     */
+    let own = /@ember\/component['"]/.test(source)
+      ? source
+      : inlineSuperclass(source, file, resolve).source;
+
+    if (!/@ember\/component['"]/.test(own)) continue;
+    if (!readClassicComponent(own, file)) continue;
 
     candidates.push({ name, file, templateFile: file.replace(/\.(js|ts)$/, ".hbs"), source });
   }
