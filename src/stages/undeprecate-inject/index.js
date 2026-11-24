@@ -1,11 +1,13 @@
+import { globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { parseProgram, walk } from "#ast.js";
 import { viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
-import { dependencyNames, editPackageJson, setDependency } from "#package-json.js";
+import { editPackageJson, setDependency } from "#package-json.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
+import { addonsOf } from "#stages/app-tree/index.js";
 import { Project } from "#project.js";
 
 /** @typedef {import('#ast.js').Node} Node */
@@ -21,24 +23,28 @@ const WHEN_MATCHING = String.raw`/\binject\b[^;]*from\s*['"]@ember\/service['"]/
 
 /**
  * Only the code of Ember addons goes into the app. A tool such as eslint-plugin-ember can name `inject` in its own code.
+ * An addon of an addon goes into the app too.
  *
  * @param {Project} project
  * @returns {string[]} the addons whose installed code imports `inject` from @ember/service
  */
 export function injectUsers(project) {
-  return dependencyNames(project.packageJson).filter((name) => {
-    let dependency = new Project(join(project.directory, "node_modules", name));
-
-    if (!dependency.has("package.json")) return false;
-    let keywords = /** @type {string[] | undefined} */ (dependency.packageJson.keywords);
-
-    if (!keywords?.includes("ember-addon")) return false;
-
-    return dependency
-      .files(["**/*.{js,mjs}"])
-      .filter((file) => !/(^|\/)tests?\//.test(file))
-      .some((file) => INJECT.test(dependency.read(file)));
-  });
+  return addonsOf(project)
+    .filter((addon) =>
+      /**
+       * A v2 addon's code is in its dist folder, which Project.files leaves out.
+       */
+      globSync("**/*.{js,mjs}", {
+        cwd: addon.directory,
+        withFileTypes: true,
+        exclude: (entry) => entry.name === "node_modules",
+      })
+        .filter((entry) => entry.isFile())
+        .map((entry) => join(entry.parentPath, entry.name))
+        .filter((path) => !/(^|\/)tests?\//.test(path.slice(addon.directory.length)))
+        .some((path) => INJECT.test(readFileSync(path, "utf8"))),
+    )
+    .map((addon) => addon.name);
 }
 
 /**
