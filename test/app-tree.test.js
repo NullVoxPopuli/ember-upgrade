@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import appTree from "#stages/app-tree/index.js";
+import appTree, { calledByName } from "#stages/app-tree/index.js";
 import declareImports from "#stages/declare-imports/index.js";
 
 /**
@@ -68,6 +68,12 @@ function cratesIo() {
         },
       },
     },
+    /**
+     * The container's template is loose mode, so it finds the message component by name.
+     */
+    "node_modules/ember-cli-notifications/dist/components/notification-container.js": `import { precompileTemplate } from "@ember/template-compilation";
+export default precompileTemplate("{{#each this.messages as |m|}}<NotificationMessage @notification={{m}} />{{/each}}");
+`,
   });
 }
 
@@ -115,4 +121,56 @@ test("the packages that the app imports without declaring them become dependenci
     }
   `);
   expect(declareImports.detect(app)).toBe(false);
+});
+
+test("without loose-mode templates, components, helpers and modifiers stay out of app/", async () => {
+  let app = project({
+    "package.json": { name: "app", devDependencies: { "ember-power-select": "^8.0.0" } },
+    "app/components/picker.gjs": `import PowerSelect from "ember-power-select/components/power-select";
+<template><PowerSelect @options={{@options}} as |o|>{{o}}</PowerSelect></template>
+`,
+    "node_modules/ember-power-select/package.json": {
+      name: "ember-power-select",
+      version: "8.0.0",
+      keywords: ["ember-addon"],
+      exports: { "./*": "./dist/*.js" },
+      "ember-addon": {
+        version: 2,
+        "app-js": {
+          "./components/power-select.js": "./dist/_app_/components/power-select.js",
+          "./helpers/ember-power-select-is-equal.js":
+            "./dist/_app_/helpers/ember-power-select-is-equal.js",
+          "./services/power-select.js": "./dist/_app_/services/power-select.js",
+        },
+      },
+    },
+    "node_modules/ember-power-select/dist/components/power-select.js": `import { precompileTemplate } from "@ember/template-compilation";
+export default precompileTemplate("<div></div>", { strictMode: true, scope: () => ({}) });
+`,
+  });
+
+  await appTree.run(app);
+
+  expect(app.files(["app/**/*.js"])).toMatchInlineSnapshot(`
+    [
+      "app/services/power-select.js",
+    ]
+  `);
+});
+
+test("a module is called by name with its dashed or its angle-bracket name", () => {
+  let templates = [
+    "{{outlet}}<this.ProvidedComponent />",
+    "{{#if (eq @a @b)}}<PowerSelect::Trigger @select={{@select}} />{{/if}}",
+  ];
+
+  expect(
+    [
+      "./helpers/eq.js",
+      "./components/power-select/trigger.js",
+      "./components/provided-component.js",
+      "./helpers/b.js",
+      "./modifiers/outlet-tracker.js",
+    ].map((appPath) => calledByName(appPath, templates)),
+  ).toEqual([true, true, false, false, false]);
 });
