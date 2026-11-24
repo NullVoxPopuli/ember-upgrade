@@ -2,6 +2,7 @@ import { parseProgram, SKIP, walk } from "#ast.js";
 import { importMap } from "#codemods/imports.js";
 import { Edits } from "#edits.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import { recordProgress } from "#progress.js";
 
 /** @typedef {import('#ast.js').Node} Node */
 /** @typedef {import('#project.js').Project} Project */
@@ -19,6 +20,33 @@ const INFLECTIONS = new Set(["uncountable", "irregular", "plural", "singular"]);
 const RELATIONSHIPS = new Set(["belongsTo", "hasMany"]);
 
 const WORDS = new Set(["pluralize", "singularize"]);
+
+const STORE = "app/services/store.js";
+
+/**
+ * A store service that only re-exports ember-data's store, as the app-tree stage writes it.
+ */
+const STORE_REEXPORT =
+  /^\s*(export \* from ["']ember-data\/(app\/services\/)?store["'];?\s*)?export \{ default \} from ["']ember-data\/(app\/services\/)?store["'];?\s*$/;
+
+/**
+ * ember-data's store with the legacy request methods and the LegacyNetworkHandler set up on purpose.
+ * Implicit, the same methods log warp-drive:deprecate-legacy-request-methods.
+ */
+export const LEGACY_STORE = `import { JSONAPICache } from "@warp-drive/json-api";
+import { useLegacyStore } from "@warp-drive/legacy";
+
+export default useLegacyStore({
+  linksMode: false,
+  legacyRequests: true,
+  cache: JSONAPICache,
+});
+`;
+
+/**
+ * \`record.save()\` has no options in most apps. A \`save\` with arguments, such as a local storage helper, is not a record.
+ */
+const RECORD_SAVE = /\.save\(\s*\)/;
 
 /**
  * @param {Project} project
@@ -298,6 +326,10 @@ function plan(project) {
     if (output) changes.set(babel, output);
   }
 
+  if (project.has(STORE) && STORE_REEXPORT.test(project.read(STORE))) {
+    changes.set(STORE, LEGACY_STORE);
+  }
+
   for (let file of project.files(["{app,mirage,tests}/**/*.{js,ts,gjs,gts}"])) {
     let source = project.read(file);
     let output;
@@ -322,7 +354,8 @@ function plan(project) {
  */
 export default {
   name: "warp-drive",
-  label: "Resolve the WarpDrive setup deprecations: reactivity, inflections and relationship types",
+  label:
+    "Resolve the WarpDrive deprecations: reactivity, the legacy store, inflections and relationship types",
 
   detect(project) {
     return Boolean(warpDriveRange(project)) && plan(project).size > 0;
@@ -344,10 +377,32 @@ export default {
     editPackageJson(project, (pkg) => {
       if (changes.has(APP)) setDependency(pkg, "@warp-drive/ember", range);
 
+      if (changes.get(STORE) === LEGACY_STORE) {
+        setDependency(pkg, "@warp-drive/legacy", range);
+        setDependency(pkg, "@warp-drive/json-api", range);
+      }
+
       let strings = Array.from(changes.values()).some((output) => output.includes(STRING_UTILS));
 
       if (strings) setDependency(pkg, "@warp-drive/utilities", range);
     });
+
+    let saves = project
+      .files(["app/**/*.{js,ts,gjs,gts}"])
+      .filter((file) => RECORD_SAVE.test(project.read(file)));
+
+    if (saves.length > 0) {
+      recordProgress(project, {
+        id: "warp-drive: record.save",
+        status: "todo",
+        note:
+          `record.save() logs warp-drive:deprecate-legacy-request-methods. These files call save(): ${saves.join(", ")}. ` +
+          "For each record, call `store.request(saveRecord(record))`, with `saveRecord` from @warp-drive/legacy/compat/builders.",
+        links: [
+          "https://docs.warp-drive.io/api/@warp-drive/core/build-config/deprecations/variables/ENABLE_LEGACY_REQUEST_METHODS",
+        ],
+      });
+    }
 
     return [];
   },

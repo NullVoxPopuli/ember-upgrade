@@ -1,6 +1,12 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 
-import {
+import { Project } from "#project.js";
+import { readProgress } from "#progress.js";
+import warpDrive, {
+  LEGACY_STORE,
   withInstall,
   withWarpDriveInflection,
   withStrictTypes,
@@ -137,4 +143,55 @@ export default function makeServer(environment) {
       "app/utils/label.js",
     ),
   ).toBeUndefined();
+});
+
+/**
+ * @param {Record<string, string | object>} files
+ */
+function project(files) {
+  let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
+
+  for (let [file, contents] of Object.entries(files)) {
+    mkdirSync(join(directory, file, ".."), { recursive: true });
+    writeFileSync(
+      join(directory, file),
+      typeof contents === "string" ? contents : JSON.stringify(contents),
+    );
+  }
+
+  return new Project(directory);
+}
+
+test("the store sets up the legacy request methods on purpose, and record.save() is left to the app", async () => {
+  let app = project({
+    "package.json": {
+      name: "app",
+      devDependencies: { "ember-data": "~5.8.2", "@warp-drive/core": "~5.8.2" },
+    },
+    "app/app.js": `import Application from "@ember/application";\n`,
+    "app/services/store.js": `export { default } from "ember-data/store";\n`,
+    "app/services/session.js": `export default class { login() { LocalStore.save("token", 1); } }\n`,
+    "app/components/review.js": `export default class { async submit() { await this.review.save(); } }\n`,
+  });
+
+  expect(warpDrive.detect(app)).toBe(true);
+
+  await warpDrive.run(app);
+
+  expect(app.read("app/services/store.js")).toBe(LEGACY_STORE);
+  expect(app.packageJson.devDependencies).toMatchInlineSnapshot(`
+    {
+      "@warp-drive/core": "~5.8.2",
+      "@warp-drive/ember": "~5.8.2",
+      "@warp-drive/json-api": "~5.8.2",
+      "@warp-drive/legacy": "~5.8.2",
+      "ember-data": "~5.8.2",
+    }
+  `);
+  expect(readProgress(app).map((entry) => entry.note)).toMatchInlineSnapshot(`
+    [
+      "record.save() logs warp-drive:deprecate-legacy-request-methods. These files call save(): app/components/review.js. For each record, call \`store.request(saveRecord(record))\`, with \`saveRecord\` from @warp-drive/legacy/compat/builders.",
+    ]
+  `);
+  expect(warpDrive.detect(app)).toBe(false);
 });
