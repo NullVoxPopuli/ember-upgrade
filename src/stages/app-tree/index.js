@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { dependencyNames } from "#package-json.js";
@@ -7,6 +7,12 @@ import { recordProgress } from "#progress.js";
 /** @typedef {import('#project.js').Project} Project */
 
 const EXTENSIONS = [".js", ".ts", ".gjs", ".gts", ".hbs"];
+
+/**
+ * The app-js entries that only a template finds by name.
+ * Services, initializers, transforms and the other entries are resolver lookups that stay.
+ */
+const BY_NAME = /^\.\/(components|helpers|modifiers|templates\/components)\//;
 
 /**
  * @typedef {object} Addon
@@ -109,7 +115,127 @@ export function exportedAs(name, manifest, target) {
 }
 
 /**
+ * The text of each template in JavaScript: a tagged `hbs` string, or the string of a `precompileTemplate` call.
+ */
+const TEMPLATE_IN_JS =
+  /(?<![.\w])hbs`((?:[^`\\]|\\.)*)`|precompileTemplate\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)(\s*,\s*\{[^)]*?strictMode\s*:\s*true)?/g;
+
+/**
+ * @param {string} source
+ * @returns {string[]} the loose-mode templates of the JavaScript
+ */
+function looseTemplatesIn(source) {
+  /**
+   * Doc comments show templates as examples.
+   */
+  let code = source
+    .split("\n")
+    .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+    .join("\n");
+
+  /**
+   * A template that the build compiled holds its names in its wire format.
+   */
+  if (/["']?isStrictMode["']?\s*:\s*false/.test(code)) return [code];
+
+  /** @type {string[]} */
+  let templates = [];
+
+  for (let match of code.matchAll(TEMPLATE_IN_JS)) {
+    if (match[1] !== undefined) templates.push(match[1]);
+    else if (!match[3]) templates.push(match[2]);
+  }
+
+  return templates;
+}
+
+/**
+ * @param {string} directory
+ * @param {(path: string) => string[]} read
+ * @returns {string[]}
+ */
+function templatesUnder(directory, read) {
+  if (!existsSync(directory)) return [];
+
+  /** @type {string[]} */
+  let templates = [];
+
+  for (let entry of readdirSync(directory, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+
+    let path = join(entry.parentPath, entry.name);
+
+    if (path.slice(directory.length).includes("node_modules")) continue;
+
+    templates = templates.concat(read(path));
+  }
+
+  return templates;
+}
+
+/**
+ * Only the files that the app builds count, not blueprints or docs.
+ * A v1 addon's templates are loose mode. A v2 addon's are in its `dist`.
+ * ember-source's own templates use only the built-in components and helpers.
+ *
+ * @param {Addon} addon
+ * @returns {string[]}
+ */
+function addonLooseTemplates(addon) {
+  if (addon.name === "ember-source") return [];
+
+  if (addon.manifest["ember-addon"]?.version !== 2) {
+    return ["addon", "app"].flatMap((folder) =>
+      templatesUnder(join(addon.directory, folder), (path) =>
+        path.endsWith(".hbs") ? [readFileSync(path, "utf8")] : [],
+      ),
+    );
+  }
+
+  return templatesUnder(join(addon.directory, "dist"), (path) =>
+    /\.m?js$/.test(path) ? looseTemplatesIn(readFileSync(path, "utf8")) : [],
+  );
+}
+
+/**
+ * A loose-mode template, of the app or of an addon, finds components, helpers and modifiers by name
+ * through the app's modules. A strict-mode template imports them.
+ *
+ * @param {Project} project
+ * @param {Addon[]} addons
+ * @returns {string[]}
+ */
+export function looseTemplates(project, addons) {
+  let templates = project
+    .files(["{app,tests,lib}/**/*.{hbs,js,ts}"])
+    .flatMap((file) =>
+      file.endsWith(".hbs") ? [project.read(file)] : looseTemplatesIn(project.read(file)),
+    );
+
+  return templates.concat(addons.flatMap((addon) => addonLooseTemplates(addon)));
+}
+
+/**
+ * @param {string} appPath an app-js entry, such as `./components/power-select/trigger.js`
+ * @param {string[]} templates
+ * @returns {boolean} a template can call the module by its name
+ */
+export function calledByName(appPath, templates) {
+  let name = appPath.replace(BY_NAME, "").replace(/\.\w+$/, "");
+  let pascal = name
+    .split("/")
+    .map((part) => part.replace(/(?:^|-)(\w)/g, (_, letter) => letter.toUpperCase()))
+    .join("::");
+  let pattern = new RegExp(
+    `(?<![\\w.@-])(${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}|${pascal})(?![\\w-])`,
+  );
+
+  return templates.some((template) => pattern.test(template));
+}
+
+/**
  * The files of the addons' app trees that the app does not have.
+ * A component, helper or modifier is left out when no loose-mode template calls it by name.
  *
  * @param {Project} project
  * @returns {AppFile[]}
@@ -118,11 +244,15 @@ export function missingAppFiles(project) {
   /** @type {AppFile[]} */
   let files = [];
   let taken = new Set();
+  let addons = addonsOf(project);
+  let templates = looseTemplates(project, addons);
 
-  for (let addon of addonsOf(project)) {
+  for (let addon of addons) {
     let appJs = addon.manifest["ember-addon"]?.["app-js"] ?? {};
 
     for (let [appPath, target] of Object.entries(appJs)) {
+      if (BY_NAME.test(appPath) && !calledByName(appPath, templates)) continue;
+
       let file = join("app", appPath).split("\\").join("/");
       let base = file.replace(/\.\w+$/, "");
 
@@ -148,6 +278,8 @@ export function missingAppFiles(project) {
  * the addon's services, initializers, transforms, and the components that its own templates use by name.
  * ember.nvp apps do not merge app trees, so the stage writes those modules into app/,
  * as re-exports of the addon. The app's own files win, as they did in ember-cli.
+ * Strict-mode templates import what they use, so a component, helper or modifier
+ * is written only when a loose-mode template calls it by name.
  *
  * @type {import('#types.js').Stage}
  */
