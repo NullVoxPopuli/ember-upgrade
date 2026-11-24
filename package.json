@@ -26,7 +26,8 @@
     "format": "prettier . --write",
     "lint": "prettier . --check && tsc --noEmit",
     "test": "vitest run",
-    "test:bundle": "pnpm build && node scripts/test-bundle.js"
+    "test:bundle": "pnpm build && node scripts/test-bundle.js",
+    "prepack": "pnpm build"
   },
   "devDependencies": {
     "@oxc-parser/binding-wasm32-wasi": "0.130.0",
