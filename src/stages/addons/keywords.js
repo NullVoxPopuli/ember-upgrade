@@ -9,53 +9,62 @@ import { atLeast } from "#version.js";
 /** @typedef {import('#ast.js').Node} Node */
 /** @typedef {import('#project.js').Project} Project */
 
-const ADDON = "ember-truth-helpers";
-
 const SOURCES = ["{app,addon,addon-test-support,tests,src}/**/*.{js,ts,gjs,gts,hbs}"];
 
 /**
- * The helpers that ember-source 7.1 builds in as keywords of strict-mode templates
- * (RFCs 560, 561 and 562), by their name in ember-truth-helpers.
+ * An addon whose helpers ember-source 7.1 builds in as keywords of strict-mode templates.
  * The keywords check their argument count, so a call must fit it.
  *
- * @type {Map<string, { keyword: string, min: number, max: number }>}
+ * @typedef {object} KeywordAddon
+ * @property {string} name
+ * @property {Map<string, { keyword: string, min: number, max: number }>} keywords by the helper's module name
+ * @property {Map<string, string>} named the named exports of the package's main entry, to the module name
+ * @property {RegExp} loose a loose-mode template call, which resolves the helper by name through the addon's app tree
+ * @property {string} keywordNames for the progress note
+ * @property {string} link
  */
-const KEYWORDS = new Map([
-  ["and", { keyword: "and", min: 2, max: Infinity }],
-  ["or", { keyword: "or", min: 2, max: Infinity }],
-  ["not", { keyword: "not", min: 1, max: 1 }],
-  ["eq", { keyword: "eq", min: 2, max: 2 }],
-  ["not-eq", { keyword: "neq", min: 2, max: 2 }],
-  ["gt", { keyword: "gt", min: 2, max: 2 }],
-  ["gte", { keyword: "gte", min: 2, max: 2 }],
-  ["lt", { keyword: "lt", min: 2, max: 2 }],
-  ["lte", { keyword: "lte", min: 2, max: 2 }],
-]);
 
-/**
- * The named exports of the package's main entry.
- *
- * @type {Map<string, string>}
- */
-const NAMED = new Map([
-  ["and", "and"],
-  ["or", "or"],
-  ["not", "not"],
-  ["eq", "eq"],
-  ["notEq", "not-eq"],
-  ["gt", "gt"],
-  ["gte", "gte"],
-  ["lt", "lt"],
-  ["lte", "lte"],
-]);
+/** @type {KeywordAddon} */
+export const TRUTH_HELPERS = {
+  name: "ember-truth-helpers",
+  /** RFCs 560, 561 and 562 */
+  keywords: new Map([
+    ["and", { keyword: "and", min: 2, max: Infinity }],
+    ["or", { keyword: "or", min: 2, max: Infinity }],
+    ["not", { keyword: "not", min: 1, max: 1 }],
+    ["eq", { keyword: "eq", min: 2, max: 2 }],
+    ["not-eq", { keyword: "neq", min: 2, max: 2 }],
+    ["gt", { keyword: "gt", min: 2, max: 2 }],
+    ["gte", { keyword: "gte", min: 2, max: 2 }],
+    ["lt", { keyword: "lt", min: 2, max: 2 }],
+    ["lte", { keyword: "lte", min: 2, max: 2 }],
+  ]),
+  named: new Map([
+    ["and", "and"],
+    ["or", "or"],
+    ["not", "not"],
+    ["eq", "eq"],
+    ["notEq", "not-eq"],
+    ["gt", "gt"],
+    ["gte", "gte"],
+    ["lt", "lt"],
+    ["lte", "lte"],
+  ]),
+  loose: /[({]\s*(and|or|not|eq|not-eq|gt|gte|lt|lte|xor|is-array|is-empty|is-equal)[\s)}]/,
+  keywordNames: "and, or, not, eq, neq, gt, gte, lt and lte",
+  link: "https://rfcs.emberjs.com/id/0562-add-logical-operators/",
+};
 
-const HELPER_PATH = `${ADDON}/helpers/`;
-
-/**
- * A loose-mode template resolves a helper by its name, through the addon's app tree.
- */
-const LOOSE_USE =
-  /[({]\s*(and|or|not|eq|not-eq|gt|gte|lt|lte|xor|is-array|is-empty|is-equal)[\s)}]/;
+/** @type {KeywordAddon} */
+export const ELEMENT_HELPER = {
+  name: "ember-element-helper",
+  /** RFC 389 */
+  keywords: new Map([["element", { keyword: "element", min: 1, max: 1 }]]),
+  named: new Map([["element", "element"]]),
+  loose: /[({]\s*element[\s)}]/,
+  keywordNames: "element",
+  link: "https://rfcs.emberjs.com/id/0389-dynamic-tag-names/",
+};
 
 /**
  * @param {unknown} node
@@ -84,32 +93,36 @@ function walkAll(node, visit, parent) {
 }
 
 /**
+ * @param {KeywordAddon} addon
  * @param {Node} specifier
  * @param {string} from
- * @returns {string | undefined} the ember-truth-helpers name of the imported helper
+ * @returns {string | undefined} the addon's module name of the imported helper
  */
-function helperOf(specifier, from) {
-  if (from === ADDON && specifier.type === "ImportSpecifier") {
+function helperOf(addon, specifier, from) {
+  let helpers = `${addon.name}/helpers/`;
+
+  if (from === addon.name && specifier.type === "ImportSpecifier") {
     let imported = specifier.imported.name ?? specifier.imported.value;
 
-    return NAMED.get(imported);
+    return addon.named.get(imported);
   }
 
-  if (from.startsWith(HELPER_PATH) && specifier.type === "ImportDefaultSpecifier") {
-    return from.slice(HELPER_PATH.length).replace(/\.js$/, "");
+  if (from.startsWith(helpers) && specifier.type === "ImportDefaultSpecifier") {
+    return from.slice(helpers.length).replace(/\.js$/, "");
   }
 }
 
 /**
- * Replaces the imports of ember-truth-helpers with the keywords of ember-source 7.1.
+ * Replaces the imports of the addon's helpers with the keywords of ember-source 7.1.
  * A helper keeps its import when the file uses it in a way that the keyword does not take:
  * in JavaScript, with named arguments, with another argument count, or under a block param of the same name.
  *
  * @param {string} source a .gjs or .gts file
  * @param {string} file
+ * @param {KeywordAddon} [addon]
  * @returns {string | undefined} the new source, or undefined when nothing changes
  */
-export function useKeywords(source, file) {
+export function useKeywords(source, file, addon = TRUTH_HELPERS) {
   let program = parseProgram(source, file);
 
   if (!program) return;
@@ -122,9 +135,9 @@ export function useKeywords(source, file) {
     if (node.importKind === "type") continue;
 
     for (let specifier of node.specifiers) {
-      let helper = helperOf(specifier, node.source.value);
+      let helper = helperOf(addon, specifier, node.source.value);
 
-      if (helper && KEYWORDS.has(helper)) {
+      if (helper && addon.keywords.has(helper)) {
         imported.set(specifier.local.name, { helper, specifier, declaration: node });
       }
     }
@@ -164,7 +177,7 @@ export function useKeywords(source, file) {
 
     if (!entry) return;
 
-    let rule = /** @type {{ min: number, max: number }} */ (KEYWORDS.get(entry.helper));
+    let rule = /** @type {{ min: number, max: number }} */ (addon.keywords.get(entry.helper));
     let isCall =
       node.original === head &&
       (parent?.type === "GlimmerSubExpression" || parent?.type === "GlimmerMustacheStatement") &&
@@ -182,7 +195,7 @@ export function useKeywords(source, file) {
   let removed = new Map();
 
   for (let [local, { helper, specifier, declaration }] of imported) {
-    let { keyword } = /** @type {{ keyword: string }} */ (KEYWORDS.get(helper));
+    let { keyword } = /** @type {{ keyword: string }} */ (addon.keywords.get(helper));
     let renamed = local !== keyword;
 
     if (
@@ -227,20 +240,22 @@ export function useKeywords(source, file) {
 }
 
 /**
+ * @param {KeywordAddon} addon
  * @param {string} file
  * @param {string} source
  * @returns {boolean} the file has a loose-mode template that can call a helper of the addon by name
  */
-function hasLooseUse(file, source) {
+function hasLooseUse(addon, file, source) {
   let template = file.endsWith(".hbs") || /\bhbs`|precompileTemplate\(/.test(source);
 
-  return template && LOOSE_USE.test(source);
+  return template && addon.loose.test(source);
 }
 
 /**
+ * @param {KeywordAddon} addon
  * @param {Project} project
  */
-function plan(project) {
+function plan(addon, project) {
   /** @type {Map<string, string>} */
   let rewrites = new Map();
   /** @type {string[]} */
@@ -249,8 +264,8 @@ function plan(project) {
   for (let file of project.files(SOURCES)) {
     let source = project.read(file);
 
-    if (/\.g[jt]s$/.test(file) && source.includes(ADDON)) {
-      let output = useKeywords(source, file);
+    if (/\.g[jt]s$/.test(file) && source.includes(addon.name)) {
+      let output = useKeywords(source, file, addon);
 
       if (output) {
         rewrites.set(file, output);
@@ -258,58 +273,65 @@ function plan(project) {
       }
     }
 
-    if (source.includes(ADDON) || hasLooseUse(file, source)) users.push(file);
+    if (source.includes(addon.name) || hasLooseUse(addon, file, source)) users.push(file);
   }
 
   return { rewrites, users };
 }
 
 /**
- * ember-source 7.1 has the comparison and logic helpers of ember-truth-helpers as keywords.
  * The stage runs after template-tag, when the templates are strict mode.
  *
- * @type {import('#types.js').Stage}
+ * @param {KeywordAddon} addon
+ * @returns {import('#types.js').Stage}
  */
-export default {
-  name: ADDON,
-  label: `Use the keywords of ember-source 7.1 in place of ${ADDON}`,
+function keywordStage(addon) {
+  return {
+    name: addon.name,
+    label: `Use the keywords of ember-source 7.1 in place of ${addon.name}`,
 
-  /**
-   * An app can import the addon without declaring it, when another addon brought it in.
-   */
-  detect(project) {
-    if (!atLeast(project.dependency("ember-source"), 7, 1)) return false;
+    /**
+     * An app can import the addon without declaring it, when another addon brought it in.
+     */
+    detect(project) {
+      if (!atLeast(project.dependency("ember-source"), 7, 1)) return false;
 
-    let { rewrites, users } = plan(project);
+      let { rewrites, users } = plan(addon, project);
 
-    return rewrites.size > 0 || (Boolean(project.dependency(ADDON)) && users.length === 0);
-  },
+      return rewrites.size > 0 || (Boolean(project.dependency(addon.name)) && users.length === 0);
+    },
 
-  async check() {
-    return { blockers: [], todo: [] };
-  },
+    async check() {
+      return { blockers: [], todo: [] };
+    },
 
-  async run(project) {
-    let { rewrites, users } = plan(project);
+    async run(project) {
+      let { rewrites, users } = plan(addon, project);
 
-    for (let [file, output] of rewrites) project.write(file, output);
+      for (let [file, output] of rewrites) project.write(file, output);
 
-    if (users.length === 0) {
-      if (project.dependency(ADDON))
-        editPackageJson(project, (pkg) => removeDependency(pkg, ADDON));
+      if (users.length === 0) {
+        if (project.dependency(addon.name)) {
+          editPackageJson(project, (pkg) => removeDependency(pkg, addon.name));
+        }
+
+        return [];
+      }
+
+      recordProgress(project, {
+        id: addon.name,
+        status: "kept",
+        note:
+          `These files still use ${addon.name}: ${users.join(", ")}. ` +
+          `In strict-mode templates, use the keywords ${addon.keywordNames}. ` +
+          `Remove ${addon.name} when no file uses it.`,
+        links: [addon.link],
+      });
+
       return [];
-    }
+    },
+  };
+}
 
-    recordProgress(project, {
-      id: ADDON,
-      status: "kept",
-      note:
-        `These files still use ${ADDON}: ${users.join(", ")}. ` +
-        "In strict-mode templates, use the keywords and, or, not, eq, neq, gt, gte, lt and lte. " +
-        `Remove ${ADDON} when no file uses it.`,
-      links: ["https://rfcs.emberjs.com/id/0562-add-logical-operators/"],
-    });
-
-    return [];
-  },
-};
+export const truthHelpers = keywordStage(TRUTH_HELPERS);
+export const elementHelper = keywordStage(ELEMENT_HELPER);

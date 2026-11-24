@@ -48,7 +48,7 @@ import pods from "./pods/index.js";
 import templateColocation from "./template-colocation/index.js";
 import templateTag from "./template-tag/index.js";
 import templateWhitespace from "./template-whitespace/index.js";
-import truthHelpers from "./addons/truth-helpers.js";
+import { elementHelper, truthHelpers } from "./addons/keywords.js";
 import undeprecateInject from "./undeprecate-inject/index.js";
 import vite from "./vite/index.js";
 import viteSass from "./vite-sass/index.js";
@@ -133,9 +133,10 @@ export const stages = [
   viteLts,
   /**
    * After viteLts, which reaches the ember-source 7.1 keywords,
-   * and before app-tree, which would write the addon's helpers into app/.
+   * and before app-tree, which would write the addons' helpers into app/.
    */
   truthHelpers,
+  elementHelper,
   buildSettings,
   /**
    * After the addon stages, which change the app's addons, and before ember-nvp,
