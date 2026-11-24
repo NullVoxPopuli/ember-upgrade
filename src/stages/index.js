@@ -33,6 +33,7 @@ import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
+import emberCliServer from "./ember-cli-server/index.js";
 import jqueryIntegration from "./jquery-integration/index.js";
 import lint from "./lint/index.js";
 import inlineContent from "./addons/inline-content.js";
@@ -144,6 +145,10 @@ export const stages = [
   appTree,
   declareImports,
   emberNvp,
+  /**
+   * After ember-nvp, which writes the Vite config.
+   */
+  emberCliServer,
   undeprecateInject,
   /**
    * After the stages that replace tools and addons, so that it finds the packages that only they used.

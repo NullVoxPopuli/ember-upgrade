@@ -172,6 +172,7 @@ export const apps = [
       "app-tree",
       "declare-imports",
       "ember-nvp",
+      "ember-cli-server",
       "unused-dependencies",
       "lint",
     ],
