@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import truthHelpers, { useKeywords } from "#stages/addons/truth-helpers.js";
+import { ELEMENT_HELPER, truthHelpers, useKeywords } from "#stages/addons/keywords.js";
 
 /**
  * @param {Record<string, string | object>} files
@@ -116,4 +116,29 @@ test("an app that imports the addon without declaring it, as another addon broug
   `);
   expect(app.packageJson.devDependencies).toEqual({ "ember-source": "~7.4.1" });
   expect(truthHelpers.detect(app)).toBe(false);
+});
+
+test("the element helper becomes the element keyword", () => {
+  expect(
+    useKeywords(
+      `import { element } from "ember-element-helper";
+import Tag from "ember-element-helper/helpers/element";
+
+<template>
+  {{#let (element @tagName) as |Wrapper|}}<Wrapper>{{yield}}</Wrapper>{{/let}}
+  {{#let (Tag "h2" class="x") as |H|}}<H />{{/let}}
+</template>
+`,
+      "app/components/x.gjs",
+      ELEMENT_HELPER,
+    ),
+  ).toMatchInlineSnapshot(`
+    "import Tag from "ember-element-helper/helpers/element";
+
+    <template>
+      {{#let (element @tagName) as |Wrapper|}}<Wrapper>{{yield}}</Wrapper>{{/let}}
+      {{#let (Tag "h2" class="x") as |H|}}<H />{{/let}}
+    </template>
+    "
+  `);
 });

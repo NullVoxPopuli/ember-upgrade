@@ -33,6 +33,7 @@ import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
+import emberCliServer from "./ember-cli-server/index.js";
 import jqueryIntegration from "./jquery-integration/index.js";
 import lint from "./lint/index.js";
 import inlineContent from "./addons/inline-content.js";
@@ -47,8 +48,9 @@ import pods from "./pods/index.js";
 import templateColocation from "./template-colocation/index.js";
 import templateTag from "./template-tag/index.js";
 import templateWhitespace from "./template-whitespace/index.js";
-import truthHelpers from "./addons/truth-helpers.js";
+import { elementHelper, truthHelpers } from "./addons/keywords.js";
 import undeprecateInject from "./undeprecate-inject/index.js";
+import unusedDependencies from "./unused-dependencies/index.js";
 import vite from "./vite/index.js";
 import viteSass from "./vite-sass/index.js";
 
@@ -132,9 +134,10 @@ export const stages = [
   viteLts,
   /**
    * After viteLts, which reaches the ember-source 7.1 keywords,
-   * and before app-tree, which would write the addon's helpers into app/.
+   * and before app-tree, which would write the addons' helpers into app/.
    */
   truthHelpers,
+  elementHelper,
   buildSettings,
   /**
    * After the addon stages, which change the app's addons, and before ember-nvp,
@@ -143,7 +146,15 @@ export const stages = [
   appTree,
   declareImports,
   emberNvp,
+  /**
+   * After ember-nvp, which writes the Vite config.
+   */
+  emberCliServer,
   undeprecateInject,
+  /**
+   * After the stages that replace tools and addons, so that it finds the packages that only they used.
+   */
+  unusedDependencies,
   /**
    * Last, so that the lint errors that it records are the ones in the final code.
    */
