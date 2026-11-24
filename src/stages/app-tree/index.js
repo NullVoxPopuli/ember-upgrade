@@ -9,6 +9,22 @@ import { recordProgress } from "#progress.js";
 const EXTENSIONS = [".js", ".ts", ".gjs", ".gts", ".hbs"];
 
 /**
+ * The modules that an addon recommends in place of its app-js entry, which it deprecates.
+ * ember-data deprecated the store service and the transforms that it installs this way (ember-data:deprecate-legacy-imports).
+ *
+ * @type {Record<string, Record<string, string>>}
+ */
+const RECOMMENDED = {
+  "ember-data": {
+    "./services/store.js": `export { default } from "ember-data/store";\n`,
+    "./transforms/boolean.js": `export { BooleanTransform as default } from "@ember-data/serializer/transform";\n`,
+    "./transforms/date.js": `export { DateTransform as default } from "@ember-data/serializer/transform";\n`,
+    "./transforms/number.js": `export { NumberTransform as default } from "@ember-data/serializer/transform";\n`,
+    "./transforms/string.js": `export { StringTransform as default } from "@ember-data/serializer/transform";\n`,
+  },
+};
+
+/**
  * The app-js entries that only a template finds by name.
  * Services, initializers, transforms and the other entries are resolver lookups that stay.
  */
@@ -262,9 +278,10 @@ export function missingAppFiles(project) {
       taken.add(base);
 
       let specifier = exportedAs(addon.name, addon.manifest, String(target));
-      let contents = specifier
+      let reexport = specifier
         ? `export * from "${specifier}";\nexport { default } from "${specifier}";\n`
         : readFileSync(join(addon.directory, String(target)), "utf8");
+      let contents = RECOMMENDED[addon.name]?.[appPath] ?? reexport;
 
       files.push({ addon: addon.name, file, contents });
     }
