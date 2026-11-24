@@ -49,6 +49,7 @@ import templateTag from "./template-tag/index.js";
 import templateWhitespace from "./template-whitespace/index.js";
 import truthHelpers from "./addons/truth-helpers.js";
 import undeprecateInject from "./undeprecate-inject/index.js";
+import unusedDependencies from "./unused-dependencies/index.js";
 import vite from "./vite/index.js";
 import viteSass from "./vite-sass/index.js";
 
@@ -144,6 +145,10 @@ export const stages = [
   declareImports,
   emberNvp,
   undeprecateInject,
+  /**
+   * After the stages that replace tools and addons, so that it finds the packages that only they used.
+   */
+  unusedDependencies,
   /**
    * Last, so that the lint errors that it records are the ones in the final code.
    */

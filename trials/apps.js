@@ -172,6 +172,7 @@ export const apps = [
       "app-tree",
       "declare-imports",
       "ember-nvp",
+      "unused-dependencies",
       "lint",
     ],
     /**
@@ -205,6 +206,7 @@ export const apps = [
       "declare-imports",
       "ember-nvp",
       "undeprecate-inject",
+      "unused-dependencies",
       "lint",
     ],
     /**
@@ -247,6 +249,7 @@ export const apps = [
       "declare-imports",
       "ember-nvp",
       "undeprecate-inject",
+      "unused-dependencies",
       "lint",
     ],
     /**
