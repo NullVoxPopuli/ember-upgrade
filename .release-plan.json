@@ -1,18 +1,18 @@
 {
   "solution": {
     "ember-upgrade": {
-      "impact": "minor",
-      "oldVersion": "0.0.0",
-      "newVersion": "0.1.0",
+      "impact": "patch",
+      "oldVersion": "0.1.0",
+      "newVersion": "0.1.1",
       "tagName": "latest",
       "constraints": [
         {
-          "impact": "minor",
-          "reason": "Appears in changelog section :rocket: Enhancement"
+          "impact": "patch",
+          "reason": "Appears in changelog section :bug: Bug Fix"
         }
       ],
       "pkgJSONPath": "./package.json"
     }
   },
-  "description": "## Release (2026-11-23)\n\n* ember-upgrade 0.1.0 (minor)\n\n#### :rocket: Enhancement\n* `ember-upgrade`\n  * [#40](https://github.com/NullVoxPopuli/ember-upgrade/pull/40) Move apps to a flat ESLint config, and record the lint errors that are left ([@NullVoxPopuli-ai-agent](https://github.com/NullVoxPopuli-ai-agent))\n\n#### Committers: 1\n- @NullVoxPopuli's reduced-access machine account for AI usage ([@NullVoxPopuli-ai-agent](https://github.com/NullVoxPopuli-ai-agent))\n"
+  "description": "## Release (2026-11-24)\n\n* ember-upgrade 0.1.1 (patch)\n\n#### :bug: Bug Fix\n* `ember-upgrade`\n  * [#42](https://github.com/NullVoxPopuli/ember-upgrade/pull/42) Build dist before each publish ([@NullVoxPopuli-ai-agent](https://github.com/NullVoxPopuli-ai-agent))\n\n#### Committers: 1\n- @NullVoxPopuli's reduced-access machine account for AI usage ([@NullVoxPopuli-ai-agent](https://github.com/NullVoxPopuli-ai-agent))\n"
 }
