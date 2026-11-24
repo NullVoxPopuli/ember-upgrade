@@ -274,14 +274,15 @@ export default {
   name: ADDON,
   label: `Use the keywords of ember-source 7.1 in place of ${ADDON}`,
 
+  /**
+   * An app can import the addon without declaring it, when another addon brought it in.
+   */
   detect(project) {
-    if (!project.dependency(ADDON) || !atLeast(project.dependency("ember-source"), 7, 1)) {
-      return false;
-    }
+    if (!atLeast(project.dependency("ember-source"), 7, 1)) return false;
 
     let { rewrites, users } = plan(project);
 
-    return rewrites.size > 0 || users.length === 0;
+    return rewrites.size > 0 || (Boolean(project.dependency(ADDON)) && users.length === 0);
   },
 
   async check() {
@@ -294,7 +295,8 @@ export default {
     for (let [file, output] of rewrites) project.write(file, output);
 
     if (users.length === 0) {
-      editPackageJson(project, (pkg) => removeDependency(pkg, ADDON));
+      if (project.dependency(ADDON))
+        editPackageJson(project, (pkg) => removeDependency(pkg, ADDON));
       return [];
     }
 

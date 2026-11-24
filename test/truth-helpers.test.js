@@ -1,6 +1,27 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 
-import { useKeywords } from "#stages/addons/truth-helpers.js";
+import { Project } from "#project.js";
+import truthHelpers, { useKeywords } from "#stages/addons/truth-helpers.js";
+
+/**
+ * @param {Record<string, string | object>} files
+ */
+function project(files) {
+  let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
+
+  for (let [file, contents] of Object.entries(files)) {
+    mkdirSync(join(directory, file, ".."), { recursive: true });
+    writeFileSync(
+      join(directory, file),
+      typeof contents === "string" ? contents : JSON.stringify(contents),
+    );
+  }
+
+  return new Project(directory);
+}
 
 test("imports become keywords, and not-eq becomes neq", () => {
   expect(
@@ -75,4 +96,24 @@ test("a block param with the keyword's name keeps the import", () => {
 `;
 
   expect(useKeywords(source, "app/components/x.gjs")).toBeUndefined();
+});
+
+test("an app that imports the addon without declaring it, as another addon brought it in", async () => {
+  let app = project({
+    "package.json": { name: "app", devDependencies: { "ember-source": "~7.4.1" } },
+    "app/components/x.gjs": `import eq from "ember-truth-helpers/helpers/eq";
+<template>{{if (eq @a @b) "same"}}</template>
+`,
+  });
+
+  expect(truthHelpers.detect(app)).toBe(true);
+
+  await truthHelpers.run(app);
+
+  expect(app.read("app/components/x.gjs")).toMatchInlineSnapshot(`
+    "<template>{{if (eq @a @b) "same"}}</template>
+    "
+  `);
+  expect(app.packageJson.devDependencies).toEqual({ "ember-source": "~7.4.1" });
+  expect(truthHelpers.detect(app)).toBe(false);
 });
