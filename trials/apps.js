@@ -173,6 +173,7 @@ export const apps = [
       "declare-imports",
       "ember-nvp",
       "ember-cli-server",
+      "sass",
       "unused-dependencies",
       "lint",
     ],
