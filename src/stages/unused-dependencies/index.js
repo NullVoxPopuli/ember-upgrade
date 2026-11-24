@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+import { buildFile } from "#config-files.js";
 import { dependencyNames, editPackageJson, removeDependency } from "#package-json.js";
 import { install } from "#process.js";
 import { recordProgress } from "#progress.js";
@@ -124,13 +125,20 @@ export function unusedDependencies(project) {
     queue.push(name);
   };
 
+  /**
+   * An app with an ember-cli build loads each addon in package.json, with or without an import.
+   */
+  let classic = Boolean(buildFile(project));
+
   for (let name of declared) {
     let manifest = manifestOf(project, name);
     let ran = manifest ? binsOf(manifest, name).some((bin) => words.has(bin)) : false;
+    let loaded = classic && Boolean(manifest?.keywords?.includes("ember-addon"));
 
     if (
       named.has(name) ||
       ran ||
+      loaded ||
       words.has(name) ||
       IMPLICIT.some((pattern) => pattern.test(name))
     ) {

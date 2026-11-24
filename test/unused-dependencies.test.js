@@ -124,3 +124,20 @@ test("without node_modules, no package is unused", () => {
 
   expect(unusedDependencies(app)).toEqual([]);
 });
+
+test("an app with an ember-cli build uses each addon in package.json", () => {
+  let files = {
+    "package.json": { name: "super-rentals", devDependencies: { "tracked-built-ins": "^3.3.0" } },
+    "node_modules/tracked-built-ins/package.json": {
+      name: "tracked-built-ins",
+      keywords: ["ember-addon"],
+    },
+  };
+
+  expect(unusedDependencies(project(files))).toEqual(["tracked-built-ins"]);
+  expect(
+    unusedDependencies(
+      project(Object.assign({ "ember-cli-build.js": "module.exports = () => {};\n" }, files)),
+    ),
+  ).toEqual([]);
+});
