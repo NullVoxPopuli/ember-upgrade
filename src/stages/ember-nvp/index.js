@@ -1,3 +1,6 @@
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+
 import { buildFile } from "#config-files.js";
 import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
@@ -68,6 +71,12 @@ export default {
     if (!runUpstream(project, "ember.nvp@2.11.0", args)) {
       throw new Error("ember.nvp failed. Its output is above.");
     }
+
+    /**
+     * The compat build wrote its addon list to node_modules/.embroider/resolver.json.
+     * Embroider reads that file when it exists, so a dependency that a later change removes would stay in the build.
+     */
+    rmSync(join(project.directory, "node_modules", ".embroider"), { recursive: true, force: true });
 
     if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];
 
