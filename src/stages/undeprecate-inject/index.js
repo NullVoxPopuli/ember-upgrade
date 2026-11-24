@@ -20,20 +20,60 @@ const INJECT = /\bimport\s*\{[^}]*\binject\b[^}]*\}\s*from\s*["']@ember\/service
 const WHEN_MATCHING = String.raw`/\binject\b[^;]*from\s*['"]@ember\/service['"]/`;
 
 /**
+ * Only the code of Ember addons goes into the app. A tool such as eslint-plugin-ember can name `inject` in its own code.
+ *
  * @param {Project} project
- * @returns {string[]} the dependencies whose installed code imports `inject` from @ember/service
+ * @returns {string[]} the addons whose installed code imports `inject` from @ember/service
  */
 export function injectUsers(project) {
   return dependencyNames(project.packageJson).filter((name) => {
     let dependency = new Project(join(project.directory, "node_modules", name));
 
     if (!dependency.has("package.json")) return false;
+    let keywords = /** @type {string[] | undefined} */ (dependency.packageJson.keywords);
+
+    if (!keywords?.includes("ember-addon")) return false;
 
     return dependency
       .files(["**/*.{js,mjs}"])
       .filter((file) => !/(^|\/)tests?\//.test(file))
       .some((file) => INJECT.test(dependency.read(file)));
   });
+}
+
+/**
+ * Adds the plugin before the spread of `macros.babelMacros` in the babel config's plugins.
+ *
+ * @param {string} source babel.config
+ * @param {string} file
+ * @returns {string | undefined} undefined when the spread is not there
+ */
+export function addBabelPlugin(source, file) {
+  let program = parseProgram(source, file);
+
+  if (!program) return;
+
+  /** @type {Node | undefined} */
+  let spread;
+
+  walk(program, (node) => {
+    if (
+      node.type === "SpreadElement" &&
+      source.slice(node.argument.start, node.argument.end) === "macros.babelMacros"
+    ) {
+      spread = node;
+    }
+  });
+
+  if (!spread) return;
+
+  let lineStart = source.lastIndexOf("\n", spread.start - 1) + 1;
+  let indent = source.slice(lineStart, spread.start);
+  let edits = new Edits(source);
+
+  edits.insert(spread.start, indent.trim() === "" ? `"${PLUGIN}",\n${indent}` : `"${PLUGIN}", `);
+
+  return edits.apply();
 }
 
 /**
@@ -120,16 +160,10 @@ export default {
       setDependency(pkg, PLUGIN, `^${published(PLUGIN)?.version ?? "1.0.7"}`),
     );
 
-    let source = project.read(babel);
+    let withPlugin = addBabelPlugin(project.read(babel), babel);
 
-    if (source.includes("...macros.babelMacros")) {
-      project.write(
-        babel,
-        source.replace(
-          /^(\s*)\.\.\.macros\.babelMacros/m,
-          `$1"${PLUGIN}",\n$1...macros.babelMacros`,
-        ),
-      );
+    if (withPlugin) {
+      project.write(babel, withPlugin);
     } else {
       todo.push({
         title: "Add the undeprecate-inject plugin to the babel config",
