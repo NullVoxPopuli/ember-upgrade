@@ -174,6 +174,7 @@ export const apps = [
       "ember-nvp",
       "ember-cli-server",
       "warp-drive",
+      "sass",
       "unused-dependencies",
       "lint",
     ],
