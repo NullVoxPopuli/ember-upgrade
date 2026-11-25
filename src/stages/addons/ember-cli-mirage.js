@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 
 import { parseProgram, propertyName, walk, SKIP } from "#ast.js";
@@ -129,7 +129,6 @@ export default {
     }
 
     for (let [file, contents] of result.writes) {
-      mkdirSync(dirname(join(project.directory, file)), { recursive: true });
       project.write(file, contents);
     }
 

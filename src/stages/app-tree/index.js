@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { dependencyNames } from "#package-json.js";
@@ -318,7 +318,6 @@ export default {
     let byAddon = new Map();
 
     for (let { addon, file, contents } of files) {
-      mkdirSync(join(project.directory, dirname(file)), { recursive: true });
       project.write(file, contents);
       byAddon.set(addon, (byAddon.get(addon) ?? []).concat(file));
     }

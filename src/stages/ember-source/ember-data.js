@@ -1,4 +1,3 @@
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { parseProgram, walk } from "#ast.js";
@@ -258,7 +257,6 @@ export function explicitRelationshipOptions(project) {
   }
 
   if (usesArray && !project.has("app/utils/as-array.js")) {
-    mkdirSync(join(project.directory, "app/utils"), { recursive: true });
     project.write("app/utils/as-array.js", AS_ARRAY_SOURCE);
   }
 
