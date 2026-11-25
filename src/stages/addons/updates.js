@@ -9,7 +9,7 @@ import { packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
 import { rewriteClickOutside } from "./click-outside.js";
-import { addBasicDropdownWormhole, updatePowerSelect } from "./power-select.js";
+import { addBasicDropdownWormhole, updateOptionClicks, updatePowerSelect } from "./power-select.js";
 import { dependencyDirectory, inlineV1Stage } from "./inline-v1.js";
 import { isObsoleteAddon } from "./removals.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
@@ -364,6 +364,8 @@ export function updateStage(name, release) {
       if (name === "ember-power-select" || name === "ember-basic-dropdown") {
         addBasicDropdownWormhole(project);
       }
+
+      if (name === "ember-power-select") updateOptionClicks(project);
 
       /**
        * The vite-sass stage pointed Sass imports at the v1 addon's app/styles, which a v2 addon does not have.

@@ -11,6 +11,7 @@ import warpDrive, {
   withWarpDriveInflection,
   withStrictTypes,
   withStringUtils,
+  withSaveRequests,
   withTrackingResolved,
 } from "#stages/warp-drive/index.js";
 
@@ -162,7 +163,7 @@ function project(files) {
   return new Project(directory);
 }
 
-test("the store sets up the legacy request methods on purpose, and record.save() is left to the app", async () => {
+test("the store sets up the legacy request methods on purpose, and a save outside a class with services is left to the app", async () => {
   let app = project({
     "package.json": {
       name: "app",
@@ -220,4 +221,159 @@ test("without an app entry to install reactivity in, the store stays ember-data'
 
   expect(warpDrive.detect(app)).toBe(false);
   expect(app.packageJson.devDependencies).toHaveProperty("@ember-data/tracking");
+});
+
+/**
+ * The controllers are from emberobserver/client, shortened.
+ */
+test("record.save() becomes a request through the store service", () => {
+  expect(
+    withSaveRequests(
+      `import Controller from '@ember/controller';
+import { service } from '@ember/service';
+
+export default class EditController extends Controller {
+  @service store;
+  @service router;
+
+  async save(event) {
+    event.preventDefault();
+    await this.store
+      .createRecord('build-server', { name: this.newBuildServerName })
+      .save();
+  }
+
+  add() {
+    newCategory
+      .save()
+      .then(() => {
+        this.router.transitionTo('admin.categories.index');
+      });
+  }
+
+  update(category) {
+    findPromise
+      .then(function (parentCategory) {
+        category.set('parent', parentCategory);
+        return category.save();
+      })
+      .then(() => {
+        this.router.transitionTo('admin.categories.index');
+      });
+  }
+}
+`,
+      "app/controllers/admin/categories/edit.js",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import Controller from '@ember/controller';
+    import { service } from '@ember/service';
+    import { saveRecord } from "@warp-drive/legacy/compat/builders";
+
+    export default class EditController extends Controller {
+      @service store;
+      @service router;
+
+      async save(event) {
+        event.preventDefault();
+        await this.store.request(saveRecord(this.store
+          .createRecord('build-server', { name: this.newBuildServerName })));
+      }
+
+      add() {
+        this.store.request(saveRecord(newCategory))
+          .then(() => {
+            this.router.transitionTo('admin.categories.index');
+          });
+      }
+
+      update(category) {
+        findPromise
+          .then((parentCategory) => {
+            category.set('parent', parentCategory);
+            return this.store.request(saveRecord(category));
+          })
+          .then(() => {
+            this.router.transitionTo('admin.categories.index');
+          });
+      }
+    }
+    "
+  `);
+});
+
+test("a component without the store service gets it, and the template stays", () => {
+  expect(
+    withSaveRequests(
+      `import { service as inject } from '@ember/service';
+import Component from '@glimmer/component';
+import { task } from 'ember-concurrency';
+
+export default class AdminAddon extends Component {<template><button {{on "click" this.save.perform}}>Save</button></template>
+  @inject session;
+
+  save = task({ drop: true }, async () => {
+    await this.addon.save();
+  });
+}
+`,
+      "app/components/admin-addon.gjs",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import { service as inject } from '@ember/service';
+    import Component from '@glimmer/component';
+    import { task } from 'ember-concurrency';
+    import { saveRecord } from "@warp-drive/legacy/compat/builders";
+
+    export default class AdminAddon extends Component {<template><button {{on "click" this.save.perform}}>Save</button></template>
+      @inject store;
+
+      @inject session;
+
+      save = task({ drop: true }, async () => {
+        await this.store.request(saveRecord(this.addon));
+      });
+    }
+    "
+  `);
+});
+
+test("record.save() stays when its value is read, or when the class's this is not in reach", () => {
+  let source = `import Controller from '@ember/controller';
+import { service } from '@ember/service';
+
+export default class C extends Controller {
+  @service store;
+
+  async a() {
+    let saved = await this.model.save();
+    return saved;
+  }
+
+  b() {
+    this.model.save().then((record) => record.id);
+  }
+
+  c() {
+    list.forEach(function (item) {
+      this.track(item);
+      item.save();
+    });
+  }
+
+  d() {
+    return this.model.save();
+  }
+
+  static e(record) {
+    record.save();
+  }
+
+  f() {
+    this.changeset.save();
+  }
+}
+`;
+
+  expect(withSaveRequests(source, "app/controllers/c.js")).toBeUndefined();
 });

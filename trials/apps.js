@@ -1,5 +1,3 @@
-import { join } from "node:path";
-
 /**
  * Real apps that CI upgrades on each change.
  *
@@ -115,7 +113,7 @@ export const apps = [
   {
     name: "ember-observer",
     repo: "emberobserver/client",
-    sha: "94e197af754b703dee9d30df030f63f95691c4b1",
+    sha: "5c64a060bd7264314907f2f2efb433a8cf355caa",
     completed: [
       "package-manager",
       "ember-globals",
@@ -167,6 +165,7 @@ export const apps = [
       "ember-concurrency",
       "jquery-integration",
       "ember-source-7.4",
+      "default-query-params",
       "ember-truth-helpers",
       "build-settings",
       "app-tree",
@@ -176,17 +175,13 @@ export const apps = [
       "warp-drive",
       "sass",
       "unused-dependencies",
+      "ci-workflows",
       "lint",
     ],
     /**
      * The trial does not install after each stage, so the lockfile is behind the last stages' package.json.
-     * The patch changes two expectations of the header search test that depended on old Ember and test helpers:
-     * - Ember 3's router service put the default `searchReadmes=false` in the URL. Ember 7 leaves it out.
-     * - `click()` of @ember/test-helpers 5 renders between mouseup and click. PowerSelect closes on mouseup,
-     *   so a full click reached a removed link, and the browser left the test page.
      */
     after: [
-      ["git", "apply", join(import.meta.dirname, "ember-observer-header-search.patch")],
       ["pnpm", "install", "--no-frozen-lockfile"],
       ["pnpm", "lint"],
       ["pnpm", "test"],
