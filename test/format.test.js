@@ -55,6 +55,7 @@ test("the files that the stages changed get the app's Prettier style, and the ot
   commit(directory, "Start");
 
   write(directory, {
+    "ember-upgrade-progress.yaml": 'entries:\n  - id: "ember-fetch"\n',
     "app/controllers/build-servers.js": `import { saveRecord } from "@warp-drive/legacy/compat/builders";
 
 export default class {
@@ -90,6 +91,7 @@ export default class {
     }
     "
   `);
+  expect(app.read("ember-upgrade-progress.yaml")).toBe('entries:\n  - id: "ember-fetch"\n');
   expect(app.read("app/untouched.js")).toBe('export const a = "not formatted"\n');
   expect(format.detect(app)).toBe(false);
 });

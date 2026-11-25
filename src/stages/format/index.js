@@ -3,8 +3,20 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { exec } from "#process.js";
+import { PROGRESS_FILE } from "#progress.js";
 
 /** @typedef {import('#project.js').Project} Project */
+
+/**
+ * Files that tools write and read back: the progress file is JSON strings in YAML, which Prettier would quote again.
+ */
+const TOOL_FILES = new Set([
+  PROGRESS_FILE,
+  "pnpm-lock.yaml",
+  "package-lock.json",
+  "yarn.lock",
+  "eslint-suppressions.json",
+]);
 
 const PRETTIER_CONFIG = /^(\.prettierrc(\.\w+)?|prettier\.config\.\w+)$/;
 
@@ -49,7 +61,7 @@ export function changedFiles(project) {
   let added = git(project, ["ls-files", "--others", "--exclude-standard"]).stdout;
 
   return Array.from(new Set(changed.split("\n").concat(added.split("\n"))))
-    .filter((file) => file && existsSync(join(project.directory, file)))
+    .filter((file) => file && !TOOL_FILES.has(file) && existsSync(join(project.directory, file)))
     .sort();
 }
 
