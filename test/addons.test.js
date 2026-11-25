@@ -702,6 +702,13 @@ module.exports = async function (defaults) {
     };
     "
   `);
+  expect(app.files(["app/**"])).toMatchInlineSnapshot(`
+    [
+      "app",
+      "app/snippets",
+      "app/snippets/trackjs.html",
+    ]
+  `);
   expect(readProgress(app).map((entry) => entry.id)).toEqual(["ember-cli-inline-content"]);
 });
 
