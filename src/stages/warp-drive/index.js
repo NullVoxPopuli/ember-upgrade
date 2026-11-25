@@ -493,12 +493,7 @@ export function withSaveRequests(source, file) {
     let property = store ? store.key.name : "store";
 
     for (let save of saves) {
-      /**
-       * A chain such as `this.store\n.createRecord(...)` goes on one line inside `saveRecord(...)`.
-       */
-      let record = source
-        .slice(save.callee.object.start, save.callee.object.end)
-        .replace(/\s*\n\s*(?=\??\.)/g, "");
+      let record = source.slice(save.callee.object.start, save.callee.object.end);
 
       edits.replace(save, `this.${property}.request(saveRecord(${record}))`);
     }
