@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { buildFile } from "#config-files.js";
@@ -9,6 +9,37 @@ import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./esl
  * The flat config that the eslint-bundled layer writes.
  */
 const FLAT_CONFIG = "eslint.config.js";
+
+/**
+ * ember.nvp makes the package a module, and Node then loads each `.js` file as one.
+ * A CommonJS config, such as `.prettierrc.js`, becomes `.cjs`, so that its tool can load it.
+ *
+ * @param {import('#project.js').Project} project
+ * @returns {string[]} the renamed files
+ */
+export function renameCommonJs(project) {
+  if (project.packageJson.type !== "module") return [];
+
+  let renamed = project
+    .files(["*.js", ".*.js", "config/*.js"])
+    .filter((file) => file !== FLAT_CONFIG)
+    .filter((file) => {
+      let source = project.read(file);
+
+      return (
+        /\bmodule\.exports\b|\brequire\(/.test(source) && !/^\s*(import|export)\s/m.test(source)
+      );
+    });
+
+  for (let file of renamed) {
+    renameSync(
+      join(project.directory, file),
+      join(project.directory, file.replace(/\.js$/, ".cjs")),
+    );
+  }
+
+  return renamed;
+}
 
 /** @type {import('#types.js').Stage} */
 export default {
@@ -77,6 +108,8 @@ export default {
      * Embroider reads that file when it exists, so a dependency that a later change removes would stay in the build.
      */
     rmSync(join(project.directory, "node_modules", ".embroider"), { recursive: true, force: true });
+
+    renameCommonJs(project);
 
     if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];
 

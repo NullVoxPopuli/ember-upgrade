@@ -70,6 +70,13 @@ function unformatted(project) {
     { cwd: project.directory, encoding: "utf8" },
   );
 
+  /**
+   * Without its config, Prettier would format in its default style, so the stage stops.
+   */
+  if (/Invalid configuration/.test(result.stderr)) {
+    throw new Error(`Prettier cannot load the app's config:\n${result.stderr}`);
+  }
+
   return result.stdout.split("\n").filter(Boolean);
 }
 
