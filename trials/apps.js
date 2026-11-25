@@ -224,6 +224,7 @@ export const apps = [
     sha: "e7004ce2883da90028147418839881408c46ea39",
     completed: [
       "ember-web-app",
+      "ember-serve-proxy",
       "vite",
       "ember-scoped-css",
       "ember-test-selectors",
@@ -248,6 +249,8 @@ export const apps = [
       "app-tree",
       "declare-imports",
       "ember-nvp",
+      "ember-serve-proxy-plugin",
+      "warp-drive-version",
       "warp-drive",
       "undeprecate-inject",
       "unused-dependencies",
