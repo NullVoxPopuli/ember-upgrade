@@ -6,6 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import {
   plan,
   printIndex,
+  printInitializer,
   printMirageModel,
   readModel,
   removeDiscovery,
@@ -438,4 +439,34 @@ test("tsconfig include gets mirage/ when it does not cover it", () => {
   expect(tsconfigForMirage(`{ "include": ["app", "mirage/**/*"] }`, "x")).toBe(
     `{ "include": ["app", "mirage/**/*"] }`,
   );
+});
+
+/**
+ * ember-cli-mirage left mirage off in development when the app had server/proxies, as emberobserver/client does.
+ */
+test("the initializer leaves mirage off in development when the app proxies its API", () => {
+  expect(printInitializer("js", "  ", "#app", true)).toMatchInlineSnapshot(`
+    "import { importSync, isDevelopingApp, isTesting, macroCondition } from '@embroider/macros';
+    import config from '#app/config/environment';
+
+    /**
+     * ember-cli-mirage started the server from its own initializer, with these rules.
+     * The import stays in the macro branch, so production builds have no mirage code.
+     */
+    export function initialize() {
+      if (macroCondition(isDevelopingApp())) {
+        let settings = config['ember-cli-mirage'] ?? {};
+        let enabled = settings.enabled ?? (config.environment === 'development' && !(settings.usingProxy ?? true));
+
+        if (enabled && !isTesting() && !('FastBoot' in globalThis)) {
+          let { default: makeServer } = importSync('#mirage/servers/default');
+
+          makeServer(config.environment);
+        }
+      }
+    }
+
+    export default { initialize };
+    "
+  `);
 });

@@ -363,7 +363,10 @@ export function plan(project) {
       trackRequests: /\btrackRequests\b/.test(environment),
     }),
   );
-  result.writes.set(`app/initializers/mirage.${ext}`, printInitializer(ext, indent, prefix));
+  result.writes.set(
+    `app/initializers/mirage.${ext}`,
+    printInitializer(ext, indent, prefix, project.has("server/proxies")),
+  );
 
   let usesStartMirage = false;
   /**
@@ -1020,12 +1023,17 @@ ${i}});
  * @param {string} ext
  * @param {string} indent
  * @param {string} prefix
+ * @param {boolean} proxies the app has server/proxies, so its dev server sends API requests to a real backend
  * @returns {string}
  */
-export function printInitializer(ext, indent, prefix) {
+export function printInitializer(ext, indent, prefix, proxies) {
   let i = indent;
   let ts = ext === "ts";
   let settingsType = ts ? ": { enabled?: boolean; usingProxy?: boolean }" : "";
+  /**
+   * ember-cli-mirage set usingProxy at build time, when server/proxies existed. The browser cannot look for the folder.
+   */
+  let usingProxy = proxies ? "(settings.usingProxy ?? true)" : "settings.usingProxy";
   let cast = ts ? " as { default: (environment: string) => unknown }" : "";
 
   return `import { importSync, isDevelopingApp, isTesting, macroCondition } from '@embroider/macros';
@@ -1038,7 +1046,7 @@ import config from '${prefix}/config/environment';
 export function initialize() {
 ${i}if (macroCondition(isDevelopingApp())) {
 ${i}${i}let settings${settingsType} = config['ember-cli-mirage'] ?? {};
-${i}${i}let enabled = settings.enabled ?? (config.environment === 'development' && !settings.usingProxy);
+${i}${i}let enabled = settings.enabled ?? (config.environment === 'development' && !${usingProxy});
 
 ${i}${i}if (enabled && !isTesting() && !('FastBoot' in globalThis)) {
 ${i}${i}${i}let { default: makeServer } = importSync('#mirage/servers/default')${cast};
