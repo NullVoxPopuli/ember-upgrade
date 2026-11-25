@@ -34,6 +34,7 @@ import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
 import emberCliServer from "./ember-cli-server/index.js";
+import warpDrive from "./warp-drive/index.js";
 import sass from "./sass/index.js";
 import jqueryIntegration from "./jquery-integration/index.js";
 import lint from "./lint/index.js";
@@ -151,6 +152,10 @@ export const stages = [
    * After ember-nvp, which writes the Vite config.
    */
   emberCliServer,
+  /**
+   * After ember-nvp, which writes app/app.js and the babel config.
+   */
+  warpDrive,
   /**
    * After ember-nvp, which writes the Vite config.
    */

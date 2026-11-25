@@ -174,3 +174,34 @@ test("a module is called by name with its dashed or its angle-bracket name", () 
     ].map((appPath) => calledByName(appPath, templates)),
   ).toEqual([true, true, false, false, false]);
 });
+
+test("ember-data's store service and transforms come from the modules that it recommends", async () => {
+  let app = project({
+    "package.json": { name: "app", devDependencies: { "ember-data": "~5.8.2" } },
+    "node_modules/ember-data/package.json": {
+      name: "ember-data",
+      version: "5.8.2",
+      keywords: ["ember-addon"],
+      exports: { "./app/*": { default: "./app/*.js" } },
+      "ember-addon": {
+        version: 2,
+        "app-js": {
+          "./services/store.js": "./app/services/store.js",
+          "./transforms/date.js": "./app/transforms/date.js",
+        },
+      },
+    },
+  });
+
+  await appTree.run(app);
+
+  expect(Object.fromEntries(app.files(["app/**/*.js"]).map((file) => [file, app.read(file)])))
+    .toMatchInlineSnapshot(`
+    {
+      "app/services/store.js": "export { default } from "ember-data/store";
+    ",
+      "app/transforms/date.js": "export { DateTransform as default } from "@ember-data/serializer/transform";
+    ",
+    }
+  `);
+});
