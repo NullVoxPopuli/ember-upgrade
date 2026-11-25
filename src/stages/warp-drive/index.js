@@ -7,7 +7,7 @@ import { recordProgress } from "#progress.js";
 /** @typedef {import('#ast.js').Node} Node */
 /** @typedef {import('#project.js').Project} Project */
 
-const APP = "app/app.js";
+const APPS = ["app/app.js", "app/app.ts"];
 const INSTALL = "@warp-drive/ember/install";
 const BABEL_CONFIGS = ["babel.config.js", "babel.config.mjs", "babel.config.cjs"];
 const STRING_UTILS = "@warp-drive/utilities/string";
@@ -21,7 +21,7 @@ const RELATIONSHIPS = new Set(["belongsTo", "hasMany"]);
 
 const WORDS = new Set(["pluralize", "singularize"]);
 
-const STORE = "app/services/store.js";
+const STORES = ["app/services/store.js", "app/services/store.ts"];
 
 /**
  * A store service that only re-exports ember-data's store, as the app-tree stage writes it.
@@ -59,13 +59,14 @@ function warpDriveRange(project) {
 /**
  * WarpDrive needs Ember's reactivity system from `@warp-drive/ember/install`. Before, `@ember-data/tracking` gave it.
  *
- * @param {string} source app/app.js
+ * @param {string} source app/app.js or app/app.ts
+ * @param {string} [file]
  * @returns {string | undefined} undefined when the app already imports it
  */
-export function withInstall(source) {
+export function withInstall(source, file = "app/app.js") {
   if (source.includes(INSTALL)) return;
 
-  let program = parseProgram(source, APP);
+  let program = parseProgram(source, file);
 
   if (!program) return;
 
@@ -309,10 +310,16 @@ function plan(project) {
   /** @type {Map<string, string>} */
   let changes = new Map();
 
-  if (project.has(APP)) {
-    let output = withInstall(project.read(APP));
+  let app = APPS.find((file) => project.has(file));
+  let installed = false;
 
-    if (output) changes.set(APP, output);
+  if (app) {
+    let source = project.read(app);
+    let output = withInstall(source, app);
+
+    if (output) changes.set(app, output);
+
+    installed = Boolean(output) || source.includes(INSTALL);
   }
 
   let babel = BABEL_CONFIGS.find((file) => project.has(file));
@@ -320,14 +327,20 @@ function plan(project) {
   /**
    * The install import resolves the deprecation, so the config marks it with the same change.
    */
-  if (babel && changes.has(APP)) {
+  if (babel && app && changes.has(app)) {
     let output = withTrackingResolved(project.read(babel), babel);
 
     if (output) changes.set(babel, output);
   }
 
-  if (project.has(STORE) && STORE_REEXPORT.test(project.read(STORE))) {
-    changes.set(STORE, LEGACY_STORE);
+  /**
+   * Unlike ember-data's store, the legacy store does not set up Ember's reactivity.
+   * It needs the install import.
+   */
+  let store = STORES.find((file) => project.has(file));
+
+  if (installed && store && STORE_REEXPORT.test(project.read(store))) {
+    changes.set(store, LEGACY_STORE);
   }
 
   for (let file of project.files(["{app,mirage,tests}/**/*.{js,ts,gjs,gts}"])) {
@@ -368,16 +381,23 @@ export default {
   async run(project) {
     let range = /** @type {string} */ (warpDriveRange(project));
 
-    editPackageJson(project, (pkg) => removeDependency(pkg, "@ember-data/tracking"));
-
     let changes = plan(project);
 
     for (let [file, output] of changes) project.write(file, output);
 
     editPackageJson(project, (pkg) => {
-      if (changes.has(APP)) setDependency(pkg, "@warp-drive/ember", range);
+      let installs = APPS.some((file) => changes.get(file)?.includes(INSTALL));
+      let legacy = STORES.some((file) => changes.get(file) === LEGACY_STORE);
 
-      if (changes.get(STORE) === LEGACY_STORE) {
+      /**
+       * The install import takes the place of @ember-data/tracking.
+       */
+      if (installs) {
+        removeDependency(pkg, "@ember-data/tracking");
+        setDependency(pkg, "@warp-drive/ember", range);
+      }
+
+      if (legacy) {
         setDependency(pkg, "@warp-drive/legacy", range);
         setDependency(pkg, "@warp-drive/json-api", range);
       }

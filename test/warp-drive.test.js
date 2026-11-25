@@ -195,3 +195,29 @@ test("the store sets up the legacy request methods on purpose, and record.save()
   `);
   expect(warpDrive.detect(app)).toBe(false);
 });
+
+test("a TypeScript app gets the install import, which the legacy store needs", async () => {
+  let app = project({
+    "package.json": { name: "app", devDependencies: { "ember-data": "~5.8.2" } },
+    "app/app.ts": `import Application from "@ember/application";\n`,
+    "app/services/store.ts": `export { default } from "ember-data/store";\n`,
+  });
+
+  await warpDrive.run(app);
+
+  expect(app.read("app/app.ts")).toContain(`import "@warp-drive/ember/install";`);
+  expect(app.read("app/services/store.ts")).toBe(LEGACY_STORE);
+});
+
+test("without an app entry to install reactivity in, the store stays ember-data's", async () => {
+  let app = project({
+    "package.json": {
+      name: "app",
+      devDependencies: { "ember-data": "~5.8.2", "@ember-data/tracking": "~5.8.2" },
+    },
+    "app/services/store.js": `export { default } from "ember-data/store";\n`,
+  });
+
+  expect(warpDrive.detect(app)).toBe(false);
+  expect(app.packageJson.devDependencies).toHaveProperty("@ember-data/tracking");
+});
