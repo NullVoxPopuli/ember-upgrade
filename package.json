@@ -1,6 +1,6 @@
 {
   "name": "ember-upgrade",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Upgrades older Ember projects, step by step, to Vite, template tag, and the ember.nvp layout",
   "keywords": [
     "codemod",
