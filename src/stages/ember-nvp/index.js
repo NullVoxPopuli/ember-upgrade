@@ -1,5 +1,5 @@
 import { renameSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 
 import { buildFile } from "#config-files.js";
 import { install, packageManager, runUpstream } from "#process.js";
@@ -39,6 +39,79 @@ export function renameCommonJs(project) {
   }
 
   return renamed;
+}
+
+/**
+ * The files that can require or import a module in config/.
+ */
+const MODULE_USERS = [
+  "*.{js,cjs,mjs,ts}",
+  ".*.{js,cjs}",
+  "config/**/*.{js,cjs,mjs,ts}",
+  "lib/**/*.{js,cjs,mjs,ts}",
+  "app/**/*.{js,ts,gjs,gts}",
+  "tests/**/*.{js,ts,gjs,gts}",
+];
+
+const SPECIFIER = /(?:require\(\s*|import\(\s*|from\s+|import\s+)["'](\.{1,2}\/[^"']+)["']/g;
+
+/**
+ * @param {string} file
+ * @returns {string}
+ */
+function withoutExtension(file) {
+  return file.replace(/\.[cm]?[jt]s$/, "");
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ * @returns {Map<string, Set<string>>} each module in config/, with the files that require or import it
+ */
+export function configModuleUsers(project) {
+  /** @type {Map<string, Set<string>>} */
+  let users = new Map();
+  /** @type {Map<string, string>} */
+  let modules = new Map();
+
+  for (let module of project.files(["config/**/*.{js,cjs,mjs}"])) {
+    users.set(module, new Set());
+    modules.set(withoutExtension(module), module);
+  }
+
+  for (let file of project.files(MODULE_USERS)) {
+    for (let [, specifier] of project.read(file).matchAll(SPECIFIER)) {
+      let target = posix.normalize(posix.join(posix.dirname(file), specifier));
+      let module = modules.get(withoutExtension(target));
+
+      if (module && module !== file) users.get(module)?.add(file);
+    }
+  }
+
+  return users;
+}
+
+/**
+ * ember.nvp replaces files such as ember-cli-build.js and config/environment.js.
+ * A helper module in config/ that only those files required has no use after it.
+ *
+ * @param {import('#project.js').Project} project
+ * @param {Map<string, Set<string>>} before from `configModuleUsers`, before ember.nvp ran
+ * @returns {string[]} the removed modules
+ */
+export function removeOrphanConfigModules(project, before) {
+  let after = configModuleUsers(project);
+  /** @type {string[]} */
+  let removed = [];
+
+  for (let [module, users] of before) {
+    if (users.size === 0 || !project.has(module) || (after.get(module)?.size ?? 0) > 0) continue;
+    if (Array.from(users).some((user) => project.has(user))) continue;
+
+    rmSync(join(project.directory, module));
+    removed.push(module);
+  }
+
+  return removed;
 }
 
 /** @type {import('#types.js').Stage} */
@@ -98,8 +171,9 @@ export default {
      * ember.nvp replaces it with a flat config, and removes it, so the stage reads it first.
      */
     let eslintrc = readEslintrc(project);
+    let configUsers = configModuleUsers(project);
 
-    if (!runUpstream(project, "ember.nvp@2.11.0", args)) {
+    if (!runUpstream(project, "ember.nvp@3.1.0", args)) {
       throw new Error("ember.nvp failed. Its output is above.");
     }
 
@@ -109,6 +183,7 @@ export default {
      */
     rmSync(join(project.directory, "node_modules", ".embroider"), { recursive: true, force: true });
 
+    removeOrphanConfigModules(project, configUsers);
     renameCommonJs(project);
 
     if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];

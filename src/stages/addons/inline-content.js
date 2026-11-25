@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { parseProgram, propertyName, walk } from "#ast.js";
@@ -147,6 +147,17 @@ export default {
       }
 
       project.write(file, html);
+    }
+
+    /**
+     * The HTML holds the content of these files now. The progress note names the files of the left-out snippets, so they stay.
+     */
+    let kept = new Set(
+      snippets.filter((snippet) => left.has(snippet.key)).map((snippet) => snippet.file),
+    );
+
+    for (let snippet of snippets) {
+      if (!kept.has(snippet.file)) rmSync(join(project.directory, snippet.file), { force: true });
     }
 
     removeBuildOptions(project, ["inlineContent"]);
