@@ -276,8 +276,7 @@ export default class EditController extends Controller {
 
       async save(event) {
         event.preventDefault();
-        await this.store.request(saveRecord(this.store
-          .createRecord('build-server', { name: this.newBuildServerName })));
+        await this.store.request(saveRecord(this.store.createRecord('build-server', { name: this.newBuildServerName })));
       }
 
       add() {
