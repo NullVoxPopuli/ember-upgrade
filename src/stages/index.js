@@ -35,6 +35,7 @@ import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
+import format from "./format/index.js";
 import emberCliServer from "./ember-cli-server/index.js";
 import warpDrive from "./warp-drive/index.js";
 import sass from "./sass/index.js";
@@ -175,6 +176,10 @@ export const stages = [
    * After the stages that rename the package.json scripts, which the workflows run.
    */
   ciWorkflows,
+  /**
+   * After the stages that change code, and before lint, whose suppressions name lines of the formatted code.
+   */
+  format,
   /**
    * Last, so that the lint errors that it records are the ones in the final code.
    */

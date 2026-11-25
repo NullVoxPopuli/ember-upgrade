@@ -176,6 +176,7 @@ export const apps = [
       "sass",
       "unused-dependencies",
       "ci-workflows",
+      "format",
       "lint",
     ],
     /**
@@ -205,6 +206,7 @@ export const apps = [
       "ember-nvp",
       "warp-drive",
       "unused-dependencies",
+      "format",
       "lint",
     ],
     /**
@@ -249,6 +251,7 @@ export const apps = [
       "warp-drive",
       "undeprecate-inject",
       "unused-dependencies",
+      "format",
       "lint",
     ],
     /**
