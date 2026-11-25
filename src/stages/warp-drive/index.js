@@ -1,4 +1,4 @@
-import { parseProgram, SKIP, walk } from "#ast.js";
+import { identifierName, parseProgram, SKIP, walk } from "#ast.js";
 import { importMap } from "#codemods/imports.js";
 import { Edits } from "#edits.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
@@ -302,6 +302,233 @@ export function withStrictTypes(source, file) {
   return edits.size > 0 ? edits.apply() : undefined;
 }
 
+const SAVE_RECORD = "@warp-drive/legacy/compat/builders";
+
+const FUNCTIONS = new Set(["FunctionExpression", "FunctionDeclaration", "ArrowFunctionExpression"]);
+
+/**
+ * @param {Node} node
+ * @param {Map<Node, Node | undefined>} parents
+ * @returns {boolean} true when the node uses its own function's `this` or `arguments`
+ */
+function usesOwnThis(node, parents) {
+  let found = false;
+
+  walk(node.body, (child) => {
+    if (child.type === "FunctionExpression" || child.type === "FunctionDeclaration") return SKIP;
+    if (
+      child.type === "ThisExpression" ||
+      child.type === "Super" ||
+      child.type === "MetaProperty" ||
+      (child.type === "Identifier" && child.name === "arguments")
+    ) {
+      found = true;
+    }
+  });
+
+  return found || parents.get(node)?.type === "MethodDefinition";
+}
+
+/**
+ * `store.request()` resolves with a document, not with the record. Only a call whose value nothing reads can change.
+ *
+ * @param {Node} node
+ * @param {Map<Node, Node | undefined>} parents
+ * @returns {boolean}
+ */
+function valueUnused(node, parents) {
+  let parent = parents.get(node);
+
+  if (!parent) return false;
+  if (parent.type === "ExpressionStatement") return true;
+  if (parent.type === "AwaitExpression") return valueUnused(parent, parents);
+
+  if (parent.type === "MemberExpression" && parent.object === node && !parent.computed) {
+    let call = parents.get(parent);
+    let method = parent.property.name;
+
+    if (call?.type !== "CallExpression" || call.callee !== parent) return false;
+    if (method === "catch" || method === "finally") return valueUnused(call, parents);
+
+    let callback = call.arguments[0];
+
+    return method === "then" && FUNCTIONS.has(callback?.type) && callback.params.length === 0;
+  }
+
+  /**
+   * A `.then` callback that returns the call gives its value to the next callback.
+   */
+  let returned =
+    parent.type === "ReturnStatement" ||
+    (parent.type === "ArrowFunctionExpression" && parent.body === node);
+  /** @type {Node | undefined} */
+  let callback = parent;
+
+  while (returned && callback && !FUNCTIONS.has(callback.type)) callback = parents.get(callback);
+
+  if (!returned || !callback) return false;
+
+  let call = parents.get(callback);
+
+  return (
+    call?.type === "CallExpression" &&
+    call.arguments[0] === callback &&
+    call.callee.type === "MemberExpression" &&
+    call.callee.property.name === "then" &&
+    valueUnused(call, parents)
+  );
+}
+
+/**
+ * Changes `record.save()` to `this.store.request(saveRecord(record))`, in classes with the store service.
+ * `record.save()` logs warp-drive:deprecate-legacy-request-methods, and the request does the same save.
+ *
+ * A call changes only when nothing reads its value, and inside a function that can see the class's `this`.
+ * A `function` callback without its own `this` becomes an arrow function for that.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @returns {string | undefined}
+ */
+export function withSaveRequests(source, file) {
+  if (!RECORD_SAVE.test(source) || /\bsaveRecord\b|ember-changeset/.test(source)) return;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return;
+
+  /** @type {Set<string>} */
+  let decorators = new Set();
+
+  for (let node of program.body) {
+    if (node.type !== "ImportDeclaration" || node.source.value !== "@ember/service") continue;
+
+    for (let specifier of node.specifiers) {
+      let imported = specifier.imported?.name;
+
+      if (imported === "service" || imported === "inject") decorators.add(specifier.local.name);
+    }
+  }
+
+  if (decorators.size === 0) return;
+
+  /** @type {Map<Node, Node | undefined>} */
+  let parents = new Map();
+
+  walk(program, (node, parent) => {
+    parents.set(node, parent);
+  });
+
+  let edits = new Edits(source);
+
+  walk(program, (node) => {
+    if (node.type !== "ClassBody") return;
+
+    let services = node.body.filter(
+      (/** @type {Node} */ member) =>
+        member.type === "PropertyDefinition" &&
+        member.decorators?.some((/** @type {Node} */ d) =>
+          decorators.has(identifierName(d.expression.callee ?? d.expression) ?? ""),
+        ),
+    );
+
+    let store = services.find((/** @type {Node} */ member) => {
+      let decorator = member.decorators[0].expression;
+      let name = decorator.arguments?.[0]?.value ?? member.key.name;
+
+      return name === "store";
+    });
+
+    if (services.length === 0) return;
+
+    /** @type {Node[]} */
+    let saves = [];
+    /** @type {Node[]} */
+    let arrows = [];
+
+    walk(node, (child) => {
+      if (child.type === "ClassBody" && child !== node) return SKIP;
+      if (
+        child.type !== "CallExpression" ||
+        child.arguments.length > 0 ||
+        child.callee.type !== "MemberExpression" ||
+        child.callee.computed ||
+        child.callee.property.name !== "save" ||
+        child.callee.object.type === "ThisExpression" ||
+        /changeset/i.test(source.slice(child.callee.object.start, child.callee.object.end)) ||
+        !valueUnused(child, parents)
+      ) {
+        return;
+      }
+
+      /** @type {Node[]} */
+      let functions = [];
+
+      for (let up = parents.get(child); up && up !== node; up = parents.get(up)) {
+        if (up.type === "FunctionExpression" || up.type === "FunctionDeclaration") {
+          functions.push(up);
+        }
+      }
+
+      let methods = functions.filter((fn) => parents.get(fn)?.type === "MethodDefinition");
+      let callbacks = functions.filter((fn) => parents.get(fn)?.type !== "MethodDefinition");
+
+      if (methods.some((fn) => fn.static) || parents.get(methods[0])?.static) return;
+      if (
+        callbacks.some(
+          (fn) =>
+            fn.type !== "FunctionExpression" || fn.id || fn.generator || usesOwnThis(fn, parents),
+        )
+      ) {
+        return;
+      }
+
+      saves.push(child);
+
+      for (let fn of callbacks) if (!arrows.includes(fn)) arrows.push(fn);
+    });
+
+    if (saves.length === 0) return;
+
+    let property = store ? store.key.name : "store";
+
+    for (let save of saves) {
+      let record = source.slice(save.callee.object.start, save.callee.object.end);
+
+      edits.replace(save, `this.${property}.request(saveRecord(${record}))`);
+    }
+
+    for (let fn of arrows) {
+      let params = source.slice(fn.start, fn.body.start).replace(/^(async\s+)?function\s*/, "$1");
+
+      edits.replace({ start: fn.start, end: fn.body.start }, `${params.trimEnd()} => `);
+    }
+
+    if (!store) {
+      let first = services[0];
+      let lineStart = source.lastIndexOf("\n", first.start - 1) + 1;
+      let indent = source.slice(lineStart, first.start);
+      let decorator = identifierName(
+        first.decorators[0].expression.callee ?? first.decorators[0].expression,
+      );
+
+      edits.insert(first.start, `@${decorator} store;\n\n${indent}`);
+    }
+  });
+
+  if (edits.size === 0) return;
+
+  let imports = program.body.filter(
+    (/** @type {Node} */ node) => node.type === "ImportDeclaration",
+  );
+  let last = imports[imports.length - 1];
+  let line = `import { saveRecord } from "${SAVE_RECORD}";`;
+
+  edits.insert(last ? last.end : 0, last ? `\n${line}` : `${line}\n`);
+
+  return edits.apply();
+}
+
 /**
  * @param {Project} project
  * @returns {Map<string, string>} the changed files
@@ -343,6 +570,13 @@ function plan(project) {
     changes.set(store, LEGACY_STORE);
   }
 
+  /**
+   * `saveRecord` needs the LegacyNetworkHandler, which the legacy store sets up.
+   */
+  let legacy =
+    (store !== undefined && changes.get(store) === LEGACY_STORE) ||
+    Boolean(store && project.read(store).includes("useLegacyStore"));
+
   for (let file of project.files(["{app,mirage,tests}/**/*.{js,ts,gjs,gts}"])) {
     let source = project.read(file);
     let output;
@@ -353,6 +587,8 @@ function plan(project) {
     }
 
     if (file.startsWith("app/models/")) output = withStrictTypes(output ?? source, file) ?? output;
+    if (legacy && file.startsWith("app/"))
+      output = withSaveRequests(output ?? source, file) ?? output;
     if (output) changes.set(file, output);
   }
 

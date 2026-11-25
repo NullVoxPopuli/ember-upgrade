@@ -11,8 +11,10 @@ import inlineContent from "#stages/addons/inline-content.js";
 import { replaceTypeahead } from "#stages/addons/power-select-typeahead.js";
 import {
   addBasicDropdownWormhole,
+  optionClasses,
   rewritePowerSelectMultiple,
   updatePowerSelect,
+  withOptionClicks,
 } from "#stages/addons/power-select.js";
 import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
@@ -803,4 +805,55 @@ test("code that read window.moment imports moment when the shim goes", async () 
   expect(app.read("tests/acceptance/code-search-test.js")).toBe(
     "import moment from 'moment';\nlet date = moment().subtract(2, 'days');\n",
   );
+});
+
+/**
+ * The template and the test are from emberobserver/client, shortened.
+ */
+test("a click on an element in a power-select option sends only the click event", () => {
+  let app = project({
+    "app/components/page-layout.hbs": `<PowerSelect @search={{perform this.searchForAddons}} as |addonName options|>
+  {{#if addonName.isFullSearchLink}}
+    <LinkTo @route="index" class="jump-to-full-search test-search-result-jump-to-full-search-link">Search</LinkTo>
+  {{else}}
+    <LinkTo @route="addons.show" @model={{addonName}} class="test-search-result-addon-link">{{addonName}}</LinkTo>
+  {{/if}}
+</PowerSelect>
+<button class="test-logout" type="button">Log out</button>
+`,
+  });
+
+  expect(
+    withOptionClicks(
+      `import { click, fillIn, currentURL } from '@ember/test-helpers';
+
+test('Each option is also a link to where it would go', async function (assert) {
+  await fillIn('.test-header-search input', 'test');
+
+  await click(findByText('.test-search-result-addon-link', 'addon-test'));
+
+  await click('.test-search-result-jump-to-full-search-link');
+
+  await click('.test-logout');
+});
+`,
+      "tests/acceptance/header-search-test.js",
+      optionClasses(app),
+    ),
+  ).toMatchInlineSnapshot(`
+    "import { click, fillIn, currentURL, triggerEvent } from '@ember/test-helpers';
+
+    test('Each option is also a link to where it would go', async function (assert) {
+      await fillIn('.test-header-search input', 'test');
+
+      /** click() renders between mouseup and click. PowerSelect closes on mouseup, so a full click reaches a removed element. */
+      await triggerEvent(findByText('.test-search-result-addon-link', 'addon-test'), 'click');
+
+      /** click() renders between mouseup and click. PowerSelect closes on mouseup, so a full click reaches a removed element. */
+      await triggerEvent('.test-search-result-jump-to-full-search-link', 'click');
+
+      await click('.test-logout');
+    });
+    "
+  `);
 });

@@ -24,9 +24,11 @@ import {
 } from "./addons/removals.js";
 import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
 import appTree from "./app-tree/index.js";
+import ciWorkflows from "./ci-workflows/index.js";
 import classicComponents from "./classic-components/index.js";
 import buildSettings from "./build-settings/index.js";
 import declareImports from "./declare-imports/index.js";
+import defaultQueryParams from "./default-query-params/index.js";
 import emberCli from "./ember-cli/index.js";
 import emberConcurrency from "./ember-concurrency/index.js";
 import emberCssModules from "./ember-css-modules/index.js";
@@ -135,6 +137,10 @@ export const stages = [
   templateWhitespace,
   viteLts,
   /**
+   * After viteLts, which reaches the URLs of ember-source 7.
+   */
+  defaultQueryParams,
+  /**
    * After viteLts, which reaches the ember-source 7.1 keywords,
    * and before app-tree, which would write the addons' helpers into app/.
    */
@@ -165,6 +171,10 @@ export const stages = [
    * After the stages that replace tools and addons, so that it finds the packages that only they used.
    */
   unusedDependencies,
+  /**
+   * After the stages that rename the package.json scripts, which the workflows run.
+   */
+  ciWorkflows,
   /**
    * Last, so that the lint errors that it records are the ones in the final code.
    */
