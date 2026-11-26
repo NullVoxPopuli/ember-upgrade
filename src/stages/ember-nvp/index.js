@@ -6,6 +6,7 @@ import { updateNodePins } from "#node-version.js";
 import { recordProgress } from "#progress.js";
 import { fixStylesheetImports } from "./css-imports.js";
 import { ESLINT_CONFIGS, withoutBabelConfigFile } from "./eslint-babel.js";
+import { TESTEM_CONFIG, withDistFolder } from "./testem.js";
 import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
 
@@ -222,6 +223,13 @@ export default {
       let output = withoutBabelConfigFile(config, file);
 
       if (output !== config) project.write(file, output);
+    }
+
+    if (project.has(TESTEM_CONFIG)) {
+      let config = project.read(TESTEM_CONFIG);
+      let output = withDistFolder(config, TESTEM_CONFIG);
+
+      if (output !== config) project.write(TESTEM_CONFIG, output);
     }
 
     if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];
