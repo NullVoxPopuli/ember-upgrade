@@ -11,6 +11,7 @@ import { published } from "#process.js";
 import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
+import { updateNodePins } from "#node-version.js";
 import { BABEL_CONFIGS, withoutCompilerPath } from "./compiler-path.js";
 import { explicitRelationshipOptions } from "./ember-data.js";
 import { KEYWORD_FILES, withoutKeywordImports } from "./helper-keywords.js";
@@ -207,6 +208,11 @@ function step(lts) {
 
         if (output !== targets) project.write(TARGETS, output);
       }
+
+      /**
+       * The ember-cli of the ember-source 6 blueprints requires ES modules.
+       */
+      if (target[0] >= 6) updateNodePins(project);
 
       if (before[0] < 6 && target[0] >= 6) {
         keepArrayPrototypeExtensions(project);

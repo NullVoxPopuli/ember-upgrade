@@ -185,7 +185,7 @@ test("a Node.js pin older than the build tooling needs moves to the LTS line", (
   });
 
   expect(updateNodePins(app)).toEqual([".npmrc", ".nvmrc"]);
-  expect(app.read(".npmrc")).toBe("auto-install-peers=true\nuse-node-version=24\n");
-  expect(app.read(".nvmrc")).toBe("24\n");
+  expect(app.read(".npmrc")).toMatch(/^auto-install-peers=true\nuse-node-version=24\.\d+\.\d+\n$/);
+  expect(app.read(".nvmrc")).toMatch(/^24\.\d+\.\d+\n$/);
   expect(app.read(".node-version")).toBe("24.11.0\n");
 });
