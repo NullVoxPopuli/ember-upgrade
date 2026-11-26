@@ -69,6 +69,10 @@ function headTags(manifest) {
 export default {
   name: "ember-web-app",
   label: "Replace ember-web-app with public/manifest.webmanifest and tags in index.html",
+  /**
+   * config/environment.js and config/manifest.js can require the app's packages.
+   */
+  needsInstall: true,
 
   detect(project) {
     return Boolean(project.dependency("ember-web-app"));
