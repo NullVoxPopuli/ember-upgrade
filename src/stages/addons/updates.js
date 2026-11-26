@@ -4,7 +4,13 @@ import { parseProgram } from "#ast.js";
 import { addVitePlugin, removeBuildOptions, viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
 import { installedAddonTree, resolvePackage } from "#installed.js";
-import { addOverride, allowBuild, overrideRange, removeOverride } from "#manager-settings.js";
+import {
+  addOverride,
+  allowBuild,
+  overrideRange,
+  pnpmMajor,
+  removeOverride,
+} from "#manager-settings.js";
 import {
   dependencyNames,
   editPackageJson,
@@ -19,6 +25,7 @@ import { addBasicDropdownWormhole, updateOptionClicks, updatePowerSelect } from 
 import { dependencyDirectory, inlineV1Stage } from "./inline-v1.js";
 import { mergedStyleImports, moveMergedStyleImports } from "./merged-styles.js";
 import { isObsoleteAddon } from "./removals.js";
+import { truthHelperPaths } from "./truth-helpers.js";
 import { IGNORED, NO_V2_YET, installedV1Addons, isV1Addon as isV1Manifest } from "./known.js";
 import { ICONS_MODULE, iconsModule, rewriteDynamicIcons } from "./svg-jar-icons.js";
 
@@ -92,8 +99,9 @@ export const deprecationWorkflow = {
 };
 
 const STYLEGUIDE_PR = "https://github.com/ember-learn/ember-styleguide/pull/551";
-const STYLEGUIDE_REF =
-  "github:NullVoxPopuli-ai-agent/ember-styleguide#a00373bc5bf1a9f125545c6ed470294cf86bc907";
+const STYLEGUIDE_SHA = "a00373bc5bf1a9f125545c6ed470294cf86bc907";
+const STYLEGUIDE_REF = `github:NullVoxPopuli-ai-agent/ember-styleguide#${STYLEGUIDE_SHA}`;
+const STYLEGUIDE_TARBALL = `https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/${STYLEGUIDE_SHA}`;
 
 /** @type {Stage} */
 export const emberStyleguide = {
@@ -122,7 +130,14 @@ export const emberStyleguide = {
 
     editPackageJson(project, (pkg) => setDependency(pkg, "ember-styleguide", STYLEGUIDE_REF));
 
-    if (packageManager(project) === "pnpm") allowBuild(project, "ember-styleguide");
+    if (packageManager(project) === "pnpm") {
+      allowBuild(project, "ember-styleguide");
+
+      /**
+       * pnpm 11 allows the build of a git-hosted package by the URL of its tarball.
+       */
+      if (pnpmMajor(project) >= 11) allowBuild(project, `ember-styleguide@${STYLEGUIDE_TARBALL}`);
+    }
 
     recordProgress(project, {
       id: "ember-styleguide",
@@ -524,6 +539,10 @@ const TEMPLATE_CODEMODS = new Map([
   [
     "ember-power-select",
     { codemod: updatePowerSelect, files: "{app,addon,tests}/**/*.{hbs,gjs,gts,js,ts}" },
+  ],
+  [
+    "ember-truth-helpers",
+    { codemod: truthHelperPaths, files: "{app,addon,tests}/**/*.{gjs,gts,js,ts}" },
   ],
 ]);
 

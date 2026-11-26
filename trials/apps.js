@@ -588,6 +588,7 @@ export const apps = [
     verify: true,
     repo: "ember-learn/rfcs-app",
     sha: "bd12425cd34cddb52903ca7d6247b547249a99e0",
+    setup: [["npm", "run", "clone"]],
     completed: [],
   },
   {
@@ -629,6 +630,33 @@ export const apps = [
     name: "ember-blog",
     repo: "ember-learn/ember-blog",
     sha: "beb67247068c847e1141344b794f72a64c0681f3",
-    completed: [],
+    completed: [
+      "ember-cli",
+      "ember-fetch",
+      "ember-source-3.28",
+      "ember-source-4.4",
+      "ember-source-4.8",
+      "ember-source-4.12",
+      "ember-source-5.4",
+      "ember-source-5.8",
+      "ember-source-5.12",
+      "ember-source-6.4",
+      "ember-source-6.8",
+      "ember-source-6.12",
+      "ember-metrics",
+      "v1-addons",
+      "vite",
+      "prember",
+      "ember-export-application-global",
+      "ember-maybe-import-regenerator",
+      "ember-source-7.4",
+      "app-tree",
+      "declare-imports",
+    ],
+    /**
+     * empress-blog, empress-blog-ember-template, ember-cli-fastboot and ember-cli-netlify are v1 addons with no stage yet,
+     * and ember-cli-build has the ember-prism option.
+     */
+    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
 ];

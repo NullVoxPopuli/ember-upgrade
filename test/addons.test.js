@@ -331,7 +331,7 @@ test("ember-styleguide installs from git, and pnpm 10 may build it", async () =>
   ]);
 });
 
-test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml", async () => {
+test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml, by the tarball URL for a git-hosted package", async () => {
   let app = project({
     "package.json": `{ "name": "x", "packageManager": "pnpm@12.21.0", "devDependencies": { "ember-styleguide": "^11.3.1" } }`,
     "pnpm-lock.yaml": "",
@@ -340,9 +340,13 @@ test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml", async () => 
 
   await emberStyleguide.run(app);
 
-  expect(app.read("pnpm-workspace.yaml")).toBe(
-    "allowBuilds:\n  esbuild: true\n  ember-styleguide: true\n",
-  );
+  expect(app.read("pnpm-workspace.yaml")).toMatchInlineSnapshot(`
+    "allowBuilds:
+      esbuild: true
+      ember-styleguide: true
+      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/a00373bc5bf1a9f125545c6ed470294cf86bc907': true
+    "
+  `);
   expect(app.packageJson.pnpm).toBeUndefined();
 });
 
