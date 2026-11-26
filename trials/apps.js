@@ -553,8 +553,8 @@ export const apps = [
       "classic-components",
     ],
     /**
-     * The template-tag codemod builds the app with \`new EmberApp({ project })\`, without the options of ember-cli-build.js,
-     * so ember-bootstrap does not get \`bootstrapVersion: 3\`, and looks for bootstrap 4 or 5.
+     * The template-tag codemod builds the app with `new EmberApp({ project })`, without the options of ember-cli-build.js,
+     * so ember-bootstrap does not get `bootstrapVersion: 3`, and looks for bootstrap 4 or 5.
      */
     stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },
