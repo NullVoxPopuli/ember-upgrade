@@ -30,6 +30,7 @@ import buildSettings from "./build-settings/index.js";
 import declareImports from "./declare-imports/index.js";
 import defaultQueryParams from "./default-query-params/index.js";
 import emberCli from "./ember-cli/index.js";
+import emberCliApp from "./ember-cli-app/index.js";
 import emberConcurrency from "./ember-concurrency/index.js";
 import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
@@ -75,6 +76,10 @@ import viteSass from "./vite-sass/index.js";
  * @type {(import('#types.js').Stage | import('#types.js').StageGroup)[]}
  */
 export const stages = [
+  /**
+   * First, so that nothing changes in a project that the stages cannot upgrade.
+   */
+  emberCliApp,
   packageManager,
   emberGlobals,
   emberWebApp,

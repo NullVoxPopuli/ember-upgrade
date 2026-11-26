@@ -433,6 +433,10 @@ export const apps = [
     repo: "streamlink/streamlink-twitch-gui",
     sha: "8fb521372056242327b71ae8d449882e14478508",
     completed: [],
+    /**
+     * It builds Ember with webpack from src/app, so the ember-cli stages do not apply.
+     */
+    stopsAt: { stage: "ember-cli-app", message: "no ember-cli-build.js" },
   },
   {
     name: "skylines",
