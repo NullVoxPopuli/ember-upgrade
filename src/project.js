@@ -1,4 +1,4 @@
-import { existsSync, globSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /**
@@ -59,11 +59,16 @@ export class Project {
   }
 
   /**
+   * Creates the folders of the file that do not exist.
+   *
    * @param {string} file relative to the project
    * @param {string} contents
    */
   write(file, contents) {
-    writeFileSync(join(this.directory, file), contents);
+    let path = join(this.directory, file);
+
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, contents);
   }
 
   /**

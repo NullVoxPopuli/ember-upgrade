@@ -1,6 +1,3 @@
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
-
 import { parseProgram, walk } from "#ast.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
@@ -259,7 +256,6 @@ export default {
     }
 
     if (titleFunction && !project.has("app/services/page-title.js")) {
-      mkdirSync(join(project.directory, "app/services"), { recursive: true });
       project.write("app/services/page-title.js", pageTitleService(titleFunction));
     }
 

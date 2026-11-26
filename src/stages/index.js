@@ -37,7 +37,9 @@ import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
 import format from "./format/index.js";
 import emberCliServer from "./ember-cli-server/index.js";
+import { proxyPluginStage, proxyScriptsStage } from "./ember-serve-proxy/index.js";
 import warpDrive from "./warp-drive/index.js";
+import warpDriveVersion from "./warp-drive/version.js";
 import sass from "./sass/index.js";
 import jqueryIntegration from "./jquery-integration/index.js";
 import lint from "./lint/index.js";
@@ -86,6 +88,10 @@ export const stages = [
    */
   emberCliMirage,
   emberCssModules,
+  /**
+   * Before vite, which replaces the `start` script.
+   */
+  proxyScriptsStage,
   vite,
   /** Later stages boot the compat build, where ember-cli-sass can load node-sass. */
   viteSass,
@@ -159,6 +165,11 @@ export const stages = [
    * After ember-nvp, which writes the Vite config.
    */
   emberCliServer,
+  proxyPluginStage,
+  /**
+   * Before warp-drive, which adds WarpDrive packages at the version that the app has.
+   */
+  warpDriveVersion,
   /**
    * After ember-nvp, which writes app/app.js and the babel config.
    */

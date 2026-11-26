@@ -1,4 +1,3 @@
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { parseProgram, walk } from "#ast.js";
@@ -230,7 +229,6 @@ function controllersForTemplates(project, injection, only) {
       .join("");
     let decorator = service === property ? "@service" : `@service('${service}')`;
 
-    mkdirSync(join(project.directory, "app/controllers", route, ".."), { recursive: true });
     project.write(
       `app/controllers/${route}.js`,
       `import Controller from '@ember/controller';\nimport { service } from '@ember/service';\n\nexport default class ${className}Controller extends Controller {\n  ${decorator} ${property};\n}\n`,

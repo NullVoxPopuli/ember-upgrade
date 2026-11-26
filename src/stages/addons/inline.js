@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
@@ -98,7 +98,6 @@ export function inlineStage(inline) {
        * @param {string} contents
        */
       let write = (file, contents) => {
-        mkdirSync(join(project.directory, dirname(file)), { recursive: true });
         project.write(file, contents);
       };
 

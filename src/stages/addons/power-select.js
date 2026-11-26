@@ -1,4 +1,3 @@
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { identifierName, parseProgram, walk } from "#ast.js";
@@ -92,7 +91,6 @@ export function addBasicDropdownWormhole(project) {
   if (!file) {
     if (!project.has("app/app.js") && !project.has("app/app.ts")) return;
 
-    mkdirSync(join(project.directory, "app/templates"), { recursive: true });
     project.write("app/templates/application.hbs", "{{outlet}}\n<BasicDropdownWormhole />\n");
     return;
   }
