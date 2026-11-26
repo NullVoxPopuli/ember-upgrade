@@ -3,7 +3,7 @@ import { dirname, join, relative } from "node:path";
 
 import { resolvePackage } from "#installed.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
-import { published } from "#process.js";
+import { install, published } from "#process.js";
 import { recordProgress } from "#progress.js";
 
 /** @typedef {import('#project.js').Project} Project */
@@ -72,25 +72,38 @@ export default {
     return Boolean(project.dependency(NAME));
   },
 
-  async check(project) {
-    /** @type {import('#types.js').Report} */
-    let report = { blockers: [], todo: [] };
-
-    if (!installedPercy(project)) {
-      report.blockers.push({
-        title: `${NAME} is not installed, or its test helper changed`,
-        where: ["package.json"],
-        action: `Install the dependencies. If ${NAME} has no ${SOURCE}, move its test helper by hand.`,
-      });
-    }
-
-    return report;
+  async check() {
+    return { blockers: [], todo: [] };
   },
 
   async run(project) {
-    let percy = /** @type {{ directory: string, version: string, helper: string }} */ (
-      installedPercy(project)
-    );
+    /** @type {import('#types.js').Finding[]} */
+    let todo = [];
+    let percy = installedPercy(project);
+
+    /**
+     * Before 5, the helper had another shape. Its API, `percySnapshot(name, options)`, is the same.
+     */
+    if (!percy) {
+      editPackageJson(project, (pkg) =>
+        setDependency(pkg, NAME, `^${published(NAME)?.version ?? "5.0.1"}`),
+      );
+
+      if (!install(project)) throw new Error(`The install of the latest ${NAME} failed.`);
+
+      percy = installedPercy(project);
+    }
+
+    if (!percy) throw new Error(`${NAME} has no ${SOURCE}. Move its test helper by hand.`);
+
+    if (!project.dependency("@percy/cli")) {
+      todo.push({
+        title: "Run the Percy tests with @percy/cli",
+        where: ["package.json"],
+        action: `${NAME} 5 sends the snapshots to @percy/cli, which replaced @percy/agent. Run the tests with \`percy exec -- <test command>\`.`,
+      });
+    }
+
     let utils = resolvePackage(percy.directory, "@percy/sdk-utils");
     let range = utils
       ? `^${JSON.parse(readFileSync(join(utils, "package.json"), "utf8")).version}`
@@ -125,6 +138,6 @@ export default {
       links: ["https://github.com/percy/ember-percy"],
     });
 
-    return [];
+    return todo;
   },
 };
