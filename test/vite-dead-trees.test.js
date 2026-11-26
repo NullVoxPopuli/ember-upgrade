@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 
+import { withoutAddonConfigModule } from "#stages/vite/config-module.js";
 import { removeDeadTrees } from "#stages/vite/dead-trees.js";
 
 /**
@@ -162,4 +163,23 @@ module.exports = async function(defaults) {
     };
     "
   `);
+});
+
+test("compatBuild gets useAddonConfigModule: false", () => {
+  expect(
+    withoutAddonConfigModule(
+      "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce);\n};\n",
+      "ember-cli-build.js",
+    ),
+  ).toBe(
+    "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce, { useAddonConfigModule: false });\n};\n",
+  );
+  expect(
+    withoutAddonConfigModule(
+      "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce, { staticAddonTrees: true });\n};\n",
+      "ember-cli-build.js",
+    ),
+  ).toBe(
+    "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce, { useAddonConfigModule: false, staticAddonTrees: true });\n};\n",
+  );
 });

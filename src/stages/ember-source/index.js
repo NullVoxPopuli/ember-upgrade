@@ -13,6 +13,7 @@ import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 import { BABEL_CONFIGS, withoutCompilerPath } from "./compiler-path.js";
 import { explicitRelationshipOptions } from "./ember-data.js";
+import { KEYWORD_FILES, withoutKeywordImports } from "./helper-keywords.js";
 import { TARGETS, withoutInternetExplorer } from "./targets.js";
 import { explicitInjections, routerServiceTransitions } from "./injections.js";
 import { renameTitleHelpers } from "./page-title.js";
@@ -130,6 +131,18 @@ function step(lts) {
          */
         if (target[0] >= 7) removeDependency(pkg, "ember-cli-htmlbars");
       });
+
+      /**
+       * Templates of ember-source 7.4 have `array` and `hash` as keywords.
+       */
+      if (target[0] > 7 || (target[0] === 7 && target[1] >= 4)) {
+        for (let file of project.files(KEYWORD_FILES)) {
+          let source = project.read(file);
+          let output = withoutKeywordImports(source, file);
+
+          if (output !== source) project.write(file, output);
+        }
+      }
 
       if (target[0] >= 7) {
         for (let file of BABEL_CONFIGS) {

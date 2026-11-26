@@ -3,6 +3,7 @@ import { addOverride } from "#manager-settings.js";
 import { published, runUpstream } from "#process.js";
 import { recordProgress } from "#progress.js";
 import { atLeast } from "#version.js";
+import { configModuleAddons, withoutAddonConfigModule } from "./config-module.js";
 import { removeDeadTrees } from "./dead-trees.js";
 
 /**
@@ -99,6 +100,24 @@ export default {
         action:
           "The code that post-processed `app.toTree()` is gone. If it did something that the app needs, such as PostCSS plugins, do it in the Vite config or in postcss.config.js.",
       });
+    }
+
+    let addons = configModuleAddons(project);
+    let current = file ? project.read(file) : "";
+
+    if (file && addons.length > 0) {
+      let output = withoutAddonConfigModule(current, file);
+
+      if (output !== current) {
+        project.write(file, output);
+        recordProgress(project, {
+          id: "useAddonConfigModule",
+          status: "check",
+          note:
+            `${addons.join(", ")} wrote the app's config module, which Embroider refuses, so compatBuild has \`useAddonConfigModule: false\`. ` +
+            "app/config/environment reads the config from the meta tag. The ember-nvp stage removes the option.",
+        });
+      }
     }
 
     for (let [name, fallback] of Object.entries(PINS)) {

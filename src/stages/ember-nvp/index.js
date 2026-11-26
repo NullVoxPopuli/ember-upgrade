@@ -1,7 +1,7 @@
 import { renameSync, rmSync } from "node:fs";
 import { join, posix } from "node:path";
 
-import { buildFile } from "#config-files.js";
+import { buildFile, removeCompatBuildOptions } from "#config-files.js";
 import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
 
@@ -143,6 +143,12 @@ export default {
   },
 
   async run(project) {
+    /**
+     * ember.nvp apps read no config modules of addons, and ember.nvp stops on the option.
+     * The compat build of the stages before this one needs it, when a v1 addon has a config module.
+     */
+    removeCompatBuildOptions(project, ["useAddonConfigModule"]);
+
     /**
      * Without a name, ember.nvp gives the app the name of its template, and imports of `<name>/...` stop resolving.
      */

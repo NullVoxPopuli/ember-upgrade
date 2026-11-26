@@ -241,9 +241,9 @@ module.exports = async function (defaults) {
 });
 
 /**
- * From ember-learn/upgrade-guide ember-cli-build.js, shortened, with the useAddonConfigModule of ember-learn/rfcs-app.
+ * From ember-learn/upgrade-guide ember-cli-build.js, shortened.
  */
-test("an empty extraPublicTrees and useAddonConfigModule go", async () => {
+test("an empty extraPublicTrees goes", async () => {
   let app = project({
     "package.json": JSON.stringify({ devDependencies: { "@embroider/vite": "^1.7.2" } }),
     "ember-cli-build.js": `'use strict';
@@ -256,7 +256,6 @@ module.exports = async function (defaults) {
 
   return compatBuild(app, buildOnce, {
     extraPublicTrees: [],
-    useAddonConfigModule: false,
   });
 };
 `,

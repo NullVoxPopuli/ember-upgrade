@@ -7,6 +7,7 @@ import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
 import { withoutCompilerPath } from "#stages/ember-source/compiler-path.js";
 import { withoutInternetExplorer } from "#stages/ember-source/targets.js";
+import { withoutKeywordImports } from "#stages/ember-source/helper-keywords.js";
 import {
   arrayMacroGetters,
   explicitRelationships,
@@ -576,6 +577,38 @@ module.exports = {
     module.exports = {
       browsers,
     };
+    "
+  `);
+});
+
+/**
+ * The template of ember-website's meetups page after the ember-leaflet stage, shortened.
+ */
+test("the imports of array and hash go, because templates of ember-source 7.4 have them as keywords", () => {
+  expect(
+    withoutKeywordImports(
+      `import { array, hash } from '@ember/helper';
+import { fn, hash as h } from "@ember/helper";
+import { array as list } from '@ember/helper';
+
+const options = hash;
+
+<template>
+  <MapLibreGL @initOptions={{hash center=(array 0 20)}} @x={{fn this.a}} @y={{h}} @z={{list}} />
+</template>
+`,
+      "app/templates/community/meetups/index.gjs",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import { hash } from '@ember/helper';
+    import { fn, hash as h } from "@ember/helper";
+    import { array as list } from '@ember/helper';
+
+    const options = hash;
+
+    <template>
+      <MapLibreGL @initOptions={{hash center=(array 0 20)}} @x={{fn this.a}} @y={{h}} @z={{list}} />
+    </template>
     "
   `);
 });
