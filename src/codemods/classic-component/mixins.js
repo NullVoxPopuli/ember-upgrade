@@ -214,6 +214,17 @@ function importLine(name, from) {
 }
 
 /**
+ * `inject` is the old name of `service` in @ember/service. Both import the same function.
+ *
+ * @param {string} module
+ * @param {string} imported
+ * @returns {string}
+ */
+function exportName(module, imported) {
+  return module === "@ember/service" && imported === "inject" ? "service" : imported;
+}
+
+/**
  * Copies the properties of the app's mixins into the classic component that uses them, as `Component.extend(Mixin, {})` combined them.
  * The mixin's imports and module constants that the properties use come along. Mixins of addons stay.
  *
@@ -379,7 +390,11 @@ export function inlineMixins(source, file, resolve) {
           : imported.module;
         let have = imports.get(local);
 
-        if (have && (have.module !== module || have.imported !== imported.imported)) {
+        if (
+          have &&
+          (have.module !== module ||
+            exportName(module, have.imported) !== exportName(module, imported.imported))
+        ) {
           unreadable.push(`${local} of the mixin ${name} is another import in the component`);
         } else if (!have && (imported.imported === local || imported.imported === "default")) {
           let names = add.get(module) ?? new Set();

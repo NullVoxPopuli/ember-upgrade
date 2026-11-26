@@ -155,6 +155,46 @@ export default Component.extend(ProgressMixin, EKMixin, {
   `);
 });
 
+/**
+ * From documize/community (AGPL-3.0), after the ember-source 4 step declared the injected service.
+ */
+test("a mixin's service import and the component's inject import are the same function", () => {
+  let mixin = `import Mixin from '@ember/object/mixin';
+import { service } from '@ember/service';
+
+export default Mixin.create({
+  eventBus: service(),
+});
+`;
+  let source = `import Component from '@ember/component';
+import { inject as service } from '@ember/service';
+import Notifier from '../mixins/notifier';
+
+export default Component.extend(Notifier, {
+  global: service(),
+});
+`;
+
+  let result = inlineMixins(source, "app/components/license-key.js", (specifier) =>
+    specifier === "../mixins/notifier"
+      ? { file: "app/mixins/notifier.js", source: mixin }
+      : undefined,
+  );
+
+  expect(result.unreadable).toEqual([]);
+  expect(result.source).toMatchInlineSnapshot(`
+    "import Component from '@ember/component';
+    import { inject as service } from '@ember/service';
+
+    export default Component.extend({
+      eventBus: service(),
+
+      global: service(),
+    });
+    "
+  `);
+});
+
 test("the component's _super call runs the mixin's method under its own name", () => {
   let source = `import Component from '@ember/component';
 import ProgressMixin from 'my-app/mixins/progress';
