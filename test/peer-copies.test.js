@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import composableHelpers from "#stages/addons/composable-helpers.js";
 import peerCopies, { peerMismatches } from "#stages/peer-copies/index.js";
+import { missingPeers } from "#stages/peer-dependencies/index.js";
 
 /**
  * @param {Record<string, string | object>} files
@@ -109,4 +110,23 @@ test("an addon that depends on ember-composable-helpers needs the fork, with no 
   );
 
   expect(composableHelpers.detect(app)).toBe(false);
+});
+
+/**
+ * From ember-learn/ember-website: ember-a11y-testing 8.0.1 has axe-core as a required peer, and qunit as an optional one.
+ */
+test("the required peers of the app's addons that the app does not declare", () => {
+  let app = project({
+    "package.json": { name: "ember-website", devDependencies: { "ember-a11y-testing": "^8.0.1" } },
+    "node_modules/ember-a11y-testing/package.json": {
+      name: "ember-a11y-testing",
+      keywords: ["ember-addon"],
+      peerDependencies: { "axe-core": "^4.0.0", qunit: ">= 2", "ember-source": ">= 4" },
+      peerDependenciesMeta: { qunit: { optional: true } },
+    },
+  });
+
+  expect(Object.fromEntries(missingPeers(app))).toEqual({
+    "axe-core": { range: "^4.0.0", addons: ["ember-a11y-testing"] },
+  });
 });

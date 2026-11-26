@@ -664,6 +664,7 @@ export const apps = [
       "ember-body-class",
       "ember-href-to",
       "v1-addons",
+      "peer-dependencies",
       "prember",
       "vite",
       "ember-styleguide-css",

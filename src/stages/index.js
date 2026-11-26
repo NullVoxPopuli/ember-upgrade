@@ -69,6 +69,7 @@ import patchedPackages from "./patched-packages/index.js";
 import truthHelpersPaths from "./addons/truth-helpers.js";
 import noImplicitThis from "./no-implicit-this/index.js";
 import peerCopies from "./peer-copies/index.js";
+import peerDependencies from "./peer-dependencies/index.js";
 import pods from "./pods/index.js";
 import templateColocation from "./template-colocation/index.js";
 import templateTag from "./template-tag/index.js";
@@ -137,6 +138,7 @@ export const stages = [
    */
   v2Addons,
   peerCopies,
+  peerDependencies,
   /**
    * Before vite, whose Babel config removes only the imports that say `type`.
    */
