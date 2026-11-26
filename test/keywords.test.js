@@ -175,7 +175,12 @@ test("the helpers that are no keywords move to @ember/utils, or into the app whe
     "
   `);
   expect(app.has("app/helpers/xor.js")).toBe(true);
-  expect(app.has("app/helpers/is-array.js")).toBe(true);
+  expect(app.read("app/helpers/is-array.js")).toMatchInlineSnapshot(`
+    "export default function isArray(...values) {
+      return values.every((value) => Array.isArray(value));
+    }
+    "
+  `);
   expect(app.has("app/helpers/is-equal.js")).toBe(false);
   expect(app.packageJson.devDependencies).toEqual({ "ember-source": "~7.4.1" });
   expect(truthHelpers.detect(app)).toBe(false);

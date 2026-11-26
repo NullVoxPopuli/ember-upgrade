@@ -54,12 +54,11 @@ export default function xor(left, right) {
 `;
 
 /**
- * From ember-truth-helpers 5 (MIT): `is-array` is true when each argument is an array.
+ * `is-array` of ember-truth-helpers 5 is true when each argument is an array. Native arrays are the arrays of Ember 7,
+ * so Ember arrays and objects with a `length`, which the `isArray` of @ember/array counted, are no arrays here.
  */
-const IS_ARRAY = `import { isArray as isEmberArray } from '@ember/array';
-
-export default function isArray(...values) {
-  return values.every(isEmberArray);
+const IS_ARRAY = `export default function isArray(...values) {
+  return values.every((value) => Array.isArray(value));
 }
 `;
 
@@ -466,7 +465,9 @@ function keywordStage(addon) {
         recordProgress(project, {
           id: `${addon.name}: helpers`,
           status: "moved into the app",
-          note: `The app uses helpers of ${addon.name} that are no keywords. Their code is in ${helperFiles.join(", ")} now.`,
+          note:
+            `The app uses helpers of ${addon.name} that are no keywords. Their code is in ${helperFiles.join(", ")} now. ` +
+            "is-array checks with Array.isArray, so an Ember array or an object with a length is no array for it.",
         });
       }
 
