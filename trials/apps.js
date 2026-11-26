@@ -421,4 +421,32 @@ export const apps = [
     ],
     stopsAt: { stage: "template-tag", message: "@embroider/template-tag-codemod failed" },
   },
+  {
+    name: "documize",
+    repo: "documize/community",
+    sha: "e19bcd02ab20750a904fc2e3815cd453e877fa54",
+    directory: "gui",
+    completed: [],
+  },
+  {
+    name: "streamlink-twitch-gui",
+    repo: "streamlink/streamlink-twitch-gui",
+    sha: "8fb521372056242327b71ae8d449882e14478508",
+    completed: [],
+  },
+  {
+    name: "skylines",
+    repo: "skylines-project/skylines",
+    sha: "c8145deda871813d42f2b780dc75bc8329aa55fa",
+    directory: "ember",
+    completed: [],
+  },
+  {
+    name: "hermes",
+    verify: true,
+    repo: "hashicorp-forge/hermes",
+    sha: "d18e2109be9312cc22228951fa855bd1a9543855",
+    directory: "web",
+    completed: [],
+  },
 ];
