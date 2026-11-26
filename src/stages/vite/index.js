@@ -3,6 +3,7 @@ import { addOverride } from "#manager-settings.js";
 import { published, runUpstream } from "#process.js";
 import { recordProgress } from "#progress.js";
 import { atLeast } from "#version.js";
+import { removeDeadTrees } from "./dead-trees.js";
 
 /**
  * v1 addons depend on older copies of these packages, and the Vite build needs the latest one.
@@ -84,6 +85,22 @@ export default {
       throw new Error("ember-vite-codemod failed. Its output is above.");
     }
 
+    /** @type {import('#types.js').Finding[]} */
+    let todo = [];
+    let file = buildFile(project);
+    let build = file ? project.read(file) : "";
+    let live = file ? removeDeadTrees(build, file) : build;
+
+    if (file && live !== build) {
+      project.write(file, live);
+      todo.push({
+        title: "ember-cli-build changed the output of the classic build, which Vite does not use",
+        where: [file],
+        action:
+          "The code that post-processed `app.toTree()` is gone. If it did something that the app needs, such as PostCSS plugins, do it in the Vite config or in postcss.config.js.",
+      });
+    }
+
     for (let [name, fallback] of Object.entries(PINS)) {
       addOverride(project, name, `^${published(name)?.version ?? fallback}`);
     }
@@ -98,6 +115,6 @@ export default {
       });
     }
 
-    return [];
+    return todo;
   },
 };

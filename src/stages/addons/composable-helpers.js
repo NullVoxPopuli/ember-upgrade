@@ -3,8 +3,11 @@ import { dirname, join } from "node:path";
 import { parseProgram } from "#ast.js";
 import { removeBuildOptions } from "#config-files.js";
 import { Edits } from "#edits.js";
+import { installedAddonTree } from "#installed.js";
+import { addOverride, hasOverride } from "#manager-settings.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
+import { recordProgress } from "#progress.js";
 import { Project } from "#project.js";
 import { atLeast } from "#version.js";
 
@@ -22,6 +25,16 @@ const SOURCES = [
 ];
 
 /**
+ * @param {Project} project
+ * @returns {boolean} an installed addon depends on the original, and no override replaces it
+ */
+function dependedOn(project) {
+  if (hasOverride(project, OLD)) return false;
+
+  return installedAddonTree(project).some(({ manifest }) => manifest.dependencies?.[OLD]);
+}
+
+/**
  * Moves to the maintained v2 fork. The helper names and import paths stay the same.
  * ember-vite-codemod refuses the original, because of a Babel issue that will not be fixed.
  *
@@ -32,7 +45,7 @@ export default {
   label: `Move from ${OLD} to ${NEW}`,
 
   detect(project) {
-    return Boolean(project.dependency(OLD));
+    return Boolean(project.dependency(OLD)) || dependedOn(project);
   },
 
   async check() {
@@ -41,6 +54,7 @@ export default {
 
   async run(project) {
     let range = `^${published(NEW)?.version ?? FALLBACK}`;
+    let deep = dependedOn(project);
 
     editPackageJson(project, (pkg) => {
       removeDependency(pkg, OLD);
@@ -86,6 +100,21 @@ export default {
      * The `only` and `except` options of the original. The fork is a v2 addon, so the build keeps only what the app uses.
      */
     removeBuildOptions(project, [OLD]);
+
+    /**
+     * The original runs Babel with the app's config at build time, which breaks the build of an app
+     * whose Babel config is async. The fork has the same import paths, so it replaces the copies that addons depend on.
+     */
+    if (deep || dependedOn(project)) {
+      addOverride(project, OLD, `npm:${NEW}@${range}`);
+      recordProgress(project, {
+        id: `${OLD}: override`,
+        status: "override",
+        note:
+          `An override replaces ${OLD} with ${NEW} for the addons that depend on it. ` +
+          "Remove the override when no dependency depends on the original.",
+      });
+    }
 
     return [];
   },
