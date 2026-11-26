@@ -1036,3 +1036,48 @@ test("ember-get-config goes, and its imports name the app's config/environment",
   `);
   expect(emberGetConfig.detect(app)).toBe(false);
 });
+
+/**
+ * From ember-learn/ember-website ember-cli-build.js (MIT), before the vite stage, shortened.
+ */
+test("prember's prerender call leaves the tree that it wrapped", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "prember": "^2.1.0" } }`,
+    "package-lock.json": "{}",
+    "ember-cli-build.js": `'use strict';
+
+const { compatBuild } = require('@embroider/compat');
+const { Webpack } = require('@embroider/webpack');
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { prerender } = require('prember');
+
+module.exports = function (defaults) {
+  const app = new EmberApp(defaults, {
+    prember: { urls: ['/', 'teams'] },
+  });
+
+  const compiledApp = compatBuild(app, Webpack, {});
+
+  return prerender(app, compiledApp);
+};
+`,
+  });
+
+  expect(await prember.run(app)).toEqual([]);
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+
+    const { compatBuild } = require('@embroider/compat');
+    const { Webpack } = require('@embroider/webpack');
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    module.exports = function (defaults) {
+      const app = new EmberApp(defaults, {});
+
+      const compiledApp = compatBuild(app, Webpack, {});
+
+      return compiledApp;
+    };
+    "
+  `);
+});

@@ -1,5 +1,7 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { parseProgram, propertyName, walk } from "#ast.js";
+import { Edits } from "#edits.js";
 import { buildFile, removeBuildOptions, removeUnusedRequires } from "#config-files.js";
 import {
   dependencyNames,
@@ -65,6 +67,11 @@ function removalStage(removal) {
 
       removeBuildOptions(project, removal.buildOptions ?? []);
 
+      /**
+       * Before the requires go, because the change of the code can leave one unused.
+       */
+      removal.after?.(project);
+
       for (let module of removeUnusedRequires(project, names)) {
         todo.push({
           title: `ember-cli-build still uses ${module}, which is removed`,
@@ -76,8 +83,6 @@ function removalStage(removal) {
       for (let file of removal.files ?? []) {
         rmSync(join(project.directory, file), { force: true });
       }
-
-      removal.after?.(project);
 
       if (removal.progress) {
         recordProgress(
@@ -148,6 +153,56 @@ export const emberTestSelectors = removalStage({
 });
 
 /**
+ * prember's `prerender(app, tree)` wraps the build tree, and the tree stays without it.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function unwrapPrerender(project) {
+  let file = buildFile(project);
+  let source = file ? project.read(file) : "";
+  let program = file ? parseProgram(source, file) : undefined;
+
+  if (!file || !program) return;
+
+  /** @type {Set<string>} */
+  let names = new Set();
+
+  walk(program, (node) => {
+    let init = node.type === "VariableDeclarator" ? node.init : undefined;
+
+    if (
+      init?.type !== "CallExpression" ||
+      init.callee.name !== "require" ||
+      init.arguments[0]?.value !== "prember"
+    )
+      return;
+
+    if (node.id.type === "ObjectPattern") {
+      for (let property of node.id.properties) {
+        if (propertyName(property) === "prerender" && property.value?.type === "Identifier")
+          names.add(property.value.name);
+      }
+    }
+  });
+
+  let edits = new Edits(source);
+
+  walk(program, (node) => {
+    if (
+      node.type !== "CallExpression" ||
+      node.callee.type !== "Identifier" ||
+      !names.has(node.callee.name)
+    )
+      return;
+    if (node.arguments.length !== 2) return;
+
+    edits.replace(node, source.slice(node.arguments[1].start, node.arguments[1].end));
+  });
+
+  if (edits.size > 0) project.write(file, edits.apply());
+}
+
+/**
  * prember runs in the ember-cli build, so it does nothing in a Vite build.
  * vite-ember-ssr prerenders an app that builds without @embroider/compat,
  * so the progress file holds the work until the app gets there.
@@ -156,6 +211,7 @@ export const prember = removalStage({
   name: "prember",
   label: "Remove prember. vite-ember-ssr prerenders the same URLs after the ember-nvp stage",
   matches: (name) => name === "prember",
+  after: unwrapPrerender,
   buildOptions: ["prember"],
   progress: {
     note:
