@@ -277,6 +277,7 @@ export const apps = [
       "update-ember-decorators",
       "update-ember-intl",
       "v1-addons",
+      "type-imports",
     ],
     /**
      * @embroider/vite cannot find a file from `app.import('node_modules/open-iconic/...', { destDir })`.
@@ -348,6 +349,7 @@ export const apps = [
       "ember-wormhole",
       "update-@ember-decorators/utils",
       "v1-addons",
+      "type-imports",
       "vite",
       "vite-sass",
       "ember-scoped-css",
