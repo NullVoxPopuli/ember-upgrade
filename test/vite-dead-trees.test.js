@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { withoutAddonConfigModule } from "#stages/vite/config-module.js";
+import { withAddonContentOff } from "#stages/vite/config-module.js";
 import { removeDeadTrees } from "#stages/vite/dead-trees.js";
 
 /**
@@ -165,9 +165,9 @@ module.exports = async function(defaults) {
   `);
 });
 
-test("compatBuild gets useAddonConfigModule: false", () => {
+test("compatBuild gets useAddonConfigModule: false and useAddonAppBoot: false", () => {
   expect(
-    withoutAddonConfigModule(
+    withAddonContentOff(
       "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce);\n};\n",
       "ember-cli-build.js",
     ),
@@ -175,11 +175,20 @@ test("compatBuild gets useAddonConfigModule: false", () => {
     "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce, { useAddonConfigModule: false });\n};\n",
   );
   expect(
-    withoutAddonConfigModule(
+    withAddonContentOff(
       "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce, { staticAddonTrees: true });\n};\n",
       "ember-cli-build.js",
     ),
   ).toBe(
     "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce, { useAddonConfigModule: false, staticAddonTrees: true });\n};\n",
+  );
+  expect(
+    withAddonContentOff(
+      "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce, { useAddonConfigModule: false });\n};\n",
+      "ember-cli-build.js",
+      "useAddonAppBoot",
+    ),
+  ).toBe(
+    "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce, { useAddonAppBoot: false, useAddonConfigModule: false });\n};\n",
   );
 });

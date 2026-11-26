@@ -3,7 +3,7 @@ import { addOverride } from "#manager-settings.js";
 import { published, runUpstream } from "#process.js";
 import { recordProgress } from "#progress.js";
 import { atLeast } from "#version.js";
-import { ADDON_CONTENT, contentAddons, withoutAddonConfigModule } from "./config-module.js";
+import { ADDON_CONTENT, contentAddons, withAddonContentOff } from "./config-module.js";
 import { removeDeadTrees } from "./dead-trees.js";
 
 /**
@@ -108,7 +108,7 @@ export default {
 
       if (!file || addons.length === 0) continue;
 
-      let output = withoutAddonConfigModule(current, file, option);
+      let output = withAddonContentOff(current, file, option);
 
       if (output === current) continue;
 

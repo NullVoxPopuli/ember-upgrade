@@ -578,8 +578,9 @@ export const apps = [
       "ember-styleguide",
       "ember-source-6.8",
       "ember-source-6.12",
+      "ember-cli-netlify",
+      "percy-ember",
       "update-ember-math-helpers",
-      "v1-addons",
       "ember-scoped-css",
       "ember-test-selectors",
       "ember-cli-dependency-lint",
@@ -589,11 +590,19 @@ export const apps = [
       "ember-source-7.4",
       "app-tree",
       "declare-imports",
+      "ember-nvp",
+      "ember-cli-server",
+      "warp-drive-version",
+      "warp-drive",
+      "unused-dependencies",
+      "ci-workflows",
+      "format",
+      "lint",
     ],
+    after: [["pnpm", "test"]],
   },
   {
     name: "upgrade-guide",
-    wip: true,
     verify: true,
     repo: "ember-learn/upgrade-guide",
     sha: "f98414a14176f02c348dc46bdb91b9df8e52a086",
@@ -660,7 +669,6 @@ export const apps = [
   },
   {
     name: "cli-guides",
-    wip: true,
     repo: "ember-learn/cli-guides",
     sha: "c43fc18474ad0c2d4c9b1f6b6adaa254921ea650",
     completed: [
@@ -693,7 +701,6 @@ export const apps = [
   },
   {
     name: "ember-blog",
-    wip: true,
     repo: "ember-learn/ember-blog",
     sha: "beb67247068c847e1141344b794f72a64c0681f3",
     completed: [

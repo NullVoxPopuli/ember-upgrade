@@ -46,7 +46,7 @@ export function contentAddons(project, content) {
  * @param {string} [option] the compatBuild option that turns the addon's part off
  * @returns {string} the same source when compatBuild already has the option, or no call
  */
-export function withoutAddonConfigModule(source, file, option = "useAddonConfigModule") {
+export function withAddonContentOff(source, file, option = "useAddonConfigModule") {
   let program = parseProgram(source, file);
   let edits = new Edits(source);
 
@@ -66,9 +66,7 @@ export function withoutAddonConfigModule(source, file, option = "useAddonConfigM
       edits.insert(node.arguments[1].end, `, { ${option}: false }`);
     } else if (
       options.type === "ObjectExpression" &&
-      !options.properties.some(
-        (/** @type {Node} */ property) => propertyName(property) === "useAddonConfigModule",
-      )
+      !options.properties.some((/** @type {Node} */ property) => propertyName(property) === option)
     ) {
       edits.insert(options.start + 1, ` ${option}: false,`);
     }
