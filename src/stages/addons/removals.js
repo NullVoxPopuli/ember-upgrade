@@ -217,6 +217,11 @@ export const qunitConsoleGrouper = removalStage({
 const OBSOLETE = [
   { name: "ember-cli-eslint", label: "It lints in the ember-cli build. Run eslint on its own" },
   {
+    name: "ember-cli-template-lint",
+    label: "It lints in the ember-cli build. Run ember-template-lint on its own",
+    replaceWith: { "ember-template-lint": "7.9.3" },
+  },
+  {
     name: "ember-cli-stylelint",
     label: "It lints in the ember-cli build. Run stylelint on its own",
   },
