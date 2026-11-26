@@ -238,6 +238,10 @@ const OBSOLETE = [
   },
   { name: "ember-watson", label: "It is an ember-cli command" },
   {
+    name: "ember-template-imports",
+    label: "babel-plugin-ember-template-compilation compiles .gjs and .gts files in the Vite build",
+  },
+  {
     name: "ember-export-application-global",
     label: "Ember Inspector finds the app without a global",
     progress: {
