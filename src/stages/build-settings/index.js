@@ -80,6 +80,7 @@ function outputCss(outputPaths) {
  * @property {boolean} outputPaths ember-cli-build has the `outputPaths` option
  * @property {{ name: string, path: string }[]} outputCss the extra CSS files of `outputPaths.app.css`, such as `themes/forest` at `/assets/theme-forest.css`
  * @property {boolean} emptyPublicTrees compatBuild has `extraPublicTrees: []`, which adds nothing
+ * @property {boolean} addonConfigModule compatBuild has `useAddonConfigModule`, which only Embroider's compat build reads
  */
 
 /**
@@ -102,6 +103,7 @@ export function readSettings(source, file) {
     outputPaths: false,
     outputCss: [],
     emptyPublicTrees: false,
+    addonConfigModule: false,
   };
 
   walk(program, (node, parent) => {
@@ -119,6 +121,8 @@ export function readSettings(source, file) {
         ) {
           settings.emptyPublicTrees = true;
         }
+
+        if (propertyName(property) === "useAddonConfigModule") settings.addonConfigModule = true;
       }
     }
 
@@ -369,7 +373,8 @@ export default {
         settings.imports.length > 0 ||
         settings.msw ||
         settings.outputPaths ||
-        settings.emptyPublicTrees),
+        settings.emptyPublicTrees ||
+        settings.addonConfigModule),
     );
   },
 
@@ -513,6 +518,11 @@ export default {
     if (settings.msw || settings.emptyPublicTrees) {
       removeCompatBuildOptions(project, ["extraPublicTrees"]);
     }
+
+    /**
+     * ember.nvp apps read no config modules of addons.
+     */
+    if (settings.addonConfigModule) removeCompatBuildOptions(project, ["useAddonConfigModule"]);
 
     if (settings.babelPlugins.length > 0) {
       let babel = /** @type {string} */ (firstOf(project, BABEL_CONFIGS));
