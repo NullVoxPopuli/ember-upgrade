@@ -185,7 +185,7 @@ export default {
     let eslintrc = readEslintrc(project);
     let configUsers = configModuleUsers(project);
 
-    if (!runUpstream(project, "ember.nvp@3.1.1", args)) {
+    if (!runUpstream(project, "ember.nvp@3.1.2", args)) {
       throw new Error("ember.nvp failed. Its output is above.");
     }
 
