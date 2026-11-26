@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
 import { withoutCompilerPath } from "#stages/ember-source/compiler-path.js";
+import { withoutInternetExplorer } from "#stages/ember-source/targets.js";
 import {
   arrayMacroGetters,
   explicitRelationships,
@@ -535,6 +536,45 @@ test("the compilerPath of ember-source 6 goes for ember-source 7", () => {
           },
         ],
       ],
+    };
+    "
+  `);
+});
+
+/**
+ * From ember-learn/deprecation-app config/targets.js, with a push added.
+ */
+test("Internet Explorer goes from the targets of ember-source 5", () => {
+  expect(
+    withoutInternetExplorer(`'use strict';
+
+const browsers = [
+  'last 1 Chrome versions',
+  'last 1 Safari versions',
+  'ie 11',
+];
+
+if (process.env.LEGACY) {
+  browsers.push('ie 11');
+}
+
+module.exports = {
+  browsers,
+};
+`),
+  ).toMatchInlineSnapshot(`
+    "'use strict';
+
+    const browsers = [
+      'last 1 Chrome versions',
+      'last 1 Safari versions',
+    ];
+
+    if (process.env.LEGACY) {
+    }
+
+    module.exports = {
+      browsers,
     };
     "
   `);

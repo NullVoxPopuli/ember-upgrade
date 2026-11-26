@@ -903,3 +903,32 @@ test('Each option is also a link to where it would go', async function (assert) 
     "
   `);
 });
+
+/**
+ * From ember-learn/upgrade-guide app/app.js, shortened.
+ */
+test("the app imports the CSS of the v2 ember-styleguide, before its own stylesheets", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "ember-styleguide": "^11.0.0" } }`,
+    "package-lock.json": "{}",
+    "app/app.js": `import Application from '@ember/application';
+import Resolver from 'ember-resolver';
+import './styles/app.css';
+
+export default class App extends Application {}
+`,
+  });
+
+  await emberStyleguide.run(app);
+  await emberStyleguide.run(app);
+
+  expect(app.read("app/app.js")).toMatchInlineSnapshot(`
+    "import Application from '@ember/application';
+    import Resolver from 'ember-resolver';
+    import 'ember-styleguide/styles.css';
+    import './styles/app.css';
+
+    export default class App extends Application {}
+    "
+  `);
+});

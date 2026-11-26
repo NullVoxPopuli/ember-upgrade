@@ -36,6 +36,40 @@ const APP_FILES = ["app/app.js", "app/app.ts"];
 const WORKFLOW = "app/deprecation-workflow.js";
 const OLD_WORKFLOW = "config/deprecation-workflow.js";
 
+const STYLEGUIDE_CSS = "import 'ember-styleguide/styles.css';";
+
+/**
+ * ember-styleguide 11 added its CSS to the ember-cli build. The v2 addon exports it, and the app imports it,
+ * before the app's own stylesheets, which can override it.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function importStyleguideCss(project) {
+  let file = APP_FILES.find((name) => project.has(name));
+
+  if (!file) return;
+
+  let source = project.read(file);
+
+  if (source.includes("ember-styleguide/styles.css")) return;
+
+  let program = parseProgram(source, file);
+  let imports = (program?.body ?? []).filter(
+    (/** @type {import('#ast.js').Node} */ node) => node.type === "ImportDeclaration",
+  );
+  let stylesheet = imports.find((/** @type {import('#ast.js').Node} */ node) =>
+    /\.(css|scss|sass|less)$/.test(String(node.source.value)),
+  );
+  let last = imports[imports.length - 1];
+  let edits = new Edits(source);
+
+  if (stylesheet) edits.insert(stylesheet.start, `${STYLEGUIDE_CSS}\n`);
+  else if (last) edits.insert(last.end, `\n${STYLEGUIDE_CSS}`);
+  else edits.insert(0, `${STYLEGUIDE_CSS}\n`);
+
+  project.write(file, edits.apply());
+}
+
 /**
  * Adds `import './deprecation-workflow';` as the first import of app/app.js,
  * so that the workflow handles the deprecations of the modules that come after it.
@@ -125,10 +159,12 @@ export const emberStyleguide = {
       editPackageJson(project, (pkg) =>
         setDependency(pkg, "ember-styleguide", `^${release.version}`),
       );
+      importStyleguideCss(project);
       return [];
     }
 
     editPackageJson(project, (pkg) => setDependency(pkg, "ember-styleguide", STYLEGUIDE_REF));
+    importStyleguideCss(project);
 
     if (packageManager(project) === "pnpm") {
       allowBuild(project, "ember-styleguide");

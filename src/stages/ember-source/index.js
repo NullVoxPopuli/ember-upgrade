@@ -13,6 +13,7 @@ import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 import { BABEL_CONFIGS, withoutCompilerPath } from "./compiler-path.js";
 import { explicitRelationshipOptions } from "./ember-data.js";
+import { TARGETS, withoutInternetExplorer } from "./targets.js";
 import { explicitInjections, routerServiceTransitions } from "./injections.js";
 import { renameTitleHelpers } from "./page-title.js";
 import {
@@ -100,6 +101,7 @@ function step(lts) {
     },
 
     async run(project) {
+      let emberDataBefore = parse(project.dependency("ember-data"));
       let pageTitle = parse(project.dependency("ember-page-title"));
       let glimmerComponent = parse(project.dependency("@glimmer/component"));
       let before = /** @type {[number, number, number]} */ (
@@ -155,6 +157,23 @@ function step(lts) {
       let todo = [];
       let emberData = parse(project.dependency("ember-data"));
 
+      /**
+       * ember-data 4 depended on ember-inflector. ember-data 5 has it as an optional peer, and its deprecation support still imports it.
+       */
+      if (
+        emberDataBefore?.[0] === 4 &&
+        emberData?.[0] === 5 &&
+        !project.dependency("ember-inflector")
+      ) {
+        editPackageJson(project, (pkg) =>
+          setDependency(
+            pkg,
+            "ember-inflector",
+            `^${published("ember-inflector", "6")?.version ?? "6.0.0"}`,
+          ),
+        );
+      }
+
       if (emberData && emberData[0] >= 5) {
         let unreadable = explicitRelationshipOptions(project);
 
@@ -166,6 +185,13 @@ function step(lts) {
               "Add both options. `async: true` and the inverse field were the defaults before.",
           });
         }
+      }
+
+      if (before[0] < 5 && target[0] >= 5 && project.has(TARGETS)) {
+        let targets = project.read(TARGETS);
+        let output = withoutInternetExplorer(targets);
+
+        if (output !== targets) project.write(TARGETS, output);
       }
 
       if (before[0] < 6 && target[0] >= 6) keepArrayPrototypeExtensions(project);
