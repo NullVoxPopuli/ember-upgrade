@@ -63,10 +63,17 @@ test("a package that keeps an older major of an app dependency, which its range 
 
 test("the ranges that accept a major", () => {
   expect(
-    ["^7.28.10 || ^8.0.0", "^7.0.0", ">= 7", ">=7 <8", "*", "~8.1.0", "8.1.3"].map((range) => [
-      range,
-      acceptsMajor(range, 8),
-    ]),
+    [
+      "^7.28.10 || ^8.0.0",
+      "^7.0.0",
+      ">= 7",
+      ">=7 <8",
+      "*",
+      "~8.1.0",
+      "8.1.3",
+      "^7.4.0 || ^8.0.0-0 <8.0.0",
+      ">=7 <8.1",
+    ].map((range) => [range, acceptsMajor(range, 8)]),
   ).toEqual([
     ["^7.28.10 || ^8.0.0", true],
     ["^7.0.0", false],
@@ -75,5 +82,7 @@ test("the ranges that accept a major", () => {
     ["*", true],
     ["~8.1.0", true],
     ["8.1.3", true],
+    ["^7.4.0 || ^8.0.0-0 <8.0.0", false],
+    [">=7 <8.1", true],
   ]);
 });

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { installedTree, resolvePackage } from "#installed.js";
 import { addOverride, hasOverride, removeOverride } from "#manager-settings.js";
 import { dependencyNames } from "#package-json.js";
-import { install } from "#process.js";
+import { install, packageManager } from "#process.js";
 import { recordProgress } from "#progress.js";
 
 /** @typedef {import('#project.js').Project} Project */
@@ -36,13 +36,22 @@ export function acceptsMajor(range, major) {
 
     if (text === "" || text === "*" || text === "x") return true;
 
+    /**
+     * An upper bound such as `<8.0.0` leaves only the prereleases of 8.
+     */
+    let upper = /<\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(text);
+
+    if (
+      upper &&
+      (major > Number(upper[1]) ||
+        (major === Number(upper[1]) && !Number(upper[2]) && !Number(upper[3])))
+    ) {
+      return false;
+    }
+
     let lower = /^>=?\s*v?(\d+)/.exec(text);
 
-    if (lower) {
-      let upper = /<\s*v?(\d+)/.exec(text.slice(lower[0].length));
-
-      return Number(lower[1]) <= major && (!upper || major < Number(upper[1]));
-    }
+    if (lower) return Number(lower[1]) <= major;
 
     let exact = /^[\^~=]?\s*v?(\d+)/.exec(text);
 
@@ -75,9 +84,10 @@ export function copyMismatches(project) {
   let found = new Map();
 
   for (let { directory, manifest } of installedTree(project, () => true)) {
-    let ranges = Object.assign({}, manifest.peerDependencies, manifest.dependencies);
-
-    for (let [name, range] of Object.entries(ranges)) {
+    /**
+     * The peer dependencies resolve to the copy of the package that installs this one, which the peer-copies stage handles.
+     */
+    for (let [name, range] of Object.entries(manifest.dependencies ?? {})) {
       let own = appCopies.get(name);
 
       if (!own || hasOverride(project, name)) continue;
@@ -103,6 +113,30 @@ export function copyMismatches(project) {
 }
 
 /**
+ * pnpm takes an override for one parent, such as `@nullvoxpopuli/ember-vite>@babel/core`,
+ * so the packages that need the old major keep it. The other package managers get one override for the whole tree.
+ *
+ * @param {Project} project
+ * @param {{ name: string, range: string, users: string[] }[]} mismatches
+ * @returns {Map<string, string>} the range of each override, by key
+ */
+function overrideKeys(project, mismatches) {
+  /** @type {Map<string, string>} */
+  let keys = new Map();
+
+  for (let { name, range, users } of mismatches) {
+    if (packageManager(project) !== "pnpm") {
+      keys.set(name, range);
+      continue;
+    }
+
+    for (let user of users) keys.set(`${user}>${name}`, range);
+  }
+
+  return keys;
+}
+
+/**
  * The overrides make the package manager resolve each copy again, and the lockfile keeps that resolution
  * after the overrides go, because each range accepts it.
  *
@@ -114,11 +148,13 @@ export function resolveCopies(project) {
 
   if (mismatches.length === 0) return false;
 
-  for (let { name, range } of mismatches) addOverride(project, name, range);
+  let keys = overrideKeys(project, mismatches);
+
+  for (let [key, range] of keys) addOverride(project, key, range);
 
   if (!install(project)) throw new Error("The install with the overrides failed.");
 
-  for (let { name } of mismatches) removeOverride(project, name);
+  for (let [key] of keys) removeOverride(project, key);
 
   if (!install(project)) throw new Error("The install after the overrides failed.");
 
