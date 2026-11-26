@@ -675,7 +675,7 @@ export const apps = [
       "declare-imports",
     ],
     /**
-     * guidemaker, ember-cli-fastboot and ember-cli-netlify are v1 addons with no stage yet.
+     * guidemaker and ember-cli-fastboot are v1 addons with no stage yet.
      */
     stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
@@ -708,7 +708,7 @@ export const apps = [
       "declare-imports",
     ],
     /**
-     * empress-blog, empress-blog-ember-template, ember-cli-fastboot and ember-cli-netlify are v1 addons with no stage yet,
+     * empress-blog, empress-blog-ember-template and ember-cli-fastboot are v1 addons with no stage yet,
      * and ember-cli-build has the ember-prism option.
      */
     stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
