@@ -96,6 +96,37 @@ test("an app on an LTS gets no step for it", async () => {
 });
 
 /**
+ * From hashicorp-forge/hermes web/package.json, shortened.
+ * ember-a11y-refocus and ember-app-scheduler depend on @glimmer/component 1.
+ */
+test("the step to @glimmer/component 2 overrides it for the addons too", async () => {
+  let app = project({
+    name: "hermes",
+    packageManager: "pnpm@10.0.0",
+    devDependencies: {
+      "@glimmer/component": "^1.1.2",
+      "ember-a11y-refocus": "^3.0.2",
+      "ember-source": "~5.12.0",
+    },
+  });
+
+  writeFileSync(join(app.directory, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+
+  let [step] = await classicLts.expand(app);
+
+  expect(step.name).toBe("ember-source-6.4");
+
+  await step.run(app);
+
+  expect(app.dependency("@glimmer/component")).toBe("^2.0.0");
+  expect(app.read("pnpm-workspace.yaml")).toMatchInlineSnapshot(`
+    "overrides:
+      '@glimmer/component': '^2.0.0'
+    "
+  `);
+});
+
+/**
  * From code-corps/code-corps-ember (MIT), shortened.
  */
 test("the title helper of ember-page-title 3 becomes page-title", () => {

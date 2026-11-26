@@ -100,6 +100,7 @@ function step(lts) {
 
     async run(project) {
       let pageTitle = parse(project.dependency("ember-page-title"));
+      let glimmerComponent = parse(project.dependency("@glimmer/component"));
       let before = /** @type {[number, number, number]} */ (
         parse(project.dependency("ember-source"))
       );
@@ -128,6 +129,11 @@ function step(lts) {
       });
 
       let newPageTitle = parse(project.dependency("ember-page-title"));
+      let newGlimmerComponent = project.dependency("@glimmer/component");
+
+      if (glimmerComponent?.[0] === 1 && parse(newGlimmerComponent)?.[0] === 2) {
+        glimmerComponentOverride(project, /** @type {string} */ (newGlimmerComponent));
+      }
 
       if (pageTitle && newPageTitle && pageTitle[0] < 6 && newPageTitle[0] >= 6) {
         renameTitleHelpers(project);
@@ -191,6 +197,27 @@ function step(lts) {
       return todo;
     },
   };
+}
+
+/**
+ * @glimmer/component 1 is a v1 addon, so the app tree of each copy merges into the app.
+ * Its `component-managers/glimmer.js` imports `@glimmer/component/-private/ember-component-manager`,
+ * which resolves from the app to version 2, and version 2 does not export it.
+ * The override gives the addons that depend on version 1 the app's version.
+ *
+ * @param {import('#project.js').Project} project
+ * @param {string} range
+ */
+function glimmerComponentOverride(project, range) {
+  addOverride(project, "@glimmer/component", range);
+  recordProgress(project, {
+    id: "@glimmer/component",
+    status: "override",
+    note:
+      `An override forces @glimmer/component ${range} for all dependencies, because the app tree of version 1 imports a module that version 2 does not export. ` +
+      "Remove the override when no dependency needs @glimmer/component 1.",
+    links: ["https://www.npmjs.com/package/@glimmer/component"],
+  });
 }
 
 /**
