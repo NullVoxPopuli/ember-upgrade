@@ -624,7 +624,32 @@ export const apps = [
     name: "cli-guides",
     repo: "ember-learn/cli-guides",
     sha: "c43fc18474ad0c2d4c9b1f6b6adaa254921ea650",
-    completed: [],
+    completed: [
+      "ember-cli",
+      "ember-fetch",
+      "ember-source-4.4",
+      "ember-source-4.8",
+      "ember-source-4.12",
+      "ember-source-5.4",
+      "ember-source-5.8",
+      "ember-source-5.12",
+      "ember-source-6.4",
+      "ember-source-6.8",
+      "ember-source-6.12",
+      "v1-addons",
+      "peer-copies",
+      "vite",
+      "prember",
+      "ember-export-application-global",
+      "ember-maybe-import-regenerator",
+      "ember-source-7.4",
+      "app-tree",
+      "declare-imports",
+    ],
+    /**
+     * guidemaker, ember-cli-fastboot and ember-cli-netlify are v1 addons with no stage yet.
+     */
+    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "ember-blog",
