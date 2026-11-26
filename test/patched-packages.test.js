@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -60,4 +60,12 @@ test("an update of a patched package removes the patch, which was for the versio
 
   expect(app.read("pnpm-workspace.yaml")).toBe("");
   expect(existsSync(join(app.directory, "patches/ember-page-title.patch"))).toBe(false);
+});
+
+test("the stage has work before an install, when the range of a patched package is no exact version", () => {
+  let app = website();
+
+  rmSync(join(app.directory, "node_modules"), { recursive: true });
+
+  expect(patchedPackages.detect(app)).toBe(true);
 });

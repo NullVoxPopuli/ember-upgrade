@@ -43,8 +43,16 @@ export default {
   label: "Pin each package that a pnpm patch changes to the version that the patch is for",
   needsInstall: true,
 
+  /**
+   * Without an install, the version is unknown, so a range that is no exact version is enough.
+   * The run comes after the install, and reads the version.
+   */
   detect(project) {
-    return unpinned(project).length > 0;
+    return patchKeys(project).some((key) => {
+      let range = project.dependency(key);
+
+      return Boolean(range) && !/^\d+\.\d+\.\d+$/.test(String(range));
+    });
   },
 
   async check() {
