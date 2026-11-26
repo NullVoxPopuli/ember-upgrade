@@ -115,3 +115,81 @@ test("a load of leaflet that only waits for it loads maplibre-gl", () => {
     }
   `);
 });
+
+/**
+ * From ember-learn/ember-website app/controllers/community/meetups/index.ts (MIT), shortened.
+ */
+test("the settings of the Leaflet marker icons go, with the constants that only they read", () => {
+  expect(
+    convertLoads(
+      `export default class extends Controller {
+  constructor() {
+    super(...arguments);
+
+    if (!import.meta.env.SSR) {
+      // @ts-expect-error: Incorrect type
+      void import('leaflet').then(() => {
+        if (this.isDestroyed || this.isDestroying) {
+          return;
+        }
+
+        // @ts-expect-error: Incorrect type
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+        const config = getOwner(this).resolveRegistration('config:environment');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+        const prefix = config.rootURL;
+
+        // @ts-expect-error: Incorrect type
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        L.Icon.Default.imagePath = \`\${prefix}assets/images/\`;
+
+        this.leafletPackageLoaded = true;
+      });
+    }
+  }
+}
+`,
+      "app/controllers/community/meetups/index.ts",
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "output": "export default class extends Controller {
+      constructor() {
+        super(...arguments);
+
+        if (!import.meta.env.SSR) {
+          // @ts-expect-error: Incorrect type
+          void import('maplibre-gl').then(() => {
+            if (this.isDestroyed || this.isDestroying) {
+              return;
+            }
+
+
+
+            this.leafletPackageLoaded = true;
+          });
+        }
+      }
+    }
+    ",
+      "unreadable": [],
+    }
+  `);
+});
+
+test("another read of the Leaflet global after the load is for the user", () => {
+  expect(
+    convertLoads(
+      `import('leaflet').then(() => {
+  L.Icon.Default.imagePath = '/images/';
+  L.control.scale().addTo(map);
+});
+`,
+      "app/map.js",
+    ).unreadable,
+  ).toMatchInlineSnapshot(`
+    [
+      "the Leaflet global \`L\`, after import('leaflet')",
+    ]
+  `);
+});

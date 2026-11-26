@@ -319,6 +319,96 @@ export function convertImports(source, file) {
 }
 
 /**
+ * @param {Node} node
+ * @returns {boolean} the node sets an option of `L.Icon.Default`, such as `L.Icon.Default.imagePath = ...`
+ */
+function setsDefaultIcon(node) {
+  if (node.type !== "ExpressionStatement" || node.expression.type !== "AssignmentExpression") {
+    return false;
+  }
+
+  /** @type {string[]} */
+  let path = [];
+  let target = node.expression.left;
+
+  while (target.type === "MemberExpression" && !target.computed) {
+    path.unshift(target.property.name);
+    target = target.object;
+  }
+
+  return (
+    target.type === "Identifier" &&
+    target.name === "L" &&
+    path[0] === "Icon" &&
+    path[1] === "Default"
+  );
+}
+
+/**
+ * @param {string} source
+ * @param {Node} node
+ * @returns {{ start: number, end: number }} the node with the `//` comment lines right above it
+ */
+function withCommentsAbove(source, node) {
+  let start = node.start;
+
+  for (;;) {
+    let lineStart = source.lastIndexOf("\n", start - 1) + 1;
+    let previousStart = source.lastIndexOf("\n", lineStart - 2) + 1;
+
+    if (lineStart === 0 || !source.slice(previousStart, lineStart).trim().startsWith("//")) break;
+
+    start = previousStart + source.slice(previousStart, lineStart).indexOf("//");
+  }
+
+  return { start, end: node.end };
+}
+
+/**
+ * The marker icons of Leaflet are images, and the MapLibre markers of the stage draw a pin.
+ * So the settings of `L.Icon.Default` go, with the constants that only they read.
+ *
+ * @param {string} source
+ * @param {Node} callback the function that runs after the load
+ * @param {Edits} edits
+ * @returns {boolean} true when the callback reads the `L` global in another way
+ */
+function removeIconSettings(source, callback, edits) {
+  if (callback?.body?.type !== "BlockStatement") return false;
+
+  let statements = callback.body.body;
+  let removed = new Set(statements.filter(setsDefaultIcon));
+
+  for (let changed = removed.size > 0; changed;) {
+    changed = false;
+
+    for (let statement of statements) {
+      if (removed.has(statement) || statement.type !== "VariableDeclaration") continue;
+
+      let names = statement.declarations.map(
+        (/** @type {Node} */ declarator) => declarator.id.name,
+      );
+      let rest = statements
+        .filter((/** @type {Node} */ other) => other !== statement && !removed.has(other))
+        .map((/** @type {Node} */ other) => source.slice(other.start, other.end))
+        .join("\n");
+
+      if (names.every((name) => name && !new RegExp(`\\b${name}\\b`).test(rest))) {
+        removed.add(statement);
+        changed = true;
+      }
+    }
+  }
+
+  for (let statement of removed) edits.removeLine(withCommentsAbove(source, statement));
+
+  return statements.some(
+    (/** @type {Node} */ statement) =>
+      !removed.has(statement) && /\bL\./.test(source.slice(statement.start, statement.end)),
+  );
+}
+
+/**
  * @param {string} source
  * @param {string} file
  * @returns {{ output: string, unreadable: string[] }} the module with `import('maplibre-gl')` for each `import('leaflet')` that only loads it
@@ -328,6 +418,19 @@ export function convertLoads(source, file) {
   let edits = new Edits(source);
   /** @type {string[]} */
   let unreadable = [];
+
+  /**
+   * The `.then()` call of each `import('leaflet').then`, by its member expression
+   *
+   * @type {Map<Node, Node>}
+   */
+  let callbacks = new Map();
+
+  walk(program, (node) => {
+    if (node.type === "CallExpression" && node.callee.type === "MemberExpression") {
+      callbacks.set(node.callee, node);
+    }
+  });
 
   walk(program, (node, parent) => {
     if (node.type === "ImportDeclaration" && /^leaflet(\/|$)/.test(String(node.source.value))) {
@@ -344,6 +447,10 @@ export function convertLoads(source, file) {
 
     if (then || parent?.type === "ExpressionStatement" || parent?.type === "UnaryExpression") {
       edits.replace(node.source, `'maplibre-gl'`);
+
+      if (then && removeIconSettings(source, callbacks.get(parent)?.arguments[0], edits)) {
+        unreadable.push("the Leaflet global `L`, after import('leaflet')");
+      }
     } else {
       unreadable.push("import('leaflet') whose result the code reads");
     }
