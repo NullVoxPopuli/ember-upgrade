@@ -1,7 +1,9 @@
 import { rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 
 import { parseProgram } from "#ast.js";
+import { Edits } from "#edits.js";
+import { modulePrefix } from "#module-prefix.js";
 import { editPackageJson, removeDependency } from "#package-json.js";
 import { recordProgress } from "#progress.js";
 
@@ -76,6 +78,44 @@ export function isScrollOnlyLink(source, file) {
 }
 
 /**
+ * @param {string} source
+ * @param {string} file
+ * @param {Set<string>} modules the deleted subclasses, such as `app/components/link-to`
+ * @param {string} prefix the module prefix of the app
+ * @returns {string} the module with `LinkTo` of `@ember/routing` for each default import of a deleted subclass
+ */
+export function withBuiltInLinkTo(source, file, modules, prefix) {
+  let program = parseProgram(source, file);
+
+  if (!program) return source;
+
+  let edits = new Edits(source);
+
+  for (let node of program.body) {
+    if (node.type !== "ImportDeclaration" || node.specifiers.length !== 1) continue;
+
+    let [specifier] = node.specifiers;
+    let path = String(node.source.value);
+    let target = path.startsWith(".")
+      ? posix.join(posix.dirname(file), path)
+      : path.startsWith(`${prefix}/`)
+        ? `app/${path.slice(prefix.length + 1)}`
+        : undefined;
+
+    if (specifier.type !== "ImportDefaultSpecifier" || !target || !modules.has(target)) continue;
+
+    let local = specifier.local.name;
+
+    edits.replace(
+      node,
+      `import { ${local === "LinkTo" ? "LinkTo" : `LinkTo as ${local}`} } from '@ember/routing';`,
+    );
+  }
+
+  return edits.size > 0 ? edits.apply() : source;
+}
+
+/**
  * @param {Project} project
  * @returns {{ links: string[], others: string[] }} the files that import the addon: subclasses that only scroll, and the rest
  */
@@ -142,6 +182,16 @@ export default {
     let { links } = importers(project);
 
     for (let file of links) rmSync(join(project.directory, file));
+
+    let modules = new Set(links.map((file) => file.replace(/\.(js|ts)$/, "")));
+    let prefix = modulePrefix(project);
+
+    for (let file of project.files(SOURCES)) {
+      let source = project.read(file);
+      let output = withBuiltInLinkTo(source, file, modules, prefix);
+
+      if (output !== source) project.write(file, output);
+    }
 
     if (links.length > 0) project.write("app/routes/application.js", APPLICATION_ROUTE);
 

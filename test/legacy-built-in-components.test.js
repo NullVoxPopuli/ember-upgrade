@@ -40,6 +40,8 @@ test("a LinkTo subclass that scrolls to the top becomes a listener of the applic
       devDependencies: { "@ember/legacy-built-in-components": "^0.4.2" },
     }),
     "app/components/link-to.js": LINK,
+    "app/components/main-layout.gjs": `import LinkTo from './link-to';\n\n<template><LinkTo @route="index">Home</LinkTo></template>\n`,
+    "config/environment.js": `module.exports = function () { return { modulePrefix: 'deprecation-app' }; };\n`,
   });
 
   expect(stage.detect(app)).toBe(true);
@@ -48,6 +50,12 @@ test("a LinkTo subclass that scrolls to the top becomes a listener of the applic
   await stage.run(app);
 
   expect(app.has("app/components/link-to.js")).toBe(false);
+  expect(app.read("app/components/main-layout.gjs")).toMatchInlineSnapshot(`
+    "import { LinkTo } from '@ember/routing';
+
+    <template><LinkTo @route="index">Home</LinkTo></template>
+    "
+  `);
   expect(app.read("app/routes/application.js")).toMatchInlineSnapshot(`
     "import Route from '@ember/routing/route';
     import { service } from '@ember/service';
