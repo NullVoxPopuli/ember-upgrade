@@ -518,6 +518,7 @@ export const apps = [
       "ember-source-6.12",
       "ember-cli-mirage",
       "ember-css-modules",
+      "percy-ember",
       "@ember-intl/cp-validations",
       "update-@ember/render-modifiers",
       "ember-ajax",
