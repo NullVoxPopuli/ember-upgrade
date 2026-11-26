@@ -7,6 +7,7 @@ import { Project } from "#project.js";
 import { readProgress } from "#progress.js";
 import packageManager, {
   hoistedVersions,
+  inRepoAddonPackages,
   importedPackages,
   pinGitDependencies,
   pnpmSelector,
@@ -155,6 +156,32 @@ test("a yarn 3 app moves to pnpm, with the same versions", async () => {
   expect(app.packageJson.packageManager).toMatch(/^pnpm@\d+\./);
 }, 120_000);
 
+/**
+ * From skylines-project/skylines (AGPL-3.0), ember/lib/cesium/index.js.
+ */
+test("the packages that in-repo addons require", () => {
+  let app = project({
+    "package.json": "{}",
+    "lib/cesium/index.js": `'use strict';
+
+const path = require('path');
+const fs = require("node:fs");
+
+const Funnel = require('broccoli-funnel');
+const local = require('./lib/local');
+
+module.exports = {
+  treeForPublic() {
+    return new Funnel(path.dirname(require.resolve('cesium')), { destDir: 'cesium' });
+  },
+};
+`,
+    "lib/cesium/lib/local.js": `import { scope } from '@scope/name/sub';\n`,
+  });
+
+  expect(inRepoAddonPackages(app)).toEqual(["@scope/name", "broccoli-funnel"]);
+});
+
 test("a modern npm lockfile stays", () => {
   let app = project({
     "package.json": `{ "name": "x" }`,
@@ -233,10 +260,26 @@ d3@^5.0.0:
     this.import('node_modules/c3/c3.min.css');
   },
 };`,
-    "ember-cli-build.js": `app.import('node_modules/@scope/thing/dist/thing.js');`,
+    /**
+     * The Sass paths are from hashicorp-forge/hermes (MPL-2.0).
+     */
+    "ember-cli-build.js": `app.import('node_modules/@scope/thing/dist/thing.js');
+let app = new EmberApp(defaults, {
+  sassOptions: {
+    includePaths: [
+      "node_modules",
+      "./node_modules/@hashicorp/design-system-tokens/dist/products/css",
+    ],
+  },
+});`,
   });
 
-  expect(importedPackages(app)).toEqual(["@scope/thing", "c3", "d3"]);
+  expect(importedPackages(app)).toEqual([
+    "@hashicorp/design-system-tokens",
+    "@scope/thing",
+    "c3",
+    "d3",
+  ]);
 
   let hoisted = hoistedVersions(app, "yarn.lock");
 

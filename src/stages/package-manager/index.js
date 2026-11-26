@@ -1,4 +1,5 @@
 import { rmSync } from "node:fs";
+import { builtinModules } from "node:module";
 import { dirname, join } from "node:path";
 
 import {
@@ -110,11 +111,12 @@ export default {
 
     /**
      * yarn 1 and npm 6 put each hoisted package in the top node_modules, so an
-     * `app.import('node_modules/<name>/...')` works for a package that only a dependency lists.
-     * pnpm does not, so the app must list it.
+     * `app.import('node_modules/<name>/...')`, and a require in an in-repo addon,
+     * work for a package that only a dependency lists. pnpm does not, so the app must list it.
      */
     let hoisted = hoistedVersions(root, lockfile);
     let required = importedPackages(project).concat(
+      inRepoAddonPackages(project),
       Object.entries(APP_DEPENDENCIES).flatMap(([addon, names]) =>
         project.dependency(addon) ? names : [],
       ),
@@ -220,15 +222,37 @@ export default {
 };
 
 /**
+ * The build names these packages by path, in `app.import('node_modules/...')` or in options such as Sass `includePaths`.
+ *
  * @param {import('#project.js').Project} project
- * @returns {string[]} the packages that the build imports from node_modules
+ * @returns {string[]} the packages that the build reads from node_modules
  */
 export function importedPackages(project) {
   let names = new Set();
-  let pattern = /\b(?:app|this)\.import\(\s*['"`]node_modules\/((?:@[^/'"`]+\/)?[^/'"`]+)/g;
+  let pattern = /['"`](?:\.\/)?node_modules\/((?:@[^/'"`]+\/)?[^/'"`]+)/g;
 
   for (let file of project.files(["ember-cli-build.{js,cjs}", "lib/*/index.{js,cjs}"])) {
     for (let match of project.read(file).matchAll(pattern)) names.add(match[1]);
+  }
+
+  return Array.from(names).sort();
+}
+
+/**
+ * An in-repo addon in lib/ has no node_modules of its own. It required packages from the app's
+ * node_modules, where yarn 1 and npm 6 also put the dependencies of dependencies, such as broccoli-funnel.
+ *
+ * @param {import('#project.js').Project} project
+ * @returns {string[]} the packages that the in-repo addons require or import
+ */
+export function inRepoAddonPackages(project) {
+  let names = new Set();
+  let pattern = /\b(?:require\(\s*|from\s+)['"`]((?:@[^/'"`]+\/)?[^./'"`][^/'"`]*)/g;
+
+  for (let file of project.files(["lib/*/index.{js,cjs}", "lib/*/lib/**/*.{js,cjs}"])) {
+    for (let match of project.read(file).matchAll(pattern)) {
+      if (!match[1].startsWith("node:") && !builtinModules.includes(match[1])) names.add(match[1]);
+    }
   }
 
   return Array.from(names).sort();
