@@ -342,6 +342,28 @@ function forwards(fn, key) {
 }
 
 /**
+ * A mixin can have a method and an action with the same name and the same code, so that both
+ * `this.notify()` and `{{action "notify"}}` work. One bound method does both.
+ *
+ * @param {string} source
+ * @param {Node | undefined} fn the action
+ * @param {Member[]} members
+ * @param {string} key
+ * @returns {boolean} whether the method of the same name has the same parameters and body
+ */
+function sameAsMethod(source, fn, members, key) {
+  let method = members.find((entry) => entry.kind === "method" && entry.name === key);
+  let other = method?.node.value;
+
+  if (fn?.type !== "FunctionExpression" || other?.type !== "FunctionExpression") return false;
+  if (fn.async !== other.async || fn.generator !== other.generator) return false;
+
+  let code = (/** @type {Node} */ node) => source.slice(node.start, node.end).replace(/\s+/g, " ");
+
+  return code(fn) === code(other);
+}
+
+/**
  * @param {string} source
  * @param {Member} entry
  * @returns {{ fn: Node, key: string } | undefined} the function of a method member, and its key as written
@@ -586,7 +608,11 @@ export function toGlimmer(input, file, names, options) {
     for (let property of entry.node.value.properties ?? []) {
       let key = property.key?.name ?? property.key?.value;
 
-      if (typeof key === "string" && has(key) && forwards(property.value, key)) {
+      if (
+        typeof key === "string" &&
+        has(key) &&
+        (forwards(property.value, key) || sameAsMethod(source, property.value, members, key))
+      ) {
         forwarded.add(key);
         actionNames.add(key);
       }

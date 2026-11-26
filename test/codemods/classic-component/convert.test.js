@@ -1058,6 +1058,93 @@ export default Component.extend({
 });
 
 /**
+ * From documize/community (AGPL-3.0), app/mixins/notifier.js, shortened.
+ */
+test("an action with the same code as the method of its name", () => {
+  let mixin = `import Mixin from '@ember/object/mixin';
+import { service } from '@ember/service';
+
+export default Mixin.create({
+  eventBus: service(),
+	notifySuccess(msg) {
+        this.eventBus.publish('notifyUser', msg, 'success');
+	},
+
+    actions: {
+		notifySuccess(msg) {
+			this.eventBus.publish('notifyUser', msg, 'success');
+		}
+    }
+});
+`;
+  let sources = new Map([
+    [
+      "app/components/license-key.js",
+      `import Component from '@ember/component';
+import Notifier from '../mixins/notifier';
+
+export default Component.extend(Notifier, {
+  tagName: '',
+
+  save() {
+    this.notifySuccess('Saved');
+  },
+});
+`,
+    ],
+    [
+      "app/components/license-key.hbs",
+      `<button {{action "notifySuccess" "Copied"}}>Copy</button>\n`,
+    ],
+  ]);
+
+  let result = convertComponents(sources, {
+    resolve: (specifier) =>
+      specifier === "../mixins/notifier"
+        ? { file: "app/mixins/notifier.js", source: mixin }
+        : undefined,
+  });
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/license-key.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { service } from '@ember/service';
+    import { action } from '@ember/object';
+
+    export default class LicenseKey extends Component {
+      @service()
+      eventBus;
+
+      @action
+      notifySuccess(msg) {
+      this.eventBus.publish('notifyUser', msg, 'success');
+      }
+
+      save() {
+        this.notifySuccess('Saved');
+      }
+
+      /**
+       * Runs an action as the \`{{action}}\` modifier did, without the event.
+       */
+      handleAction =
+        (run, options = {}) =>
+        (event) => {
+          if (options.preventDefault !== false) event.preventDefault();
+          if (options.bubbles === false) event.stopPropagation();
+
+          return run();
+        };
+    }
+    "
+  `);
+  expect(result.files.get("app/components/license-key.hbs")).toMatchInlineSnapshot(`
+    "<button {{on "click" (this.handleAction (fn this.notifySuccess "Copied"))}}>Copy</button>
+    "
+  `);
+});
+
+/**
  * From code-corps-ember (MIT), shortened.
  */
 test("the hooks of a task become calls of perform", () => {
