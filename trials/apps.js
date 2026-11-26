@@ -585,10 +585,6 @@ export const apps = [
       "app-tree",
       "declare-imports",
     ],
-    /**
-     * @percy/ember and ember-cli-netlify are v1 addons with no stage yet.
-     */
-    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "upgrade-guide",

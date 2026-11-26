@@ -54,6 +54,8 @@ import jqueryIntegration from "./jquery-integration/index.js";
 import lint from "./lint/index.js";
 import inlineContent from "./addons/inline-content.js";
 import powerSelectTypeahead from "./addons/power-select-typeahead.js";
+import netlify from "./addons/netlify.js";
+import percyEmber from "./addons/percy.js";
 import routerScroll from "./addons/router-scroll.js";
 import documentTitle from "./document-title/index.js";
 import dynamicComponents from "./dynamic-components/index.js";
@@ -115,6 +117,11 @@ export const stages = [
   /** Before v2-addons, which would update ember-power-select-typeahead's dependencies. */
   powerSelectTypeahead,
   routerScroll,
+  /**
+   * Before v2-addons, which would list these v1 addons as having no v2 release.
+   */
+  netlify,
+  percyEmber,
   /**
    * Before vite, because the old dependencies of v1 addons break the Vite build.
    */

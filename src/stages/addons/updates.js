@@ -384,6 +384,8 @@ function hasOwnStage(name) {
       "ember-power-select-typeahead",
       "ember-router-scroll",
       "ember-scoped-css-compat",
+      "ember-cli-netlify",
+      "@percy/ember",
     ].includes(name)
   );
 }
