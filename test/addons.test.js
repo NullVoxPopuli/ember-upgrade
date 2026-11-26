@@ -1081,3 +1081,34 @@ module.exports = function (defaults) {
     "
   `);
 });
+
+/**
+ * From ember-learn/deprecation-app app/services/search.js (MIT), shortened.
+ */
+test("the decorators of ember-concurrency-decorators come from ember-concurrency", async () => {
+  let { emberConcurrencyDecorators } = await import("#stages/addons/removals.js");
+  let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
+
+  mkdirSync(join(directory, "app/services"), { recursive: true });
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({
+      devDependencies: { "ember-concurrency": "^2.1.2", "ember-concurrency-decorators": "^2.0.3" },
+    }),
+  );
+  writeFileSync(
+    join(directory, "app/services/search.js"),
+    "import { task } from 'ember-concurrency-decorators';\n",
+  );
+
+  let app = new Project(directory);
+
+  expect(emberConcurrencyDecorators.detect(app)).toBe(true);
+
+  await emberConcurrencyDecorators.run(app);
+
+  expect(app.read("app/services/search.js")).toBe("import { task } from 'ember-concurrency';\n");
+  expect(Object.keys(JSON.parse(app.read("package.json")).devDependencies)).toEqual([
+    "ember-concurrency",
+  ]);
+});

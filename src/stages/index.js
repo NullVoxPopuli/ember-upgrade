@@ -18,6 +18,7 @@ import {
   emberCliDeploy,
   emberDisablePrototypeExtensions,
   emberGetConfig,
+  emberConcurrencyDecorators,
   emberTestSelectors,
   obsoleteAddons,
   prember,
@@ -134,6 +135,7 @@ export const stages = [
   netlify,
   percyEmber,
   emberGetConfig,
+  emberConcurrencyDecorators,
   leaflet,
   /**
    * Before v2-addons, which would copy the addon into the app.

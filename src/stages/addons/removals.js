@@ -12,6 +12,7 @@ import {
 import { modulePrefix } from "#module-prefix.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
+import { atLeast } from "#version.js";
 
 /** @typedef {import('#types.js').Finding} Finding */
 /** @typedef {import('#progress.js').ProgressEntry} ProgressEntry */
@@ -537,6 +538,39 @@ export const emberGetConfig = removalStage({
   label: "Remove ember-get-config. The app imports its config/environment itself",
   matches: (name) => name === "ember-get-config",
   after: importConfigDirectly,
+});
+
+/**
+ * @param {import('#project.js').Project} project
+ */
+function importDecoratorsFromEmberConcurrency(project) {
+  for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
+    let source = project.read(file);
+    let output = source.replace(
+      /(from\s*|import\s*\(\s*)(['"])ember-concurrency-decorators\2/g,
+      "$1$2ember-concurrency$2",
+    );
+
+    if (output !== source) project.write(file, output);
+  }
+}
+
+let decorators = removalStage({
+  name: "ember-concurrency-decorators",
+  label: "Remove ember-concurrency-decorators. ember-concurrency has the same decorators",
+  matches: (name) => name === "ember-concurrency-decorators",
+  after: importDecoratorsFromEmberConcurrency,
+});
+
+/**
+ * Before v2-addons, which would copy the v1 addon into the app.
+ * ember-concurrency 2 and later export the decorators of ember-concurrency-decorators, with the same names.
+ *
+ * @type {import('#types.js').Stage}
+ */
+export const emberConcurrencyDecorators = Object.assign({}, decorators, {
+  detect: (/** @type {import('#project.js').Project} */ project) =>
+    decorators.detect(project) && atLeast(project.dependency("ember-concurrency"), 2, 0),
 });
 
 /**
