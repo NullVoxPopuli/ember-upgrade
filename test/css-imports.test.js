@@ -40,6 +40,7 @@ test("an import of a stylesheet that the package does not have names its one sty
       },
     }),
     [`${REFOCUS}/dist/styles/navigation-narrator.css`]: "",
+    [`${REFOCUS}/src/styles/navigation-narrator.css`]: "",
     "node_modules/two-styles/package.json": JSON.stringify({ name: "two-styles" }),
     "node_modules/two-styles/a.css": "",
     "node_modules/two-styles/b.css": "",
@@ -60,4 +61,26 @@ import 'two-styles/c.css';
     import 'two-styles/c.css';
     "
   `);
+});
+
+/**
+ * ember-a11y-refocus 5.1.0 (MIT) exports `./styles.css` by name, before its `./*` pattern.
+ */
+test("an import that an exact key of the package's exports reaches stays", () => {
+  let app = project({
+    "package.json": JSON.stringify({ dependencies: { "ember-a11y-refocus": "^5.1.0" } }),
+    [`${REFOCUS}/package.json`]: JSON.stringify({
+      name: "ember-a11y-refocus",
+      exports: {
+        ".": { types: "./declarations/index.d.ts", default: "./dist/index.js" },
+        "./*": { types: "./declarations/*.d.ts", default: "./dist/*.js" },
+        "./addon-main.js": "./addon-main.cjs",
+        "./styles.css": "./dist/styles/navigation-narrator.css",
+      },
+    }),
+    [`${REFOCUS}/dist/styles/navigation-narrator.css`]: "",
+    "app/app.js": "import 'ember-a11y-refocus/styles.css';\n",
+  });
+
+  expect(fixStylesheetImports(app)).toEqual([]);
 });

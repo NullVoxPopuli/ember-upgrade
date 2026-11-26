@@ -27,11 +27,15 @@ function targetFile(target) {
  * @returns {string | undefined} the file of the package that the subpath reaches
  */
 function resolveExport(exports, subpath) {
+  /**
+   * Node takes a key without `*` before any pattern.
+   */
+  if (subpath in exports) return targetFile(exports[subpath]);
+
   for (let [key, target] of Object.entries(exports)) {
     let path = targetFile(target);
 
     if (!path) continue;
-    if (key === subpath) return path;
 
     let star = key.indexOf("*");
 
@@ -95,17 +99,20 @@ export function stylesheetOf(specifier, from) {
 
   if (reached && existsSync(join(directory, reached))) return;
 
+  /**
+   * Only the stylesheets that the package exports count. Some packages also publish their sources, such as src/.
+   */
   let stylesheets = globSync("**/*.css", {
     cwd: directory,
     exclude: (path) => path === "node_modules",
-  });
+  })
+    .map((path) => `./${String(path).split("\\").join("/")}`)
+    .map((file) => (exports ? exportFor(exports, file) : file))
+    .filter((subpath) => subpath !== undefined);
 
   if (stylesheets.length !== 1) return;
 
-  let file = `./${String(stylesheets[0]).split("\\").join("/")}`;
-  let exported = exports ? exportFor(exports, file) : file;
-
-  return exported ? `${name}${exported.slice(1)}` : undefined;
+  return `${name}${String(stylesheets[0]).slice(1)}`;
 }
 
 /**

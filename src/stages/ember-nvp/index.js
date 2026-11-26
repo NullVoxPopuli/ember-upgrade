@@ -154,18 +154,6 @@ export default {
 
     updateNodePins(project);
 
-    let stylesheets = fixStylesheetImports(project);
-
-    if (stylesheets.length > 0) {
-      recordProgress(project, {
-        id: "stylesheet imports",
-        status: "check",
-        note:
-          `These imports named stylesheets that their packages do not have, and the Vite build of ember.nvp resolves each import. ` +
-          `They name each package's one stylesheet now: ${stylesheets.join(", ")}.`,
-      });
-    }
-
     /**
      * Without a name, ember.nvp gives the app the name of its template, and imports of `<name>/...` stop resolving.
      */
@@ -209,9 +197,24 @@ export default {
     removeOrphanConfigModules(project, configUsers);
     renameCommonJs(project);
 
-    if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];
-
+    /**
+     * The migration changes dependency ranges, so the imports are checked against what its install gives.
+     */
     if (!install(project)) throw new Error("The install after ember.nvp failed.");
+
+    let stylesheets = fixStylesheetImports(project);
+
+    if (stylesheets.length > 0) {
+      recordProgress(project, {
+        id: "stylesheet imports",
+        status: "check",
+        note:
+          `These imports named stylesheets that their packages do not have, and the Vite build of ember.nvp resolves each import. ` +
+          `They name each package's one stylesheet now: ${stylesheets.join(", ")}.`,
+      });
+    }
+
+    if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];
 
     let source = withFlatSettings(
       project.read(FLAT_CONFIG),
