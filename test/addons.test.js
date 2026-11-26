@@ -353,7 +353,7 @@ test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml, by the tarbal
     "allowBuilds:
       esbuild: true
       ember-styleguide: true
-      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/a00373bc5bf1a9f125545c6ed470294cf86bc907': true
+      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/1e1b64705a804a2c0b65884ca06790d7de0ccd54': true
     "
   `);
   expect(app.packageJson.pnpm).toBeUndefined();
