@@ -134,3 +134,46 @@ test("Vite compiles the Sass, with the imports that ember-cli-sass resolved", as
   `);
   expect(viteSass.detect(app)).toBe(false);
 });
+
+/**
+ * From emberobserver/client, after the update to ember-power-select 8, which is a v2 addon with `exports`.
+ */
+test("an import into a package with exports gets the path that the package exports", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: {
+        "@embroider/vite": "^1.0.0",
+        "ember-cli-sass": "^11.0.1",
+        "ember-power-select": "^8.12.1",
+      },
+    }),
+    "node_modules/ember-power-select/package.json": JSON.stringify({
+      keywords: ["ember-addon"],
+      "ember-addon": { version: 2 },
+      exports: {
+        ".": { sass: "./ember-power-select.scss", default: "./dist/index.js" },
+        "./*": { default: "./dist/*.js" },
+        "./scss/base.scss": "./scss/base.scss",
+        "./scss/variables.scss": "./scss/variables.scss",
+        "./ember-power-select.scss": "./ember-power-select.scss",
+      },
+    }),
+    "node_modules/ember-power-select/ember-power-select.scss": "",
+    "node_modules/ember-power-select/scss/variables.scss": "",
+    "ember-cli-build.js": "module.exports = function (defaults) {};\n",
+    "index.html": `<link rel="stylesheet" href="/@embroider/virtual/app.css">\n`,
+    "app/styles/app.scss": `@import 'ember-power-select/scss/variables';
+@import 'ember-power-select/ember-power-select';
+@import 'ember-power-select/scss/base.scss';
+`,
+  });
+
+  await viteSass.run(app);
+
+  expect(app.read("app/styles/app.scss")).toMatchInlineSnapshot(`
+    "@import 'ember-power-select/scss/variables.scss';
+    @import 'ember-power-select';
+    @import 'ember-power-select/scss/base.scss';
+    "
+  `);
+});

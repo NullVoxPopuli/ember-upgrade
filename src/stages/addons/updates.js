@@ -509,6 +509,11 @@ export const v2Addons = {
   async expand(project) {
     /** @type {Stage[]} */
     let stages = [];
+
+    /**
+     * v2 addons need ember-source 3.28 or newer, and the vite stage stops an older app.
+     */
+    if (!atLeast(project.dependency("ember-source"), 3, 28)) return stages;
     /** @type {{ name: string, note: string, links: string[] }[]} */
     let v1Only = [];
 

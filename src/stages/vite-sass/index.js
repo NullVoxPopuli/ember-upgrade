@@ -142,6 +142,42 @@ function styleNames(source) {
  */
 
 /**
+ * A package with `exports` resolves only the paths that it lists, with their extensions,
+ * so `x/x` becomes `x/x.scss`, or `x` when the `sass` condition of the package entry is that file.
+ *
+ * @param {Source} source
+ * @param {string} specifier
+ * @returns {Resolution | undefined} undefined when the import is not into this package, or already resolves
+ */
+function fromExports(source, specifier) {
+  if (!specifier.startsWith(`${source.name}/`)) return;
+
+  let exports = JSON.parse(readFileSync(join(source.folder, "package.json"), "utf8")).exports;
+
+  if (!exports || typeof exports !== "object") return;
+
+  let rest = specifier.slice(source.name.length + 1);
+
+  if (`./${rest}` in exports) return;
+
+  let file = globSync("**/*.{scss,sass,css}", {
+    cwd: source.folder,
+    exclude: (name) => name === "node_modules",
+  })
+    .map((path) => path.split("\\").join("/"))
+    .find((path) => sassName(path) === rest);
+
+  if (!file) return;
+
+  let resolved = { declare: source.name, range: source.range };
+
+  if (exports["."]?.sass === `./${file}`)
+    return Object.assign({ specifier: source.name }, resolved);
+  if (`./${file}` in exports)
+    return Object.assign({ specifier: `${source.name}/${file}` }, resolved);
+}
+
+/**
  * @param {Source} source
  * @param {string} specifier
  * @returns {Resolution | undefined}
@@ -197,6 +233,12 @@ export function resolveImport(project, file, specifier, context) {
     let relative = posix.relative(folder, posix.join(root, specifier));
 
     return { specifier: relative.startsWith(".") ? relative : `./${relative}` };
+  }
+
+  for (let source of context.packages) {
+    let resolution = fromExports(source, specifier);
+
+    if (resolution) return resolution;
   }
 
   for (let source of context.packages) {
