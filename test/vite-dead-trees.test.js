@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 import { withAddonContentOff } from "#stages/vite/config-module.js";
 import { removeDeadTrees } from "#stages/vite/dead-trees.js";
+import { withWarpDriveConfig } from "#stages/vite/warp-drive-config.js";
 
 /**
  * From hashicorp-forge/hermes web/ember-cli-build.js, after ember-vite-codemod, with the app options shortened.
@@ -191,4 +192,32 @@ test("compatBuild gets useAddonConfigModule: false and useAddonAppBoot: false", 
   ).toBe(
     "module.exports = async function (defaults) {\n  return compatBuild(app, buildOnce, { useAddonAppBoot: false, useAddonConfigModule: false });\n};\n",
   );
+});
+
+/**
+ * From ember-learn/deprecation-app ember-cli-build.js, after ember-vite-codemod, shortened.
+ */
+test("an app on ember-data 5 calls setConfig of @warp-drive/build-config", () => {
+  expect(
+    withWarpDriveConfig(
+      `module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  let app = new EmberApp(defaults, {});
+
+  return compatBuild(app, buildOnce);
+};
+`,
+      "ember-cli-build.js",
+    ),
+  ).toMatchInlineSnapshot(`
+    "module.exports = async function (defaults) {
+      const { buildOnce } = await import('@embroider/vite');
+      let app = new EmberApp(defaults, {});
+      const { setConfig } = await import('@warp-drive/build-config');
+      setConfig(app, __dirname, {});
+
+      return compatBuild(app, buildOnce);
+    };
+    "
+  `);
 });
