@@ -62,20 +62,20 @@ function fromAddon(name, addons) {
 }
 
 /**
- * Removes each `{{x/y}}` and `{{#x-y}}...{{/x-y}}` whose name is no component or helper.
- * Such a call threw each time that it rendered, and Embroider stops the build on it.
- *
  * @param {string} template the source of an .hbs file
  * @param {{ components: Set<string>, helpers: Set<string>, addons: string[] }} names the names that a template can call, and the addons
- * @returns {{ output: string, removed: string[] }}
+ * @returns {{ source: string, missing: Node[], fromAddons: string[] }} the `{{x-y}}` calls whose name is no component or helper,
+ * apart from the names of addons, and those names
  */
-export function removeMissingCalls(template, names) {
+function unknownCalls(template, names) {
   let source = `${OPEN}${template}</template>`;
   let tree = toTree(source, { filePath: "template.gjs" });
   /** @type {Set<string>} */
   let locals = new Set();
   /** @type {Node[]} */
-  let calls = [];
+  let missing = [];
+  /** @type {Set<string>} */
+  let fromAddons = new Set();
 
   walkAll(tree, (node) => {
     for (let param of node.blockParams ?? []) locals.add(param);
@@ -90,23 +90,49 @@ export function removeMissingCalls(template, names) {
     if (!/[-/]/.test(name) || name.includes(".") || name.startsWith("@")) return;
     if (KEYWORDS.has(name) || locals.has(name)) return;
     if (names.components.has(name) || names.helpers.has(name)) return;
-    if (fromAddon(name, names.addons)) return;
-    if (calls.some((call) => call.start <= node.start && node.end <= call.end)) return;
+    if (fromAddon(name, names.addons)) {
+      fromAddons.add(name);
+      return;
+    }
+    if (missing.some((call) => call.start <= node.start && node.end <= call.end)) return;
 
-    calls.push(node);
+    missing.push(node);
   });
 
-  if (calls.length === 0) return { output: template, removed: [] };
+  return { source, missing, fromAddons: Array.from(fromAddons).sort() };
+}
+
+/**
+ * @param {string} template the source of an .hbs file
+ * @param {{ components: Set<string>, helpers: Set<string>, addons: string[] }} names
+ * @returns {string[]} the names that the template calls, which no component or helper has, and which an addon's name starts
+ */
+export function addonCalls(template, names) {
+  return unknownCalls(template, names).fromAddons;
+}
+
+/**
+ * Removes each `{{x/y}}` and `{{#x-y}}...{{/x-y}}` whose name is no component or helper.
+ * Such a call threw each time that it rendered, and Embroider stops the build on it.
+ *
+ * @param {string} template the source of an .hbs file
+ * @param {{ components: Set<string>, helpers: Set<string>, addons: string[] }} names the names that a template can call, and the addons
+ * @returns {{ output: string, removed: string[] }}
+ */
+export function removeMissingCalls(template, names) {
+  let { source, missing } = unknownCalls(template, names);
+
+  if (missing.length === 0) return { output: template, removed: [] };
 
   let edits = new Edits(source);
 
-  for (let call of calls) edits.removeLine(call);
+  for (let call of missing) edits.removeLine(call);
 
   let output = edits.apply();
 
   return {
     output: output.slice(OPEN.length, output.length - "</template>".length),
-    removed: calls.map((call) => call.path.original),
+    removed: missing.map((call) => call.path.original),
   };
 }
 

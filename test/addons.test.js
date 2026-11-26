@@ -781,6 +781,41 @@ test("selectChoose comes from the test-support entry of ember-power-select 9", (
   `);
 });
 
+/**
+ * From TryGhost/Ghost ghost/admin/app/components/power-select-vertical-collection-options.hbs (MIT), shortened, with a call of the `-present` helper added.
+ */
+test("ember-power-select-is-selected is ember-power-select-is-equal in ember-power-select 8 and later", () => {
+  expect(
+    updatePowerSelect(
+      `{{#vertical-collection @options minHeight=30 as |opt index|}}
+    <li class="ember-power-select-option"
+        aria-selected="{{ember-power-select-is-selected opt @select.selected}}"
+        {{ember-power-select-is-selected-present}}>
+    </li>
+{{/vertical-collection}}
+`,
+      "app/components/power-select-vertical-collection-options.hbs",
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "template": "{{#vertical-collection @options minHeight=30 as |opt index|}}
+        <li class="ember-power-select-option"
+            aria-selected="{{ember-power-select-is-equal opt @select.selected}}"
+            {{ember-power-select-is-selected-present}}>
+        </li>
+    {{/vertical-collection}}
+    ",
+      "unreadable": [],
+    }
+  `);
+  expect(
+    updatePowerSelect(
+      `import { emberPowerSelectIsSelected } from 'ember-power-select/helpers/ember-power-select-is-selected';\n`,
+      "app/utils/x.js",
+    ).unreadable,
+  ).toHaveLength(1);
+});
+
 test("the application template gets the wormhole of ember-basic-dropdown", () => {
   let app = project({
     "package.json": "{}",

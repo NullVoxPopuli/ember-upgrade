@@ -69,7 +69,8 @@ function addTree(tree, components, helpers) {
  * It is undefined when a dependency is not installed, because that addon can add names too.
  *
  * @param {Project} project
- * @returns {{ components: Set<string>, helpers: Set<string>, addons: string[] } | undefined} addons has the name of each addon, without its scope
+ * @returns {{ components: Set<string>, helpers: Set<string>, addons: string[], packages: import('#stages/app-tree/index.js').Addon[] } | undefined}
+ * addons has the name of each addon, without its scope
  */
 export function templateNames(project) {
   for (let name of dependencyNames(project.packageJson)) {
@@ -89,8 +90,9 @@ export function templateNames(project) {
 
   /** @type {string[]} */
   let addons = [];
+  let packages = addonsOf(project);
 
-  for (let addon of addonsOf(project)) {
+  for (let addon of packages) {
     addons.push(addon.name.replace(/^@[^/]+\//, ""));
     addTree(join(addon.directory, "app"), components, helpers);
 
@@ -101,5 +103,5 @@ export function templateNames(project) {
     }
   }
 
-  return { components, helpers, addons };
+  return { components, helpers, addons, packages };
 }

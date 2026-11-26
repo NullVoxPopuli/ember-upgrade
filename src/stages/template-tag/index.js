@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { runUpstream } from "#process.js";
+import { addonComponents, replaceShims, writeShims } from "./addon-components.js";
 import { fixImports } from "./fix-imports.js";
 import { atLeast } from "#version.js";
 
@@ -32,9 +33,15 @@ export default {
       String(atLeast(emberSource, 6, 4)),
     ];
 
+    let components = addonComponents(project);
+
+    writeShims(project, components);
+
     if (!runUpstream(project, "@embroider/template-tag-codemod@1.4.2", args)) {
       throw new Error("@embroider/template-tag-codemod failed. Its output is above.");
     }
+
+    replaceShims(project, components);
 
     for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
       let source = project.read(file);
