@@ -142,23 +142,47 @@ function styleNames(source) {
  */
 
 /**
+ * @param {Source} source
+ * @returns {Record<string, any> | undefined} the `exports` of the package, when it is an object
+ */
+function exportsOf(source) {
+  let exports = JSON.parse(readFileSync(join(source.folder, "package.json"), "utf8")).exports;
+
+  return exports && typeof exports === "object" ? exports : undefined;
+}
+
+/**
+ * @param {Source} source
+ * @param {string} specifier
+ * @returns {boolean} the package's `exports` give Sass a file for the import
+ */
+function exportsResolve(source, specifier) {
+  let exports = exportsOf(source);
+
+  if (!exports) return false;
+  if (specifier === source.name) return Boolean(exports["."]?.sass);
+
+  return (
+    specifier.startsWith(`${source.name}/`) && `.${specifier.slice(source.name.length)}` in exports
+  );
+}
+
+/**
  * A package with `exports` resolves only the paths that it lists, with their extensions,
  * so `x/x` becomes `x/x.scss`, or `x` when the `sass` condition of the package entry is that file.
  *
  * @param {Source} source
  * @param {string} specifier
- * @returns {Resolution | undefined} undefined when the import is not into this package, or already resolves
+ * @returns {Resolution | undefined} undefined when the import is not into this package
  */
 function fromExports(source, specifier) {
   if (!specifier.startsWith(`${source.name}/`)) return;
 
-  let exports = JSON.parse(readFileSync(join(source.folder, "package.json"), "utf8")).exports;
+  let exports = exportsOf(source);
 
-  if (!exports || typeof exports !== "object") return;
+  if (!exports) return;
 
   let rest = specifier.slice(source.name.length + 1);
-
-  if (`./${rest}` in exports) return;
 
   let file = globSync("**/*.{scss,sass,css}", {
     cwd: source.folder,
@@ -234,6 +258,8 @@ export function resolveImport(project, file, specifier, context) {
 
     return { specifier: relative.startsWith(".") ? relative : `./${relative}` };
   }
+
+  if (context.packages.some((source) => exportsResolve(source, specifier))) return;
 
   for (let source of context.packages) {
     let resolution = fromExports(source, specifier);

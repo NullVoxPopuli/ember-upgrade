@@ -162,7 +162,8 @@ test("an import into a package with exports gets the path that the package expor
     "node_modules/ember-power-select/scss/variables.scss": "",
     "ember-cli-build.js": "module.exports = function (defaults) {};\n",
     "index.html": `<link rel="stylesheet" href="/@embroider/virtual/app.css">\n`,
-    "app/styles/app.scss": `@import 'ember-power-select/scss/variables';
+    "app/styles/app.scss": `@import "ember-power-select";
+@import 'ember-power-select/scss/variables';
 @import 'ember-power-select/ember-power-select';
 @import 'ember-power-select/scss/base.scss';
 `,
@@ -171,7 +172,8 @@ test("an import into a package with exports gets the path that the package expor
   await viteSass.run(app);
 
   expect(app.read("app/styles/app.scss")).toMatchInlineSnapshot(`
-    "@import 'ember-power-select/scss/variables.scss';
+    "@import "ember-power-select";
+    @import 'ember-power-select/scss/variables.scss';
     @import 'ember-power-select';
     @import 'ember-power-select/scss/base.scss';
     "
