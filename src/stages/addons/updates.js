@@ -71,6 +71,46 @@ function importStyleguideCss(project) {
 }
 
 /**
+ * @param {import('#project.js').Project} project
+ * @returns {boolean} the app has the v2 ember-styleguide, and app/app.js does not import its CSS
+ */
+function needsStyleguideCss(project) {
+  let range = project.dependency("ember-styleguide");
+  let file = APP_FILES.find((name) => project.has(name));
+
+  return Boolean(
+    range &&
+    (range === STYLEGUIDE_REF || atLeast(range, 12, 0)) &&
+    file &&
+    !project.read(file).includes("ember-styleguide/styles.css"),
+  );
+}
+
+/**
+ * The classic build compiles imported CSS with webpack's css-loader, which cannot resolve the fonts and
+ * public images that the styleguide's CSS names, so the import waits for Vite, which leaves those URLs to the browser.
+ *
+ * @type {Stage}
+ */
+export const emberStyleguideCss = {
+  name: "ember-styleguide-css",
+  label: "Import the CSS of the v2 ember-styleguide in app/app.js",
+
+  detect(project) {
+    return Boolean(project.dependency("@embroider/vite")) && needsStyleguideCss(project);
+  },
+
+  async check() {
+    return { blockers: [], todo: [] };
+  },
+
+  async run(project) {
+    importStyleguideCss(project);
+    return [];
+  },
+};
+
+/**
  * Adds `import './deprecation-workflow';` as the first import of app/app.js,
  * so that the workflow handles the deprecations of the modules that come after it.
  *
@@ -159,12 +199,13 @@ export const emberStyleguide = {
       editPackageJson(project, (pkg) =>
         setDependency(pkg, "ember-styleguide", `^${release.version}`),
       );
-      importStyleguideCss(project);
+      if (project.dependency("@embroider/vite")) importStyleguideCss(project);
       return [];
     }
 
     editPackageJson(project, (pkg) => setDependency(pkg, "ember-styleguide", STYLEGUIDE_REF));
-    importStyleguideCss(project);
+
+    if (project.dependency("@embroider/vite")) importStyleguideCss(project);
 
     if (packageManager(project) === "pnpm") {
       allowBuild(project, "ember-styleguide");

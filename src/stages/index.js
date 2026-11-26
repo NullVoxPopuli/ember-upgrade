@@ -22,7 +22,13 @@ import {
   prember,
   qunitConsoleGrouper,
 } from "./addons/removals.js";
-import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
+import {
+  deprecationWorkflow,
+  emberStyleguide,
+  emberStyleguideCss,
+  svgJar,
+  v2Addons,
+} from "./addons/updates.js";
 import appClass from "./app-class/index.js";
 import appTree from "./app-tree/index.js";
 import ciWorkflows from "./ci-workflows/index.js";
@@ -123,6 +129,7 @@ export const stages = [
    */
   proxyScriptsStage,
   vite,
+  emberStyleguideCss,
   /** Later stages boot the compat build, where ember-cli-sass can load node-sass. */
   viteSass,
   emberScopedCss,

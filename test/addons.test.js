@@ -19,7 +19,11 @@ import {
 import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
-import { deprecationWorkflow, emberStyleguide } from "#stages/addons/updates.js";
+import {
+  deprecationWorkflow,
+  emberStyleguide,
+  emberStyleguideCss,
+} from "#stages/addons/updates.js";
 
 /**
  * @param {Record<string, string>} files
@@ -907,9 +911,9 @@ test('Each option is also a link to where it would go', async function (assert) 
 /**
  * From ember-learn/upgrade-guide app/app.js, shortened.
  */
-test("the app imports the CSS of the v2 ember-styleguide, before its own stylesheets", async () => {
+test("an app on Vite imports the CSS of the v2 ember-styleguide, before its own stylesheets", async () => {
   let app = project({
-    "package.json": `{ "name": "x", "devDependencies": { "ember-styleguide": "^11.0.0" } }`,
+    "package.json": `{ "name": "x", "devDependencies": { "@embroider/vite": "^1.7.2", "ember-styleguide": "^11.0.0" } }`,
     "package-lock.json": "{}",
     "app/app.js": `import Application from '@ember/application';
 import Resolver from 'ember-resolver';
@@ -931,4 +935,37 @@ export default class App extends Application {}
     export default class App extends Application {}
     "
   `);
+});
+
+test("a classic app imports the CSS of the v2 ember-styleguide after the vite stage", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "ember-styleguide": "^11.0.0" } }`,
+    "package-lock.json": "{}",
+    "app/app.js": "import './styles/app.css';\n",
+  });
+
+  await emberStyleguide.run(app);
+
+  expect(app.read("app/app.js")).toBe("import './styles/app.css';\n");
+  expect(emberStyleguideCss.detect(app)).toBe(false);
+
+  app.write(
+    "package.json",
+    JSON.stringify(
+      Object.assign(app.packageJson, {
+        devDependencies: Object.assign({}, app.packageJson.devDependencies, {
+          "@embroider/vite": "^1.7.2",
+        }),
+      }),
+    ),
+  );
+
+  expect(emberStyleguideCss.detect(app)).toBe(true);
+
+  await emberStyleguideCss.run(app);
+
+  expect(app.read("app/app.js")).toBe(
+    "import 'ember-styleguide/styles.css';\nimport './styles/app.css';\n",
+  );
+  expect(emberStyleguideCss.detect(app)).toBe(false);
 });
