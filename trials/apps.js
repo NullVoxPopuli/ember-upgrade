@@ -309,6 +309,7 @@ export const apps = [
       "ember-cli-mirage",
       "ember-css-modules",
       "ember-metrics",
+      "percy-ember",
       "@ember-intl/cp-validations",
       "@ember-intl/decorators",
       "update-@ember/render-modifiers",
