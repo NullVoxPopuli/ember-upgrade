@@ -400,3 +400,163 @@ deprecate('setupRouter is deprecated', false, {
     "
   `);
 });
+
+/**
+ * From ember-toggle 7.1.1 (MIT) and documize/community, shortened.
+ * The included hook picks the theme stylesheets from the app's config.
+ */
+test("the vendor files that an included hook imports go into the app, as ember-cli-build imports", async () => {
+  let addon = "node_modules/ember-toggle";
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-toggle": "7.1.1" } }),
+    "config/environment.js": `module.exports = function (environment) {
+  return { environment, 'ember-toggle': { includedThemes: ['light', 'ios'] } };
+};
+`,
+    "ember-cli-build.js": `'use strict';
+
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+module.exports = function (defaults) {
+  let app = new EmberApp(defaults, {});
+
+  return app.toTree();
+};
+`,
+    [`${addon}/package.json`]: JSON.stringify({
+      name: "ember-toggle",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-cli-babel": "7.22.1" },
+    }),
+    [`${addon}/index.js`]: `'use strict';
+
+module.exports = {
+  name: require('./package').name,
+
+  included: function (app, parentAddon) {
+    var target = parentAddon || app;
+
+    // necessary for nested usage
+    // parent addon should call \`this._super.included.apply(this, arguments);\`
+    if (target.app) {
+      target = target.app;
+    }
+
+    this.app = target;
+
+    // Use configuration to decide which theme css files
+    // to import, thus not populating the user's app
+    this.importThemes(target);
+    this._super.included.apply(this, arguments);
+  },
+
+  importThemes: function (app) {
+    var projectConfig = this.project.config(app.env);
+    var config = projectConfig['ember-toggle'] || {};
+    var excludeBaseStyles = config.excludeBaseStyles || false;
+    var allThemes = [
+      'light',
+      'ios',
+      'default',
+      'flat',
+      'skewed',
+      'flip',
+      'material',
+    ];
+    var included = config.includedThemes;
+    var excluded = config.excludedThemes;
+    var themes = [];
+
+    if (included && Array.isArray(included)) {
+      themes = themes.concat(included);
+    } else {
+      themes = allThemes;
+    }
+
+    if (excluded && Array.isArray(excluded)) {
+      themes = themes.filter(function (theme) {
+        return excluded.indexOf(theme) === -1;
+      });
+    }
+
+    themes = themes.filter(function (theme) {
+      return theme && allThemes.indexOf(theme) !== -1;
+    });
+
+    if (!excludeBaseStyles) {
+      app.import('vendor/ember-toggle/base.css');
+    }
+
+    // Include all themes if user incorrectly specified themes in the config
+    themes = themes.length ? themes : allThemes;
+
+    themes.forEach(function (theme) {
+      app.import('vendor/ember-toggle/themes/' + theme + '.css');
+    });
+  },
+};
+`,
+    [`${addon}/vendor/ember-toggle/base.css`]: ".x-toggle { display: none; }\n",
+    [`${addon}/vendor/ember-toggle/themes/light.css`]: ".x-toggle-light {}\n",
+    [`${addon}/vendor/ember-toggle/themes/ios.css`]: ".x-toggle-ios {}\n",
+    [`${addon}/addon/components/x-toggle/component.js`]: "export default class XToggle {}\n",
+    [`${addon}/app/components/x-toggle.js`]:
+      "export { default } from 'ember-toggle/components/x-toggle/component';\n",
+  });
+
+  let stage = inlineV1Stage(app, "ember-toggle");
+
+  if (!stage) throw new Error("the addon stays a v1 addon");
+
+  expect(await stage.check(app)).toEqual({ blockers: [], todo: [] });
+
+  await stage.run(app);
+
+  expect({
+    build: app.read("ember-cli-build.js"),
+    theme: app.read("vendor/ember-toggle/themes/ios.css"),
+  }).toMatchInlineSnapshot(`
+    {
+      "build": "'use strict';
+
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    module.exports = function (defaults) {
+      let app = new EmberApp(defaults, {});
+      app.import("vendor/ember-toggle/base.css");
+      app.import("vendor/ember-toggle/themes/light.css");
+      app.import("vendor/ember-toggle/themes/ios.css");
+
+      return app.toTree();
+    };
+    ",
+      "theme": ".x-toggle-ios {}
+    ",
+    }
+  `);
+});
+
+test("an addon whose included hook reads the build options stays a v1 addon", () => {
+  let addon = "node_modules/ember-bootstrap-like";
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-bootstrap-like": "1.0.0" } }),
+    "config/environment.js": "module.exports = function () {\n  return {};\n};\n",
+    "ember-cli-build.js": "let app = new EmberApp(defaults, {});\n",
+    [`${addon}/package.json`]: JSON.stringify({
+      name: "ember-bootstrap-like",
+      keywords: ["ember-addon"],
+    }),
+    [`${addon}/index.js`]: `module.exports = {
+  name: 'ember-bootstrap-like',
+  included(app) {
+    let version = app.options['ember-bootstrap-like'].version;
+    app.import('vendor/v' + version + '.css');
+  }
+};
+`,
+    [`${addon}/vendor/v3.css`]: "",
+    [`${addon}/addon/components/x.js`]: "export default class {}\n",
+  });
+
+  expect(inlineV1Stage(app, "ember-bootstrap-like")).toBeUndefined();
+});

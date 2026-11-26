@@ -7,6 +7,7 @@ import { transform as replaceEmberGlobals } from "#stages/ember-globals/transfor
 import { parse as parseVersion } from "#stages/ember-source/index.js";
 import { stripTypes } from "#strip-types.js";
 import { contentForPages } from "./content-for.js";
+import { includedImports, vendorFiles } from "./included.js";
 import { inlineStage } from "./inline.js";
 
 /** @typedef {import('#ast.js').Node} Node */
@@ -31,12 +32,55 @@ const TEMPLATE_IMPORT = /^import (\w+) from (["'])([^"']+)\2;?\n/gm;
  * @property {Record<string, string>} imports each module of the addon, and the file that has it now
  * @property {Record<string, string>} ranges the addon's runtime dependencies, with its ranges
  * @property {boolean} contentFor the addon adds HTML to the app's pages with a `contentFor` hook
+ * @property {boolean} included the addon imports vendor files with an `included` hook
  */
 
 /**
  * The build hooks whose work the inline stage does once: `contentFor` adds HTML, which goes into the app's HTML files.
  */
 const INLINED_HOOKS = new Set(["contentFor"]);
+
+/**
+ * The index.js properties that ember-cli calls. The others are functions that the hooks call,
+ * which run with the `included` hook.
+ */
+const EMBER_CLI_HOOKS = new Set([
+  "blueprintsPath",
+  "buildError",
+  "cacheKeyForTree",
+  "config",
+  "contentFor",
+  "dependencies",
+  "import",
+  "importTransforms",
+  "included",
+  "includedCommands",
+  "init",
+  "lintTree",
+  "options",
+  "outputReady",
+  "postBuild",
+  "postprocessTree",
+  "preBuild",
+  "preprocessTree",
+  "serverMiddleware",
+  "setupPreprocessorRegistry",
+  "shouldIncludeChildAddon",
+  "testemMiddleware",
+  "treeFor",
+  "treeForAddon",
+  "treeForAddonStyles",
+  "treeForAddonTemplates",
+  "treeForAddonTestSupport",
+  "treeForApp",
+  "treeForPublic",
+  "treeForStyles",
+  "treeForTemplates",
+  "treeForTestSupport",
+  "treeForVendor",
+  "module.exports",
+  "...",
+]);
 
 /**
  * @param {string} directory the installed addon
@@ -278,8 +322,19 @@ function withoutExtension(path) {
  */
 export function planInline(name, directory, taken, emberVersion) {
   let hooks = buildHooks(directory);
+  let included = hooks.includes("included");
 
-  if (hooks.some((hook) => !INLINED_HOOKS.has(hook))) return;
+  /**
+   * An `included` hook runs once, with an app that records its imports, so the functions that it calls can stay.
+   */
+  if (
+    hooks.some(
+      (hook) =>
+        !INLINED_HOOKS.has(hook) && hook !== "included" && (EMBER_CLI_HOOKS.has(hook) || !included),
+    )
+  ) {
+    return;
+  }
   if (existsSync(join(directory, "addon", "styles"))) return;
 
   let contentFor = hooks.includes("contentFor");
@@ -403,7 +458,7 @@ export function planInline(name, directory, taken, emberVersion) {
     ranges[dependency] = String(range);
   }
 
-  return { files, imports, ranges, contentFor };
+  return { files, imports, ranges, contentFor, included };
 }
 
 /**
@@ -716,7 +771,7 @@ export function inlineV1Stage(project, name, from) {
 
   if (!plan) return;
 
-  let { files, imports, ranges, contentFor } = plan;
+  let { files, imports, ranges, contentFor, included } = plan;
 
   if (!usesTypeScript(project)) ({ files, imports } = asJavaScript(files, imports));
 
@@ -725,11 +780,28 @@ export function inlineV1Stage(project, name, from) {
    */
   if (contentFor && !contentForPages(project, directory)) return;
 
+  let vendor = included ? includedImports(project, directory) : [];
+
+  if (!vendor || (vendor.length > 0 && !vendorFiles(project, directory, vendor))) return;
+
+  let vendorImports = vendor;
+
+  /**
+   * @param {Project} target
+   * @returns {Record<string, string> | undefined}
+   */
+  let generated = (target) => {
+    let pages = contentFor ? contentForPages(target, directory) : {};
+    let copied = vendorImports.length > 0 ? vendorFiles(target, directory, vendorImports) : {};
+
+    return pages && copied ? Object.assign({}, pages, copied) : undefined;
+  };
+
   let stage = inlineStage({
     name,
     label: `Move ${name}, a v1 addon with no v2 release, into the app`,
     files: Object.fromEntries(files),
-    generated: contentFor ? (target) => contentForPages(target, directory) : undefined,
+    generated: contentFor || vendor.length > 0 ? generated : undefined,
     imports,
     ranges,
     note: contentFor
