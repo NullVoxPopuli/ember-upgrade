@@ -31,6 +31,12 @@ export default {
       String(atLeast(emberSource, 6, 3)),
       "--nativeLexicalThis",
       String(atLeast(emberSource, 6, 4)),
+      /**
+       * The components of inlined v1 addons that the app extends stay in app/addons/<addon>.
+       */
+      "--components",
+      "app/components/**/*.{js,ts,hbs}",
+      "app/addons/**/components/**/*.{js,ts,hbs}",
     ];
 
     let components = addonComponents(project);

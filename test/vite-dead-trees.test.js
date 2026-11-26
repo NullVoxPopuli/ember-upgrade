@@ -106,3 +106,60 @@ module.exports = async function (defaults) {
 
   expect(removeDeadTrees(source, "ember-cli-build.js")).toBe(source);
 });
+
+/**
+ * From ember-learn/ember-website ember-cli-build.js (MIT), after ember-vite-codemod, with the app options shortened.
+ * The app built with Embroider and webpack before.
+ */
+test("a second compatBuild call and its options go, with the requires that only they used", () => {
+  let source = `'use strict';;
+
+const { compatBuild } = require('@embroider/compat');
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { prerender } = require('prember');
+
+module.exports = async function(defaults) {
+  const {
+    buildOnce
+  } = await import("@embroider/vite");
+
+  const app = new EmberApp(defaults, {
+    prember: { urls: ['/', 'teams'] },
+  });
+
+  const options = {
+    packagerOptions: {
+      publicAssetURL: '/',
+    },
+    staticAddonTrees: true,
+  };
+
+  const compiledApp = compatBuild(app, Webpack, options);
+
+  return compatBuild(app, buildOnce);
+};
+`;
+
+  expect(removeDeadTrees(source, "ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';;
+
+    const { compatBuild } = require('@embroider/compat');
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+    const { prerender } = require('prember');
+
+    module.exports = async function(defaults) {
+      const {
+        buildOnce
+      } = await import("@embroider/vite");
+
+      const app = new EmberApp(defaults, {
+        prember: { urls: ['/', 'teams'] },
+      });
+
+
+
+      return compatBuild(app, buildOnce);
+    };
+    "
+  `);
+});

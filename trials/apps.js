@@ -581,7 +581,21 @@ export const apps = [
     verify: true,
     repo: "ember-learn/upgrade-guide",
     sha: "f98414a14176f02c348dc46bdb91b9df8e52a086",
-    completed: [],
+    completed: [
+      "ember-truth-helpers-paths",
+      "ember-styleguide",
+      "ember-source-6.12",
+      "ember-test-selectors",
+      "ember-cli-deprecation-workflow",
+      "ember-source-7.4",
+      "ember-truth-helpers",
+      "build-settings",
+      "app-tree",
+    ],
+    /**
+     * The in-repo addon lib/content-generator writes JSON files with broccoli-static-site-json, which has no Vite replacement yet.
+     */
+    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "rfcs-app",

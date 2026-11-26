@@ -47,21 +47,45 @@ function declared(statement) {
 
 /**
  * @param {Node} statement
- * @returns {string | undefined} the name of `const x = require("...")`
+ * @returns {string[]} the names of `const x = require("...")` and `const { x } = require("...")`
  */
-function requireName(statement) {
-  if (statement.type !== "VariableDeclaration" || statement.declarations.length !== 1) return;
+function requireNames(statement) {
+  if (statement.type !== "VariableDeclaration" || statement.declarations.length !== 1) return [];
 
   let [declarator] = statement.declarations;
 
   if (
-    declarator.id.type === "Identifier" &&
-    declarator.init?.type === "CallExpression" &&
-    declarator.init.callee.type === "Identifier" &&
-    declarator.init.callee.name === "require"
+    declarator.init?.type !== "CallExpression" ||
+    declarator.init.callee.type !== "Identifier" ||
+    declarator.init.callee.name !== "require"
   ) {
-    return declarator.id.name;
+    return [];
   }
+
+  if (declarator.id.type === "Identifier") return [declarator.id.name];
+  if (declarator.id.type !== "ObjectPattern") return [];
+
+  return declarator.id.properties
+    .map((/** @type {Node} */ property) =>
+      property.value?.type === "Identifier" ? property.value.name : undefined,
+    )
+    .filter((/** @type {string | undefined} */ name) => name !== undefined);
+}
+
+/**
+ * @param {Node} statement
+ * @returns {boolean} the statement declares the result of a `compatBuild(...)` call
+ */
+function declaresCompatBuild(statement) {
+  return (
+    statement.type === "VariableDeclaration" &&
+    statement.declarations.some(
+      (/** @type {Node} */ declarator) =>
+        declarator.init?.type === "CallExpression" &&
+        declarator.init.callee.type === "Identifier" &&
+        declarator.init.callee.name === "compatBuild",
+    )
+  );
 }
 
 /**
@@ -146,8 +170,9 @@ export function removeDeadTrees(source, file) {
       }
 
       let { names, toTree } = reads(statement);
+      let root = toTree || declaresCompatBuild(statement);
 
-      if (!toTree && !Array.from(names).some((name) => dead.has(name))) continue;
+      if (!root && !Array.from(names).some((name) => dead.has(name))) continue;
 
       removed.add(statement);
       for (let name of declared(statement)) dead.add(name);
@@ -163,6 +188,37 @@ export function removeDeadTrees(source, file) {
     return source;
   }
 
+  /**
+   * A declaration that only the removed code read, such as the options of a second compatBuild call, goes too.
+   */
+  for (let found = true; found;) {
+    found = false;
+
+    let readByRemoved = new Set(
+      Array.from(removed).flatMap((statement) => Array.from(reads(statement).names)),
+    );
+
+    for (let statement of body) {
+      let names = declared(statement);
+
+      if (removed.has(statement) || names.length === 0 || requireNames(statement).length > 0)
+        continue;
+      if (!names.every((name) => readByRemoved.has(name))) continue;
+
+      let readByKept = body.some(
+        (other) =>
+          other !== statement &&
+          !removed.has(other) &&
+          Array.from(reads(other).names).some((name) => names.includes(name)),
+      );
+
+      if (!readByKept) {
+        removed.add(statement);
+        found = true;
+      }
+    }
+  }
+
   /** @type {Set<string>} */
   let usedByRemoved = new Set();
 
@@ -174,7 +230,7 @@ export function removeDeadTrees(source, file) {
   let usedElsewhere = new Set();
 
   walk(program, (node, parent) => {
-    if (removed.has(node)) return SKIP;
+    if (removed.has(node) || requireNames(node).length > 0) return SKIP;
     if (node.type !== "Identifier") return;
     if (parent?.type === "VariableDeclarator" && parent.id === node) return;
     if (parent?.type === "MemberExpression" && parent.property === node && !parent.computed) return;
@@ -188,9 +244,15 @@ export function removeDeadTrees(source, file) {
   for (let statement of removed) edits.removeLine(withComments(source, statement));
 
   walk(program, (node) => {
-    let name = requireName(node);
+    let names = requireNames(node);
 
-    if (name && usedByRemoved.has(name) && !usedElsewhere.has(name)) edits.removeLine(node);
+    if (
+      names.length > 0 &&
+      names.some((name) => usedByRemoved.has(name)) &&
+      names.every((name) => !usedElsewhere.has(name))
+    ) {
+      edits.removeLine(node);
+    }
   });
 
   return edits.apply();
