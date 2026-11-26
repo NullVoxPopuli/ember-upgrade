@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { parseProgram, walk } from "#ast.js";
 import { Edits } from "#edits.js";
 import { removePatches } from "#manager-settings.js";
-import { editPackageJson, removeDependency } from "#package-json.js";
+import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
 
 /** @typedef {import('#project.js').Project} Project */
@@ -16,6 +17,11 @@ import { recordProgress } from "#progress.js";
 const PACKAGES = ["ember-cli-fastboot", "ember-cli-fastboot-testing", "ember-data-fastboot"];
 const CONFIGS = ["config/fastboot.js", "config/fastboot-testing.js"];
 const SOURCES = ["{app,tests}/**/*.{js,ts,gjs,gts}"];
+
+/**
+ * vite-ember-ssr sets the status code of a server render with `setStatusCode()`, which does nothing in the browser.
+ */
+const SSR_CLIENT = "vite-ember-ssr/client";
 
 /**
  * @param {Node} node
@@ -70,19 +76,20 @@ function withCommentsAbove(source, node) {
 
 /**
  * Replaces `this.fastboot.isFastBoot` with `import.meta.env.SSR`, which is false in the browser build and true in a server build.
- * A statement that reads the service in another way, such as `this.fastboot.response.statusCode = 404`, ran only in FastBoot, so it goes.
+ * `this.fastboot.response.statusCode = 404` becomes `setStatusCode(404)` of vite-ember-ssr.
+ * Another statement that reads the service ran only in FastBoot, so it goes.
  * The `fastboot` service goes when nothing else reads it.
  *
  * @param {string} source
  * @param {string} file
- * @returns {{ output: string, remaining: boolean, removed: string[] }} remaining is true when the code reads the service in another way,
- * and removed has the statements that ran only in FastBoot
+ * @returns {{ output: string, remaining: boolean, removed: string[], statusCodes: number }} remaining is true when the code reads the service in another way,
+ * removed has the statements that ran only in FastBoot, and statusCodes counts the `setStatusCode()` calls that replace a FastBoot status code
  */
 export function withoutFastBootService(source, file) {
   let program = parseProgram(source, file);
 
   if (!program || !source.includes("fastboot")) {
-    return { output: source, remaining: false, removed: [] };
+    return { output: source, remaining: false, removed: [], statusCodes: 0 };
   }
 
   let edits = new Edits(source);
@@ -140,7 +147,7 @@ export function withoutFastBootService(source, file) {
   let removedStatements = removable ? Array.from(new Set(around)) : [];
 
   if (checks.length === 0 && removedStatements.length === 0) {
-    return { output: source, remaining: others.length > 0, removed: [] };
+    return { output: source, remaining: others.length > 0, removed: [], statusCodes: 0 };
   }
 
   for (let check of checks) {
@@ -151,7 +158,30 @@ export function withoutFastBootService(source, file) {
     edits.replace(check, "import.meta.env.SSR");
   }
 
-  for (let statement of removedStatements) edits.removeLine(withCommentsAbove(source, statement));
+  /** @type {Node[]} */
+  let statusCodes = [];
+
+  for (let statement of removedStatements) {
+    let code = statusCodeOf(source, statement);
+
+    if (code === undefined) {
+      edits.removeLine(withCommentsAbove(source, statement));
+      continue;
+    }
+
+    edits.replace(withCommentsAbove(source, statement), `setStatusCode(${code});`);
+    statusCodes.push(statement);
+  }
+
+  if (statusCodes.length > 0) {
+    let imports = program.body.filter(
+      (/** @type {Node} */ node) => node.type === "ImportDeclaration",
+    );
+    let last = imports[imports.length - 1];
+    let line = `import { setStatusCode } from '${SSR_CLIENT}';`;
+
+    edits.insert(last ? last.end : 0, last ? `\n${line}` : `${line}\n`);
+  }
 
   let remaining = others.length > 0 && !removable;
 
@@ -162,10 +192,28 @@ export function withoutFastBootService(source, file) {
   return {
     output: declaration && !remaining ? withoutUnusedServiceImport(output, file) : output,
     remaining,
-    removed: removedStatements.map((statement) =>
-      source.slice(statement.start, statement.end).replace(/\s+/g, " "),
-    ),
+    removed: removedStatements
+      .filter((statement) => !statusCodes.includes(statement))
+      .map((statement) => source.slice(statement.start, statement.end).replace(/\s+/g, " ")),
+    statusCodes: statusCodes.length,
   };
+}
+
+/**
+ * @param {string} source
+ * @param {Node} statement
+ * @returns {string | undefined} the code of `this.fastboot.response.statusCode = <code>;`
+ */
+function statusCodeOf(source, statement) {
+  let expression = statement.expression;
+
+  if (expression.type !== "AssignmentExpression" || expression.operator !== "=") return;
+  if (
+    source.slice(expression.left.start, expression.left.end) !== "this.fastboot.response.statusCode"
+  )
+    return;
+
+  return source.slice(expression.right.start, expression.right.end);
 }
 
 /**
@@ -229,6 +277,7 @@ export function removeFastBoot(project) {
   let remaining = [];
   /** @type {string[]} */
   let removed = [];
+  let statusCodes = 0;
 
   for (let file of project.files(SOURCES)) {
     let source = project.read(file);
@@ -238,12 +287,18 @@ export function removeFastBoot(project) {
     if (result.remaining) remaining.push(file);
 
     for (let statement of result.removed) removed.push(`${file}: ${statement}`);
+
+    statusCodes += result.statusCodes;
   }
 
   editPackageJson(project, (pkg) => {
     for (let name of PACKAGES) removeDependency(pkg, name);
 
     delete pkg.fastbootDependencies;
+
+    if (statusCodes > 0 && !project.dependency("vite-ember-ssr")) {
+      setDependency(pkg, "vite-ember-ssr", `^${published("vite-ember-ssr")?.version ?? "0.7.0"}`);
+    }
   });
 
   for (let name of PACKAGES) removePatches(project, name);
@@ -264,6 +319,9 @@ export function removeFastBoot(project) {
     note:
       "FastBoot renders with the ember-cli build, which Vite replaces, so ember-cli-fastboot and its addons are removed. " +
       "`this.fastboot.isFastBoot` is `import.meta.env.SSR` now. Prerender or render on the server with vite-ember-ssr." +
+      (statusCodes > 0
+        ? " `this.fastboot.response.statusCode` is `setStatusCode()` of vite-ember-ssr now, which sets the code of a server render."
+        : "") +
       (removed.length > 0
         ? ` These statements ran only in FastBoot, and are removed: ${removed.join("; ")}.`
         : ""),

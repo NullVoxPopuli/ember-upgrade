@@ -43,6 +43,7 @@ export default class CommunityMeetupsIndexController extends Controller {
     ",
       "remaining": false,
       "removed": [],
+      "statusCodes": 0,
     }
   `);
 });
@@ -75,6 +76,7 @@ export default class NotFoundRoute extends Route {
   ).toMatchInlineSnapshot(`
     {
       "output": "import Route from '@ember/routing/route';
+    import { setStatusCode } from 'vite-ember-ssr/client';
 
     export default class NotFoundRoute extends Route {
 
@@ -83,13 +85,13 @@ export default class NotFoundRoute extends Route {
           return;
         }
 
+        setStatusCode(404);
       }
     }
     ",
       "remaining": false,
-      "removed": [
-        "this.fastboot.response.statusCode = 404;",
-      ],
+      "removed": [],
+      "statusCodes": 1,
     }
   `);
 });
@@ -97,7 +99,7 @@ export default class NotFoundRoute extends Route {
 /**
  * From ember-learn/ember-website app/routes/not-found.ts (MIT).
  */
-test("a statement that only FastBoot ran goes, with the service", () => {
+test("the status code of a FastBoot response becomes setStatusCode of vite-ember-ssr", () => {
   expect(
     withoutFastBootService(
       `import Route from '@ember/routing/route';
@@ -123,6 +125,7 @@ export default class NotFoundRoute extends Route {
   ).toMatchInlineSnapshot(`
     {
       "output": "import Route from '@ember/routing/route';
+    import { setStatusCode } from 'vite-ember-ssr/client';
 
     export default class NotFoundRoute extends Route {
 
@@ -131,13 +134,13 @@ export default class NotFoundRoute extends Route {
           return;
         }
 
+        setStatusCode(404);
       }
     }
     ",
       "remaining": false,
-      "removed": [
-        "this.fastboot.response.statusCode = 404;",
-      ],
+      "removed": [],
+      "statusCodes": 1,
     }
   `);
 });
