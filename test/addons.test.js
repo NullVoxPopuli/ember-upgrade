@@ -16,7 +16,12 @@ import {
   updatePowerSelect,
   withOptionClicks,
 } from "#stages/addons/power-select.js";
-import { emberCliDeploy, obsoleteAddons, prember } from "#stages/addons/removals.js";
+import {
+  emberCliDeploy,
+  emberGetConfig,
+  obsoleteAddons,
+  prember,
+} from "#stages/addons/removals.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
 import {
@@ -1009,4 +1014,25 @@ module.exports = async function (defaults) {
     };
     "
   `);
+});
+
+/**
+ * From ember-body-class 3.x (MIT), as the inline step writes it into the app.
+ */
+test("ember-get-config goes, and its imports name the app's config/environment", async () => {
+  let app = project({
+    "package.json": `{ "name": "ember-website", "devDependencies": { "ember-get-config": "^0.5.0" } }`,
+    "package-lock.json": "{}",
+    "app/instance-initializers/body-class.js":
+      "import config from 'ember-get-config';\nexport function initialize() {}\n",
+  });
+
+  await emberGetConfig.run(app);
+
+  expect(app.read("app/instance-initializers/body-class.js")).toMatchInlineSnapshot(`
+    "import config from 'ember-website/config/environment';
+    export function initialize() {}
+    "
+  `);
+  expect(emberGetConfig.detect(app)).toBe(false);
 });

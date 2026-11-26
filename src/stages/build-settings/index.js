@@ -19,6 +19,12 @@ const BABEL_CONFIGS = ["babel.config.mjs", "babel.config.cjs", "babel.config.js"
  */
 const DROPPED_BABEL_PLUGINS = new Set(["ember-auto-import/babel-plugin"]);
 
+/**
+ * Options of `new EmberApp()` that ember.nvp stops on. `babel` can hold only plugins that Vite does not need,
+ * and `ifa` inlined the asset map of ember-cli-ifa, which Vite does not write.
+ */
+const BLOCKING_OPTIONS = new Set(["babel", "ifa"]);
+
 const MSW_WORKER = "msw/mockServiceWorker.js";
 const OUTPUT_CSS = "app/styles/output-paths.js";
 const STYLE_EXTENSIONS = [".scss", ".sass", ".less", ".css"];
@@ -80,6 +86,7 @@ function outputCss(outputPaths) {
  * @property {boolean} outputPaths ember-cli-build has the `outputPaths` option
  * @property {{ name: string, path: string }[]} outputCss the extra CSS files of `outputPaths.app.css`, such as `themes/forest` at `/assets/theme-forest.css`
  * @property {boolean} emptyPublicTrees compatBuild has `extraPublicTrees: []`, which adds nothing
+ * @property {string[]} blockingOptions the options of `new EmberApp()` that ember.nvp stops on, and that the stage removes
  */
 
 /**
@@ -102,6 +109,7 @@ export function readSettings(source, file) {
     outputPaths: false,
     outputCss: [],
     emptyPublicTrees: false,
+    blockingOptions: [],
   };
 
   walk(program, (node, parent) => {
@@ -125,6 +133,8 @@ export function readSettings(source, file) {
     if (node.type === "NewExpression" && node.arguments[1]?.type === "ObjectExpression") {
       for (let property of node.arguments[1].properties) {
         let name = propertyName(property);
+
+        if (name && BLOCKING_OPTIONS.has(name)) settings.blockingOptions.push(name);
 
         if (name === "autoImport") settings.autoImport = source.slice(property.start, property.end);
         if (name === "outputPaths") {
@@ -369,7 +379,8 @@ export default {
         settings.imports.length > 0 ||
         settings.msw ||
         settings.outputPaths ||
-        settings.emptyPublicTrees),
+        settings.emptyPublicTrees ||
+        settings.blockingOptions.length > 0),
     );
   },
 
@@ -572,6 +583,7 @@ export default {
       "babel",
       "autoImport",
       "fingerprint",
+      "ifa",
       "minifyJS",
       "minifyCSS",
       "outputPaths",

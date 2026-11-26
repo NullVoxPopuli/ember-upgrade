@@ -17,6 +17,7 @@ import {
   emberCliDependencyLint,
   emberCliDeploy,
   emberDisablePrototypeExtensions,
+  emberGetConfig,
   emberTestSelectors,
   obsoleteAddons,
   prember,
@@ -124,6 +125,7 @@ export const stages = [
    */
   netlify,
   percyEmber,
+  emberGetConfig,
   leaflet,
   /**
    * Before vite, because the old dependencies of v1 addons break the Vite build.

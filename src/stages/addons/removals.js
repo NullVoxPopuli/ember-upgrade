@@ -7,6 +7,7 @@ import {
   removeDependency,
   setDependency,
 } from "#package-json.js";
+import { modulePrefix } from "#module-prefix.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
 
@@ -310,6 +311,11 @@ const OBSOLETE = [
     replaceWith: { mockdate: "3.0.5" },
   },
   {
+    name: "ember-get-config",
+    label: "It re-exports the app's config/environment, which the app imports itself",
+    after: importConfigDirectly,
+  },
+  {
     name: "ember-classic-decorator",
     label: "The `@classic` decorator only asserts in development",
     after: (project) => removeDecoratorImports(project, "ember-classic-decorator"),
@@ -447,6 +453,35 @@ function importNormalize(project) {
 
   project.write(app, `import "normalize.css";\n${project.read(app)}`);
 }
+
+/**
+ * ember-get-config only re-exported `<app>/config/environment`, and it does not build with Vite.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function importConfigDirectly(project) {
+  let config = `${modulePrefix(project)}/config/environment`;
+
+  for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
+    let source = project.read(file);
+    let output = source.replace(
+      /(from\s*|import\s*\(\s*)(['"])ember-get-config\2/g,
+      `$1$2${config}$2`,
+    );
+
+    if (output !== source) project.write(file, output);
+  }
+}
+
+/**
+ * Before the vite stage, which ember-get-config does not build with.
+ */
+export const emberGetConfig = removalStage({
+  name: "ember-get-config",
+  label: "Remove ember-get-config. The app imports its config/environment itself",
+  matches: (name) => name === "ember-get-config",
+  after: importConfigDirectly,
+});
 
 /**
  * One stage for each obsolete addon, so that each removal is its own commit.

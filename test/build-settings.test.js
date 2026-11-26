@@ -281,3 +281,42 @@ module.exports = async function (defaults) {
   `);
   expect(buildSettings.detect(app)).toBe(false);
 });
+
+/**
+ * From ember-learn/ember-website ember-cli-build.js (MIT), after the vite stage, shortened.
+ */
+test("a babel option with only ember-auto-import's plugin, and the ifa option, go", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "@embroider/vite": "^1.7.2" } }),
+    "ember-cli-build.js": `module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  const app = new EmberApp(defaults, {
+    babel: {
+      plugins: [require.resolve('ember-auto-import/babel-plugin')],
+    },
+    ifa: {
+      enabled: true,
+      inline: true,
+    },
+  });
+
+  return compatBuild(app, buildOnce);
+};
+`,
+  });
+
+  expect(buildSettings.detect(app)).toBe(true);
+
+  await buildSettings.run(app);
+
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "module.exports = async function (defaults) {
+      const { buildOnce } = await import('@embroider/vite');
+      const app = new EmberApp(defaults, {});
+
+      return compatBuild(app, buildOnce);
+    };
+    "
+  `);
+  expect(buildSettings.detect(app)).toBe(false);
+});
