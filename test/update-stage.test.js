@@ -145,3 +145,53 @@ test("a v2 addon with an old copy of another addon of the app updates when its l
 
   expect(stages.map((stage) => stage.name)).toEqual(["update-ember-animated-tools"]);
 });
+
+/**
+ * From hashicorp-forge/hermes: ember-power-select 8 has its own copy of ember-basic-dropdown, and
+ * ember-power-select-with-create 3.1.0, its latest release, accepts only ember-power-select 8.
+ */
+test("an update stays at the major that the peer ranges of the installed addons accept", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: {
+        "ember-basic-dropdown": "^8.8.0",
+        "ember-power-select": "^8.12.0",
+        "ember-power-select-with-create": "^3.1.0",
+        "ember-source": "~6.12.0",
+        "ember-truth-helpers": "^5.0.0",
+      },
+    }),
+    "node_modules/ember-basic-dropdown/package.json": JSON.stringify({
+      name: "ember-basic-dropdown",
+      version: "8.8.0",
+      keywords: ["ember-addon"],
+      "ember-addon": { version: 2 },
+    }),
+    "node_modules/ember-power-select/package.json": JSON.stringify({
+      name: "ember-power-select",
+      version: "8.12.0",
+      keywords: ["ember-addon"],
+      "ember-addon": { version: 2 },
+      dependencies: { "ember-basic-dropdown": "^8.0.4" },
+    }),
+    "node_modules/ember-power-select/node_modules/ember-basic-dropdown/package.json":
+      JSON.stringify({
+        name: "ember-basic-dropdown",
+        version: "8.0.4",
+        keywords: ["ember-addon"],
+        "ember-addon": { version: 2 },
+      }),
+    "node_modules/ember-power-select-with-create/package.json": JSON.stringify({
+      name: "ember-power-select-with-create",
+      version: "3.1.0",
+      keywords: ["ember-addon"],
+      "ember-addon": { version: 2 },
+      peerDependencies: { "ember-power-select": "^8.12.0" },
+    }),
+    "package-lock.json": "{}",
+  });
+
+  let stages = await v2Addons.expand(app);
+
+  expect(stages.map((stage) => stage.name)).toEqual([]);
+});

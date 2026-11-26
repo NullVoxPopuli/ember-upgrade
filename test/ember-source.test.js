@@ -144,11 +144,9 @@ test("the step to @glimmer/component 2 overrides it for the addons too", async (
   await step.run(app);
 
   expect(app.dependency("@glimmer/component")).toBe("^2.0.0");
-  expect(app.read("pnpm-workspace.yaml")).toMatchInlineSnapshot(`
-    "overrides:
-      '@glimmer/component': '^2.0.0'
-    "
-  `);
+  expect(app.read("pnpm-workspace.yaml")).toMatch(
+    /^overrides:\n  '@embroider\/macros': '\^1\.\d+\.\d+'\n  '@glimmer\/component': '\^2\.0\.0'\n$/,
+  );
 });
 
 /**

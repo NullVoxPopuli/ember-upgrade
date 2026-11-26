@@ -653,6 +653,59 @@ function manifestAt(directory) {
 }
 
 /**
+ * @param {import('#project.js').Project} project
+ * @param {string} name
+ * @returns {string[]} the peer ranges of `name` that the installed addons declare, such as `^8.12.0`
+ */
+function peerRanges(project, name) {
+  return installedAddonTree(project)
+    .map(({ manifest }) => manifest.peerDependencies?.[name])
+    .filter((range) => typeof range === "string");
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ * @param {string} name
+ * @param {number} major
+ * @returns {boolean} each installed addon that has the package as a peer accepts the major
+ */
+function peersAccept(project, name, major) {
+  return peerRanges(project, name).every(
+    (range) => range === "*" || /^>=?/.test(range.trim()) || allowsMajor(range, major),
+  );
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ * @param {string} name
+ * @param {string} [cap] a major that the release must not pass, such as `4`
+ * @returns {import('#process.js').Published | undefined} the latest release that the peer ranges of the installed addons accept
+ */
+function acceptedRelease(project, name, cap) {
+  let release = published(name, cap);
+  let major = minorOf(release?.version)?.[0];
+
+  if (!release || major === undefined || peersAccept(project, name, major)) return release;
+
+  /**
+   * The highest major that every peer range allows, such as 8 for `^8.12.0`.
+   */
+  /** @type {number | undefined} */
+  let highest;
+
+  for (let range of peerRanges(project, name)) {
+    for (let part of range.split("||")) {
+      let value = minorOf(part)?.[0];
+
+      if (value === undefined || value >= major || !peersAccept(project, name, value)) continue;
+      if (highest === undefined || value > highest) highest = value;
+    }
+  }
+
+  return highest === undefined ? undefined : published(name, String(highest));
+}
+
+/**
  * A v2 addon of the app can have its own copy of another addon of the app, at an older major,
  * such as ember-animated-tools 1 with ember-animated 1, next to the app's ember-animated 2.
  * The old copy can call what the app's versions no longer have, and Embroider stops the build on it.
@@ -682,7 +735,7 @@ function copyUpdates(project) {
 
     if (copies.length === 0) continue;
 
-    let release = published(name);
+    let release = acceptedRelease(project, name);
     let current = minorOf(manifest.version)?.[0];
     let latest = minorOf(release?.version)?.[0];
 
@@ -696,7 +749,17 @@ function copyUpdates(project) {
       return major !== undefined && typeof range === "string" && allowsMajor(range, major);
     });
 
-    if (accepts) stages.push(updateStage(name, release));
+    /**
+     * The release's own peers must accept the app's copies too, such as ember-basic-dropdown for ember-power-select.
+     */
+    let peersFit = Object.entries(release.peerDependencies ?? {}).every(([peer, range]) => {
+      let app = project.dependency(peer) ? resolvePackage(project.directory, peer) : undefined;
+      let major = app ? minorOf(manifestAt(app).version)?.[0] : undefined;
+
+      return major === undefined || peer === "ember-source" || allowsMajor(String(range), major);
+    });
+
+    if (accepts && peersFit) stages.push(updateStage(name, release));
   }
 
   return stages;
@@ -752,7 +815,11 @@ function v2AddonsGroup(afterVite) {
           continue;
         }
 
-        let release = published(name, MAJOR_CAPS.get(name));
+        /**
+         * Another installed addon can have this one as a peer, at an older major, such as ember-power-select-with-create 3
+         * with ember-power-select 8.
+         */
+        let release = acceptedRelease(project, name, MAJOR_CAPS.get(name));
         let inline = release?.v2 ? undefined : inlineV1Stage(project, name, from);
 
         if (release?.v2) {

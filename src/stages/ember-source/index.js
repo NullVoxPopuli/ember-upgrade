@@ -174,6 +174,28 @@ function step(lts) {
 
       dropPatches(project, updated);
 
+      /**
+       * The @ember/test-helpers of the ember-source 6.4 blueprint calls appEmberSatisfies, which the macros
+       * of v1 addons before @embroider/macros 1.19 do not know. The vite stage forces the same copy later.
+       */
+      if (
+        (target[0] > 6 || (target[0] === 6 && target[1] >= 4)) &&
+        !hasOverride(project, "@embroider/macros")
+      ) {
+        addOverride(
+          project,
+          "@embroider/macros",
+          `^${published("@embroider/macros")?.version ?? "1.21.4"}`,
+        );
+        recordProgress(project, {
+          id: "@embroider/macros",
+          status: "override",
+          note:
+            "An override forces the latest @embroider/macros for all dependencies, because v1 addons depend on older versions, " +
+            "which do not know the macros of @ember/test-helpers 5. Remove the override when no dependency needs an older version.",
+        });
+      }
+
       let newPageTitle = parse(project.dependency("ember-page-title"));
       let newGlimmerComponent = project.dependency("@glimmer/component");
 
