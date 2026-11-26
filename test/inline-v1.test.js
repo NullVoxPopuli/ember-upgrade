@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import {
   inlineV1Stage,
+  placements,
   withDeprecationOwner,
   withHasBlockHelpers,
   withoutCompatibilityHelpers,
@@ -599,4 +600,37 @@ test("an addon whose included hook imports a file for each environment stays a v
   });
 
   expect(inlineV1Stage(app, "env-imports")).toBeUndefined();
+});
+
+/**
+ * From ember-href-to 5.1.1 (Apache-2.0), shortened: its app/ instance-initializer has its own code,
+ * and imports the class of addon/href-to.js.
+ */
+test("an addon module that an app module only imports stays in the addon's folder", () => {
+  let files = {
+    "app/helpers/href-to.js": "export { default } from 'ember-href-to/helpers/href-to';\n",
+    "app/instance-initializers/ember-href-to.js": `import HrefTo from 'ember-href-to/href-to';
+
+export default {
+  name: 'ember-href-to',
+  initialize(applicationInstance) {},
+};
+`,
+    "addon/helpers/href-to.js": "export default class HrefToHelper {}\n",
+    "addon/href-to.js": "export default class {}\n",
+  };
+
+  expect(
+    placements(
+      "ember-href-to",
+      Object.keys(files),
+      (file) => files[/** @type {keyof typeof files} */ (file)],
+      () => false,
+    ),
+  ).toMatchInlineSnapshot(`
+    Map {
+      "addon/helpers/href-to.js" => "app/helpers/href-to.js",
+      "addon/href-to.js" => "app/addons/ember-href-to/href-to.js",
+    }
+  `);
 });

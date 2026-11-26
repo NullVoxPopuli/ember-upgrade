@@ -225,6 +225,28 @@ function importsDependency(call, dependencies) {
 }
 
 /**
+ * Only a re-export makes the addon module visible at the app path. An app module that imports it, such as
+ * the instance-initializer of ember-href-to, keeps its own code.
+ *
+ * @param {string} name the addon
+ * @param {string} source a module of the addon's `app/` tree
+ * @returns {string | undefined} the addon module that the source re-exports, such as `components/x-select`
+ */
+function reexportOf(name, source) {
+  let escaped = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  let from = `["']${escaped}/([^"']+)["']`;
+  let direct = new RegExp(`export\\s*(?:\\{[^}]*\\}|\\*)\\s*from\\s*${from}`).exec(source);
+
+  if (direct) return direct[1];
+
+  let imported = new RegExp(
+    `^\\s*import\\s+([\\w$]+)\\s+from\\s*${from};?\\s*export\\s+default\\s+\\1;?\\s*$`,
+  ).exec(source);
+
+  return imported?.[2];
+}
+
+/**
  * ember-cli merged the addon's `app/` tree into the app, so only the modules that it re-exports
  * were visible to the resolver. Each of those goes to its `app/` path, a component template goes
  * next to its component, and every other module stays in the addon's own folder, app/addons/<addon>.
@@ -244,7 +266,7 @@ export function placements(name, sources, read, taken) {
   for (let file of sources) {
     if (!file.startsWith("app/")) continue;
 
-    let specifier = new RegExp(`from\\s*["']${name}/([^"']+)["']`).exec(read(file) ?? "")?.[1];
+    let specifier = reexportOf(name, read(file) ?? "");
 
     if (specifier) reexported.set(specifier, withoutExtension(file));
   }

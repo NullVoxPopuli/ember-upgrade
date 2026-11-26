@@ -239,3 +239,45 @@ module.exports = async function (defaults) {
     "
   `);
 });
+
+/**
+ * From ember-learn/upgrade-guide ember-cli-build.js, shortened.
+ */
+test("an empty extraPublicTrees goes", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "@embroider/vite": "^1.7.2" } }),
+    "ember-cli-build.js": `'use strict';
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { compatBuild } = require('@embroider/compat');
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  const app = new EmberApp(defaults, {});
+
+  return compatBuild(app, buildOnce, {
+    extraPublicTrees: [],
+  });
+};
+`,
+  });
+
+  expect(buildSettings.detect(app)).toBe(true);
+
+  await buildSettings.run(app);
+
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+    const { compatBuild } = require('@embroider/compat');
+
+    module.exports = async function (defaults) {
+      const { buildOnce } = await import('@embroider/vite');
+      const app = new EmberApp(defaults, {});
+
+      return compatBuild(app, buildOnce, {
+      });
+    };
+    "
+  `);
+  expect(buildSettings.detect(app)).toBe(false);
+});

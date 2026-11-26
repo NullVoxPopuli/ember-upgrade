@@ -79,6 +79,7 @@ function outputCss(outputPaths) {
  * @property {boolean} msw the build copies the MSW service worker into the public files
  * @property {boolean} outputPaths ember-cli-build has the `outputPaths` option
  * @property {{ name: string, path: string }[]} outputCss the extra CSS files of `outputPaths.app.css`, such as `themes/forest` at `/assets/theme-forest.css`
+ * @property {boolean} emptyPublicTrees compatBuild has `extraPublicTrees: []`, which adds nothing
  */
 
 /**
@@ -100,9 +101,27 @@ export function readSettings(source, file) {
     msw: source.includes(MSW_WORKER),
     outputPaths: false,
     outputCss: [],
+    emptyPublicTrees: false,
   };
 
   walk(program, (node, parent) => {
+    if (
+      node.type === "CallExpression" &&
+      node.callee.type === "Identifier" &&
+      node.callee.name === "compatBuild" &&
+      node.arguments[2]?.type === "ObjectExpression"
+    ) {
+      for (let property of node.arguments[2].properties) {
+        if (
+          propertyName(property) === "extraPublicTrees" &&
+          property.value.type === "ArrayExpression" &&
+          property.value.elements.length === 0
+        ) {
+          settings.emptyPublicTrees = true;
+        }
+      }
+    }
+
     if (node.type === "NewExpression" && node.arguments[1]?.type === "ObjectExpression") {
       for (let property of node.arguments[1].properties) {
         let name = propertyName(property);
@@ -349,7 +368,8 @@ export default {
         settings.autoImport ||
         settings.imports.length > 0 ||
         settings.msw ||
-        settings.outputPaths),
+        settings.outputPaths ||
+        settings.emptyPublicTrees),
     );
   },
 
@@ -490,7 +510,9 @@ export default {
 
     if (edits.size > 0) project.write(file, edits.apply());
 
-    if (settings.msw) removeCompatBuildOptions(project, ["extraPublicTrees"]);
+    if (settings.msw || settings.emptyPublicTrees) {
+      removeCompatBuildOptions(project, ["extraPublicTrees"]);
+    }
 
     if (settings.babelPlugins.length > 0) {
       let babel = /** @type {string} */ (firstOf(project, BABEL_CONFIGS));
