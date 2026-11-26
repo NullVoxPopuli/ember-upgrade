@@ -3,9 +3,14 @@ import { join } from "node:path";
 import { parseProgram } from "#ast.js";
 import { addVitePlugin, removeBuildOptions, viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
-import { installedAddonTree } from "#installed.js";
+import { installedAddonTree, resolvePackage } from "#installed.js";
 import { addOverride, allowBuild, overrideRange, removeOverride } from "#manager-settings.js";
-import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import {
+  dependencyNames,
+  editPackageJson,
+  removeDependency,
+  setDependency,
+} from "#package-json.js";
 import { install, packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
@@ -529,6 +534,73 @@ const TEMPLATE_CODEMODS = new Map([
 const MAJOR_CAPS = new Map([["ember-concurrency", "4"]]);
 
 /**
+ * @param {string} range such as `^1.0.0 || ^2.0.0`
+ * @param {number} major
+ * @returns {boolean} a part of the range starts at the major
+ */
+function allowsMajor(range, major) {
+  return range.split("||").some((part) => minorOf(part)?.[0] === major);
+}
+
+/**
+ * @param {string} directory
+ * @returns {Record<string, any>}
+ */
+function manifestAt(directory) {
+  return JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+}
+
+/**
+ * A v2 addon of the app can have its own copy of another addon of the app, at an older major,
+ * such as ember-animated-tools 1 with ember-animated 1, next to the app's ember-animated 2.
+ * The old copy can call what the app's versions no longer have, and Embroider stops the build on it.
+ * The addon updates when its latest release accepts the app's copy.
+ *
+ * @param {import('#project.js').Project} project
+ * @returns {Stage[]}
+ */
+function copyUpdates(project) {
+  /** @type {Stage[]} */
+  let stages = [];
+
+  for (let name of dependencyNames(project.packageJson)) {
+    let directory = resolvePackage(project.directory, name);
+
+    if (!directory || hasOwnStage(name) || IGNORED.has(name)) continue;
+
+    let manifest = manifestAt(directory);
+
+    if (manifest["ember-addon"]?.version !== 2) continue;
+
+    let copies = Object.keys(manifest.dependencies ?? {}).filter((dependency) => {
+      let own = project.dependency(dependency) && resolvePackage(directory, dependency);
+
+      return own && own !== resolvePackage(project.directory, dependency);
+    });
+
+    if (copies.length === 0) continue;
+
+    let release = published(name);
+    let current = minorOf(manifest.version)?.[0];
+    let latest = minorOf(release?.version)?.[0];
+
+    if (!release || current === undefined || latest === undefined || latest <= current) continue;
+
+    let accepts = copies.every((dependency) => {
+      let app = resolvePackage(project.directory, dependency);
+      let major = app ? minorOf(manifestAt(app).version)?.[0] : undefined;
+      let range = release.dependencies?.[dependency] ?? release.peerDependencies?.[dependency];
+
+      return major !== undefined && typeof range === "string" && allowsMajor(range, major);
+    });
+
+    if (accepts) stages.push(updateStage(name, release));
+  }
+
+  return stages;
+}
+
+/**
  * One stage for each v1 addon with a v2 release, so that each update is its own commit.
  * The v1 addons with no v2 release go in the progress file.
  *
@@ -598,6 +670,8 @@ export const v2Addons = {
         });
       }
     }
+
+    for (let stage of copyUpdates(project)) stages.push(stage);
 
     if (v1Only.length > 0) stages.push(v1Record(v1Only));
 

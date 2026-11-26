@@ -61,6 +61,7 @@ import templateTag from "./template-tag/index.js";
 import templateText from "./template-text/index.js";
 import templateWhitespace from "./template-whitespace/index.js";
 import { elementHelper, truthHelpers } from "./addons/keywords.js";
+import typeImports from "./type-imports/index.js";
 import undeprecateInject from "./undeprecate-inject/index.js";
 import unusedDependencies from "./unused-dependencies/index.js";
 import vite from "./vite/index.js";
@@ -110,6 +111,10 @@ export const stages = [
    */
   v2Addons,
   peerCopies,
+  /**
+   * Before vite, whose Babel config removes only the imports that say `type`.
+   */
+  typeImports,
   /**
    * Before vite, which replaces the `start` script.
    */

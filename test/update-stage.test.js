@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import { updateStage } from "#stages/addons/updates.js";
+import { updateStage, v2Addons } from "#stages/addons/updates.js";
 
 /**
  * @param {Record<string, string>} files
@@ -104,4 +104,44 @@ test("an older pin goes away when its new range would force a v2 addon on a v1 a
   await stage.run(app);
 
   expect(JSON.parse(app.read("package.json")).resolutions).toEqual({});
+});
+
+/**
+ * From hashicorp-forge/hermes: ember-animated-tools 1 brings its own ember-animated 1,
+ * next to the app's ember-animated 2. ember-animated-tools 2 accepts ember-animated 2.
+ */
+test("a v2 addon with an old copy of another addon of the app updates when its latest release accepts the app's copy", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: {
+        "ember-animated": "^2.2.0",
+        "ember-animated-tools": "^1.0.0",
+        "ember-source": "~6.12.0",
+      },
+    }),
+    "node_modules/ember-animated/package.json": JSON.stringify({
+      name: "ember-animated",
+      version: "2.2.0",
+      keywords: ["ember-addon"],
+      "ember-addon": { version: 2 },
+    }),
+    "node_modules/ember-animated-tools/package.json": JSON.stringify({
+      name: "ember-animated-tools",
+      version: "1.0.0",
+      keywords: ["ember-addon"],
+      "ember-addon": { version: 2 },
+      dependencies: { "ember-animated": "^1.0.0" },
+    }),
+    "node_modules/ember-animated-tools/node_modules/ember-animated/package.json": JSON.stringify({
+      name: "ember-animated",
+      version: "1.1.4",
+      keywords: ["ember-addon"],
+      "ember-addon": { version: 2 },
+    }),
+    "package-lock.json": "{}",
+  });
+
+  let stages = await v2Addons.expand(app);
+
+  expect(stages.map((stage) => stage.name)).toEqual(["update-ember-animated-tools"]);
 });
