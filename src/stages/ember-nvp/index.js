@@ -5,6 +5,7 @@ import { buildFile, removeCompatBuildOptions } from "#config-files.js";
 import { updateNodePins } from "#node-version.js";
 import { recordProgress } from "#progress.js";
 import { fixStylesheetImports } from "./css-imports.js";
+import { resolveCopies } from "#stages/dependency-copies/index.js";
 import { ESLINT_CONFIGS, withoutBabelConfigFile } from "./eslint-babel.js";
 import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
@@ -202,6 +203,11 @@ export default {
      * The migration changes dependency ranges, so the imports are checked against what its install gives.
      */
     if (!install(project)) throw new Error("The install after ember.nvp failed.");
+
+    /**
+     * The migration moves the app to the Babel major of the base, and the lockfile keeps the old Babel for the build packages.
+     */
+    resolveCopies(project);
 
     let stylesheets = fixStylesheetImports(project);
 

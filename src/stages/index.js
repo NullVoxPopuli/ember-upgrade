@@ -45,6 +45,7 @@ import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
 import emberGlobals from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
+import dependencyCopies from "./dependency-copies/index.js";
 import format from "./format/index.js";
 import emberCliServer from "./ember-cli-server/index.js";
 import { proxyPluginStage, proxyScriptsStage } from "./ember-serve-proxy/index.js";
@@ -230,6 +231,10 @@ export const stages = [
   declareImports,
   appClass,
   emberNvp,
+  /**
+   * After ember-nvp, whose install keeps the old copies that the lockfile has.
+   */
+  dependencyCopies,
   /**
    * After ember-nvp, which writes the Vite config.
    */

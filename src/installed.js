@@ -27,6 +27,18 @@ export function resolvePackage(from, name) {
  * @returns {{ directory: string, manifest: Record<string, any> }[]}
  */
 export function installedAddonTree(project) {
+  return installedTree(project, (manifest) => Boolean(manifest.keywords?.includes("ember-addon")));
+}
+
+/**
+ * The app's installed dependencies, and the dependencies of each package that `follow` accepts, at any depth.
+ * Each copy of a package is its own entry.
+ *
+ * @param {Project} project
+ * @param {(manifest: Record<string, any>) => boolean} follow
+ * @returns {{ directory: string, manifest: Record<string, any> }[]}
+ */
+export function installedTree(project, follow) {
   let app = realpathSync(project.directory);
   /** @type {{ directory: string, manifest: Record<string, any> }[]} */
   let found = [];
@@ -47,7 +59,7 @@ export function installedAddonTree(project) {
   for (let index = 0; index < found.length; index++) {
     let { directory, manifest } = found[index];
 
-    if (!manifest.keywords?.includes("ember-addon")) continue;
+    if (!follow(manifest)) continue;
 
     for (let name of Object.keys(manifest.dependencies ?? {})) {
       visit(resolvePackage(directory, name));

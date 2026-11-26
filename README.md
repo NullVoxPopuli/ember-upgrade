@@ -48,6 +48,7 @@ The package has no dependencies. The parsers run as WebAssembly inside the bundl
 | `ember-source-vite`                 | Updates ember-source to 7.4. ember-source 7 builds only with Vite                                                                                                                                     | this repo                               |
 | `static-site-json`                  | Builds the JSON of an in-repo addon that uses broccoli-static-site-json with a Vite plugin in `vite/`, and removes the addon                                                                          | this repo                               |
 | `ember-nvp`                         | Moves to the ember.nvp layout, without `@embroider/compat`                                                                                                                                            | `ember.nvp@2.5.2`                       |
+| `dependency-copies`                 | Resolves again the dependencies that packages keep at an older major than the app, with overrides that go after the install                                                                           | this repo                               |
 
 A stage is done when its `detect` finds nothing more to do.
 The stages from other packages run with `npx`.
