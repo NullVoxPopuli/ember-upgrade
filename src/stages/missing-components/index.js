@@ -49,11 +49,24 @@ function walkAll(node, visit) {
 }
 
 /**
+ * A name of an addon, such as `vertical-collection` or `ember-power-select-is-selected`, is the addon's API.
+ * A new version of the addon can have it under another name or as an import, so a person moves the call.
+ *
+ * @param {string} name
+ * @param {string[]} addons
+ */
+function fromAddon(name, addons) {
+  return addons.some(
+    (addon) => name === addon || name.startsWith(`${addon}-`) || name.startsWith(`${addon}/`),
+  );
+}
+
+/**
  * Removes each `{{x/y}}` and `{{#x-y}}...{{/x-y}}` whose name is no component or helper.
  * Such a call threw each time that it rendered, and Embroider stops the build on it.
  *
  * @param {string} template the source of an .hbs file
- * @param {{ components: Set<string>, helpers: Set<string> }} names the names that a template can call
+ * @param {{ components: Set<string>, helpers: Set<string>, addons: string[] }} names the names that a template can call, and the addons
  * @returns {{ output: string, removed: string[] }}
  */
 export function removeMissingCalls(template, names) {
@@ -77,6 +90,7 @@ export function removeMissingCalls(template, names) {
     if (!/[-/]/.test(name) || name.includes(".") || name.startsWith("@")) return;
     if (KEYWORDS.has(name) || locals.has(name)) return;
     if (names.components.has(name) || names.helpers.has(name)) return;
+    if (fromAddon(name, names.addons)) return;
     if (calls.some((call) => call.start <= node.start && node.end <= call.end)) return;
 
     calls.push(node);

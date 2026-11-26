@@ -28,6 +28,10 @@ function project(files) {
  * From documize/community gui/app/templates, shortened.
  * No version of the app has layout/master-sidebar or folder/settings-templates.
  */
+/**
+ * The vertical-collection and ember-power-select calls are from TryGhost/Ghost ghost/admin.
+ * Newer versions of those addons name them in another way, so they stay for a person.
+ */
 test("calls to components and helpers that do not exist are removed", () => {
   let template = `{{#layout/master-sidebar}}
 	one<br>
@@ -40,11 +44,13 @@ test("calls to components and helpers that do not exist are removed", () => {
 		{{group-item}} {{format-date key}} {{this.page-title}} {{@on-click}}
 	{{/each-in}}
 	{{#link-to "folder"}}x{{/link-to}}
+	{{#vertical-collection this.items as |item|}}{{ember-power-select-is-selected item}}{{/vertical-collection}}
 {{/layout/master-content}}
 `;
   let names = {
     components: new Set(["layout/master-content"]),
     helpers: new Set(["format-date"]),
+    addons: ["vertical-collection", "ember-power-select"],
   };
 
   expect(removeMissingCalls(template, names)).toMatchInlineSnapshot(`
@@ -57,6 +63,7 @@ test("calls to components and helpers that do not exist are removed", () => {
     		{{group-item}} {{format-date key}} {{this.page-title}} {{@on-click}}
     	{{/each-in}}
     	{{#link-to "folder"}}x{{/link-to}}
+    	{{#vertical-collection this.items as |item|}}{{ember-power-select-is-selected item}}{{/vertical-collection}}
     {{/layout/master-content}}
     ",
       "removed": [
