@@ -138,9 +138,18 @@ try {
       continue;
     }
 
-    let tree = /** @type {{ errors?: { message: string }[] }} */ (
-      toTree(source, { filePath: file })
-    );
+    /** @type {{ errors?: { message: string }[] }} */
+    let tree;
+
+    /**
+     * ember-estree throws on some syntax errors, and returns others.
+     */
+    try {
+      tree = /** @type {{ errors?: { message: string }[] }} */ (toTree(source, { filePath: file }));
+    } catch (error) {
+      failures.push(`${file} does not parse: ${error instanceof Error ? error.message : error}`);
+      continue;
+    }
 
     if (tree.errors?.length) failures.push(`${file} does not parse: ${tree.errors[0].message}`);
   }
