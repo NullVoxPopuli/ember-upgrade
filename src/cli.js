@@ -67,4 +67,4 @@ let result = await run(project, selected, {
   verify: values.verify,
 });
 
-process.exit(result.ok ? 0 : 1);
+process.exitCode = result.ok ? 0 : 1;
