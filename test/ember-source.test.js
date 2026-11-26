@@ -92,6 +92,27 @@ test("a step updates the blueprint packages that the app has, and only up, so ex
   });
 });
 
+/**
+ * From ember-learn/ember-api-docs package.json, shortened: the app builds with Embroider and webpack.
+ */
+test("an app on @embroider/webpack keeps @embroider/compat and @embroider/core 3 until the vite stage", async () => {
+  let app = project({
+    devDependencies: {
+      "@embroider/compat": "^3.9.3",
+      "@embroider/core": "^3.5.9",
+      "@embroider/webpack": "^3.2.1",
+      "ember-source": "~6.7.0",
+    },
+  });
+  let [step] = await classicLts.expand(app);
+
+  await step.run(app);
+
+  expect(app.packageJson.devDependencies?.["@embroider/compat"]).toBe("^3.9.3");
+  expect(app.packageJson.devDependencies?.["@embroider/core"]).toBe("^3.5.9");
+  expect(app.packageJson.devDependencies?.["ember-source"]).toMatch(/^~6\.8\./);
+});
+
 test("an app on an LTS gets no step for it", async () => {
   let app = project({ devDependencies: { "ember-source": "~6.12.0" } });
 

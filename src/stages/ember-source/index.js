@@ -48,6 +48,8 @@ const EMBER_7_PINS = {
  */
 const TABLE = BLUEPRINTS;
 
+const WEBPACK_EMBROIDER = new Set(["@embroider/compat", "@embroider/core"]);
+
 /**
  * The LTS versions in order. `scripts/lts-blueprints.js` makes the table.
  */
@@ -116,6 +118,12 @@ function step(lts) {
           let current = project.dependency(name);
 
           if (!current) continue;
+
+          /**
+           * @embroider/compat and @embroider/core 4 build only with Vite. An app on @embroider/webpack keeps
+           * the versions that it has until the vite stage.
+           */
+          if (WEBPACK_EMBROIDER.has(name) && project.dependency("@embroider/webpack")) continue;
 
           let from = parse(current);
           let to = parse(range);
