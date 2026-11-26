@@ -386,6 +386,7 @@ function hasOwnStage(name) {
       "ember-scoped-css-compat",
       "ember-cli-netlify",
       "@percy/ember",
+      "ember-leaflet",
     ].includes(name)
   );
 }

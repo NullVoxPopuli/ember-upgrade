@@ -54,6 +54,7 @@ import jqueryIntegration from "./jquery-integration/index.js";
 import lint from "./lint/index.js";
 import inlineContent from "./addons/inline-content.js";
 import powerSelectTypeahead from "./addons/power-select-typeahead.js";
+import leaflet from "./addons/leaflet.js";
 import netlify from "./addons/netlify.js";
 import percyEmber from "./addons/percy.js";
 import routerScroll from "./addons/router-scroll.js";
@@ -122,6 +123,7 @@ export const stages = [
    */
   netlify,
   percyEmber,
+  leaflet,
   /**
    * Before vite, because the old dependencies of v1 addons break the Vite build.
    */
