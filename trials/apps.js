@@ -18,6 +18,7 @@
  * @property {string[]} completed
  * @property {{ stage: string, message: string }} [stopsAt]
  * @property {string[][]} [after] commands to run when every stage completes
+ * @property {boolean} [wip] the fixes for the app are in progress. CI runs these trials after the others pass, and runs each one to its end
  */
 
 /**
@@ -560,6 +561,7 @@ export const apps = [
   },
   {
     name: "hermes",
+    wip: true,
     verify: true,
     repo: "hashicorp-forge/hermes",
     sha: "d18e2109be9312cc22228951fa855bd1a9543855",
@@ -568,6 +570,7 @@ export const apps = [
   },
   {
     name: "ember-help-wanted",
+    wip: true,
     verify: true,
     repo: "ember-learn/ember-help-wanted",
     sha: "43e4667fb301ce5a601ae5e048f4e42102385e70",
@@ -590,6 +593,7 @@ export const apps = [
   },
   {
     name: "upgrade-guide",
+    wip: true,
     verify: true,
     repo: "ember-learn/upgrade-guide",
     sha: "f98414a14176f02c348dc46bdb91b9df8e52a086",
@@ -614,6 +618,7 @@ export const apps = [
   },
   {
     name: "rfcs-app",
+    wip: true,
     verify: true,
     repo: "ember-learn/rfcs-app",
     sha: "bd12425cd34cddb52903ca7d6247b547249a99e0",
@@ -622,6 +627,7 @@ export const apps = [
   },
   {
     name: "ember-website",
+    wip: true,
     verify: true,
     repo: "ember-learn/ember-website",
     sha: "d9092d93abc0e5cad4f644f64ee94d163695b0cf",
@@ -629,6 +635,7 @@ export const apps = [
   },
   {
     name: "ember-api-docs",
+    wip: true,
     verify: true,
     repo: "ember-learn/ember-api-docs",
     sha: "3f3aba0cc5b9274bf771cfa6c033ddd29f4330c8",
@@ -637,6 +644,7 @@ export const apps = [
   },
   {
     name: "guides-source",
+    wip: true,
     verify: true,
     repo: "ember-learn/guides-source",
     sha: "00b4b0f81cdae329264f4d8efc57d689684f874b",
@@ -644,6 +652,7 @@ export const apps = [
   },
   {
     name: "deprecation-app",
+    wip: true,
     verify: true,
     repo: "ember-learn/deprecation-app",
     sha: "b8d18bbfbbcd9008cd3117452015dd163b515bbe",
@@ -651,6 +660,7 @@ export const apps = [
   },
   {
     name: "cli-guides",
+    wip: true,
     repo: "ember-learn/cli-guides",
     sha: "c43fc18474ad0c2d4c9b1f6b6adaa254921ea650",
     completed: [
@@ -683,6 +693,7 @@ export const apps = [
   },
   {
     name: "ember-blog",
+    wip: true,
     repo: "ember-learn/ember-blog",
     sha: "beb67247068c847e1141344b794f72a64c0681f3",
     completed: [

@@ -45,22 +45,51 @@ jobs:
     name: List trial apps
     runs-on: ubuntu-latest
     outputs:
-      apps: ${{ steps.list.outputs.apps }}
+      stable: ${{ steps.list.outputs.stable }}
+      wip: ${{ steps.list.outputs.wip }}
     steps:
       - uses: actions/checkout@v4
       - id: list
-        run: echo "apps=$(node --input-type=module -e 'import { apps } from "./trials/apps.js"; console.log(JSON.stringify(apps.map((a) => a.name)))')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "stable=$(node --input-type=module -e 'import { apps } from "./trials/apps.js"; console.log(JSON.stringify(apps.filter((a) => !a.wip).map((a) => a.name)))')" >> "$GITHUB_OUTPUT"
+          echo "wip=$(node --input-type=module -e 'import { apps } from "./trials/apps.js"; console.log(JSON.stringify(apps.filter((a) => a.wip).map((a) => a.name)))')" >> "$GITHUB_OUTPUT"
 
   trials:
+    # The trials whose expected stages are settled. A failure is a regression, so the others stop.
     name: Trial (${{ matrix.app }})
     needs: trial-apps
+    if: needs.trial-apps.outputs.stable != '[]'
     # Playwright does not support Chromium on Ubuntu 26.04, and some trial apps install it.
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: true
       matrix:
-        app: ${{ fromJSON(needs.trial-apps.outputs.apps) }}
+        app: ${{ fromJSON(needs.trial-apps.outputs.stable) }}
+    steps:
+      - uses: wyvox/action@v1
+      - run: pnpm build
+      - run: node scripts/trial.js ${{ matrix.app }} --diff trial.diff
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trial-${{ matrix.app }}
+          path: trial.diff
+          if-no-files-found: ignore
+
+  trials-wip:
+    name: Trial (${{ matrix.app }})
+    # The trials whose fixes are in progress. Each one runs to its end, so one run shows where every app stops.
+    # They run after the settled trials pass.
+    needs: [trial-apps, trials]
+    if: ${{ !cancelled() && needs.trials.result != 'failure' && needs.trial-apps.outputs.wip != '[]' }}
+    # Playwright does not support Chromium on Ubuntu 26.04, and some trial apps install it.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.trial-apps.outputs.wip) }}
     steps:
       - uses: wyvox/action@v1
       - run: pnpm build
