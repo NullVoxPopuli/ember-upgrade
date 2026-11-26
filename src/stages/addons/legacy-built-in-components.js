@@ -23,7 +23,9 @@ export default class ApplicationRoute extends Route {
     super(...arguments);
 
     this.router.on('routeDidChange', () => {
-      window.scrollTo(0, 0);
+      if (window.scrollTo) {
+        window.scrollTo(0, 0);
+      }
     });
   }
 }

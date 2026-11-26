@@ -59,7 +59,9 @@ test("a LinkTo subclass that scrolls to the top becomes a listener of the applic
         super(...arguments);
 
         this.router.on('routeDidChange', () => {
-          window.scrollTo(0, 0);
+          if (window.scrollTo) {
+            window.scrollTo(0, 0);
+          }
         });
       }
     }
