@@ -416,6 +416,7 @@ export const apps = [
       "update-ember-simple-auth",
       "update-ember-truth-helpers",
       "v1-addons",
+      "peer-copies",
       "vite",
       "ember-test-selectors",
       "ember-cli-shims",
