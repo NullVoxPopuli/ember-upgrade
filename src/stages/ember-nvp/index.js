@@ -3,6 +3,8 @@ import { join, posix } from "node:path";
 
 import { buildFile, removeCompatBuildOptions } from "#config-files.js";
 import { updateNodePins } from "#node-version.js";
+import { recordProgress } from "#progress.js";
+import { fixStylesheetImports } from "./css-imports.js";
 import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
 
@@ -151,6 +153,18 @@ export default {
     removeCompatBuildOptions(project, ["useAddonConfigModule", "useAddonAppBoot"]);
 
     updateNodePins(project);
+
+    let stylesheets = fixStylesheetImports(project);
+
+    if (stylesheets.length > 0) {
+      recordProgress(project, {
+        id: "stylesheet imports",
+        status: "check",
+        note:
+          `These imports named stylesheets that their packages do not have, and the Vite build of ember.nvp resolves each import. ` +
+          `They name each package's one stylesheet now: ${stylesheets.join(", ")}.`,
+      });
+    }
 
     /**
      * Without a name, ember.nvp gives the app the name of its template, and imports of `<name>/...` stop resolving.
