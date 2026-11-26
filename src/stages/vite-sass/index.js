@@ -22,7 +22,7 @@ const ENTRY_LINK = /(href=")([^"]*)@embroider\/virtual\/app\.css"/g;
 export function sassName(path) {
   let name = path.replace(/\.(scss|sass|css)$/, "").replace(/(^|\/)_([^/]*)$/, "$1$2");
 
-  return name.replace(/\/index$/, "");
+  return name.replace(/(^|\/)index$/, "");
 }
 
 /**
@@ -283,6 +283,12 @@ export function resolveImport(project, file, specifier, context) {
   if (/^(sass:|https?:|\/\/|url\()/.test(specifier) || specifier.endsWith(".css")) return;
 
   let folder = posix.dirname(file);
+  let joined = posix.join(folder, specifier);
+
+  /**
+   * Vite resolves a package folder through the package's `exports`, so a relative path into node_modules names a file of it.
+   */
+  if (specifier.startsWith(".") && joined.startsWith("node_modules/")) specifier = joined;
 
   if (specifier.startsWith("node_modules/")) {
     let path = specifier.slice("node_modules/".length);

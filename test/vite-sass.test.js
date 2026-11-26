@@ -245,3 +245,37 @@ export default defineConfig({
     "
   `);
 });
+
+/**
+ * From hashicorp-forge/hermes (MPL-2.0), shortened, after the update to ember-power-select 8.
+ */
+test("a relative import of a package folder names the index file that the package exports", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: {
+        "@embroider/vite": "^1.0.0",
+        "ember-cli-sass": "^11.0.1",
+        "ember-power-select": "^8.12.0",
+      },
+    }),
+    "node_modules/ember-power-select/package.json": JSON.stringify({
+      version: "8.12.0",
+      exports: {
+        ".": { types: "./declarations/index.d.ts", default: "./dist/index.js" },
+        "./_index.scss": "./_index.scss",
+        "./ember-power-select.scss": "./ember-power-select.scss",
+      },
+    }),
+    "node_modules/ember-power-select/_index.scss": "",
+    "node_modules/ember-power-select/ember-power-select.scss": "",
+    "app/styles/app.scss": `@use "ember-power-select-theme";\n`,
+    "app/styles/ember-power-select-theme.scss": `@import "../../node_modules/ember-power-select";\n`,
+  });
+
+  await viteSass.run(app);
+
+  expect(app.read("app/styles/ember-power-select-theme.scss")).toMatchInlineSnapshot(`
+    "@import "ember-power-select/_index.scss";
+    "
+  `);
+});
