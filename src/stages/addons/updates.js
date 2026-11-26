@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { parseProgram } from "#ast.js";
 import { addVitePlugin, removeBuildOptions, viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
-import { addOverride, allowBuild, overrideRange } from "#manager-settings.js";
+import { installedAddonTree } from "#installed.js";
+import { addOverride, allowBuild, overrideRange, removeOverride } from "#manager-settings.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { install, packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
@@ -13,7 +14,7 @@ import { addBasicDropdownWormhole, updateOptionClicks, updatePowerSelect } from 
 import { dependencyDirectory, inlineV1Stage } from "./inline-v1.js";
 import { mergedStyleImports, moveMergedStyleImports } from "./merged-styles.js";
 import { isObsoleteAddon } from "./removals.js";
-import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
+import { IGNORED, NO_V2_YET, installedV1Addons, isV1Addon as isV1Manifest } from "./known.js";
 import { ICONS_MODULE, iconsModule, rewriteDynamicIcons } from "./svg-jar-icons.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
@@ -290,6 +291,26 @@ function hasOwnStage(name) {
 }
 
 /**
+ * @param {import('#project.js').Project} project
+ * @param {string} dependency
+ * @param {string} range
+ * @returns {boolean} the range gives a v2 addon, and an installed v1 addon depends on the package
+ * without ember-auto-import 2, which v1 addons need to load a v2 addon
+ */
+function oldAddonsNeed(project, dependency, range) {
+  let release = published(dependency, range);
+
+  if (!release?.addon || !release.v2) return false;
+
+  return installedAddonTree(project).some(
+    ({ manifest }) =>
+      isV1Manifest(manifest) &&
+      manifest.dependencies?.[dependency] &&
+      !atLeast(manifest.dependencies?.["ember-auto-import"], 2, 0),
+  );
+}
+
+/**
  * A newer pin stays, such as the ones that the vite stage adds.
  *
  * @param {string} pin
@@ -332,6 +353,7 @@ export function updateStage(name, release) {
        * An override of the addon itself, or of what it needs, can hold back the update.
        * The override goes to the range that the release asks for, because it kept the dependency tree on one copy,
        * and two copies of some v1 addons, such as @ember/test-waiters 3, break the build.
+       * It goes away when it would force a v2 addon on a v1 addon that cannot load one.
        */
       let wanted = Object.assign({}, release.dependencies, release.peerDependencies, {
         [name]: `^${release.version}`,
@@ -343,7 +365,9 @@ export function updateStage(name, release) {
         let pin = overrideRange(project, dependency);
 
         if (pin && olderRelease(pin, range)) {
-          addOverride(project, dependency, range);
+          if (oldAddonsNeed(project, dependency, range)) removeOverride(project, dependency);
+          else addOverride(project, dependency, range);
+
           unpinned.push(`${dependency} (${pin}, and ${name} ${release.version} asks for ${range})`);
         }
       }

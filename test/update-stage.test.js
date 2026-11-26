@@ -72,3 +72,36 @@ test("an update moves older pins of what the release needs to its ranges, and de
   );
   expect(stage.detect(app)).toBe(false);
 });
+
+/**
+ * From skylines-project/skylines: ember-bootstrap 4 is a v1 addon with ember-auto-import 1,
+ * which cannot load ember-concurrency 4, a v2 addon.
+ */
+test("an older pin goes away when its new range would force a v2 addon on a v1 addon that cannot load one", async () => {
+  let app = project({
+    "yarn.lock": "",
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-bootstrap": "^4.9.0", "ember-concurrency": "^2.3.7" },
+      resolutions: { "ember-concurrency": "2.3.7" },
+    }),
+    "node_modules/ember-bootstrap/package.json": JSON.stringify({
+      name: "ember-bootstrap",
+      version: "4.9.0",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-auto-import": "^1.12.2", "ember-concurrency": "^2.1.2" },
+    }),
+  });
+
+  let stage = updateStage("ember-concurrency", {
+    version: "4.0.6",
+    addon: true,
+    v2: true,
+    repository: undefined,
+    dependencies: {},
+    peerDependencies: {},
+  });
+
+  await stage.run(app);
+
+  expect(JSON.parse(app.read("package.json")).resolutions).toEqual({});
+});
