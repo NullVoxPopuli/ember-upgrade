@@ -369,7 +369,7 @@ function withCommentsAbove(source, node) {
  * So the settings of `L.Icon.Default` go, with the constants that only they read.
  *
  * @param {string} source
- * @param {Node} callback the function that runs after the load
+ * @param {Node | undefined} callback the function that runs after the load
  * @param {Edits} edits
  * @returns {boolean} true when the callback reads the `L` global in another way
  */
@@ -385,6 +385,7 @@ function removeIconSettings(source, callback, edits) {
     for (let statement of statements) {
       if (removed.has(statement) || statement.type !== "VariableDeclaration") continue;
 
+      /** @type {string[]} */
       let names = statement.declarations.map(
         (/** @type {Node} */ declarator) => declarator.id.name,
       );
@@ -448,7 +449,10 @@ export function convertLoads(source, file) {
     if (then || parent?.type === "ExpressionStatement" || parent?.type === "UnaryExpression") {
       edits.replace(node.source, `'maplibre-gl'`);
 
-      if (then && removeIconSettings(source, callbacks.get(parent)?.arguments[0], edits)) {
+      if (
+        then &&
+        removeIconSettings(source, callbacks.get(/** @type {Node} */ (parent))?.arguments[0], edits)
+      ) {
         unreadable.push("the Leaflet global `L`, after import('leaflet')");
       }
     } else {
