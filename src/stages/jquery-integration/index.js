@@ -1,3 +1,4 @@
+import { rewriteJQuery } from "#codemods/classic-component/jquery.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
 
@@ -9,6 +10,8 @@ const FEATURES = "config/optional-features.json";
  */
 const USES_INTEGRATION = /from\s*["']@ember\/jquery["']|\bthis\.\$\(|\bEmber\.\$\b/;
 const IMPORTS_JQUERY = /from\s*["']jquery["']/;
+const COMPONENT_CODE = /\.(js|ts)$/;
+const TEARDOWN = new Set(["willDestroyElement", "willClearRender"]);
 
 /**
  * @param {import('#project.js').Project} project
@@ -28,6 +31,30 @@ function users(project) {
 }
 
 /**
+ * The classic components that the classic-components stage kept, such as subclasses of TextField,
+ * whose jQuery calls the DOM API can replace.
+ *
+ * @param {import('#project.js').Project} project
+ * @returns {Map<string, string>} the new source of each file
+ */
+function domRewrites(project) {
+  /** @type {Map<string, string>} */
+  let rewrites = new Map();
+
+  for (let file of users(project)) {
+    if (!COMPONENT_CODE.test(file)) continue;
+
+    let result = rewriteJQuery(project.read(file), file, TEARDOWN);
+
+    if (result.unreadable.length === 0 && !USES_INTEGRATION.test(result.source)) {
+      rewrites.set(file, result.source);
+    }
+  }
+
+  return rewrites;
+}
+
+/**
  * Ember 4 removed the jQuery integration, and ember.nvp builds with Ember's default features.
  * The classic-component stage moved the components' jQuery calls to the DOM, so an app often uses none.
  *
@@ -42,7 +69,8 @@ export default {
   },
 
   async check(project) {
-    let files = users(project);
+    let rewrites = domRewrites(project);
+    let files = users(project).filter((file) => !rewrites.has(file));
 
     if (files.length === 0) return { blockers: [], todo: [] };
 
@@ -60,6 +88,8 @@ export default {
   },
 
   async run(project) {
+    for (let [file, source] of domRewrites(project)) project.write(file, source);
+
     let importsJquery = project.files().some((file) => IMPORTS_JQUERY.test(project.read(file)));
 
     editPackageJson(project, (pkg) => {
