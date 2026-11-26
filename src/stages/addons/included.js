@@ -68,7 +68,12 @@ export function includedImports(project, directory) {
   for (let environment of ENVIRONMENTS) {
     /** @type {VendorImport[]} */
     let imports = [];
-    let record = (/** @type {string} */ path, /** @type {{ type?: string }} */ options) => {
+    let record = (/** @type {unknown} */ path, /** @type {{ type?: string }} */ options) => {
+      /**
+       * An object of paths for each environment, such as `{ development, production }`, stays with ember-cli.
+       */
+      if (typeof path !== "string") throw new Error("the hook imports a file for each environment");
+
       imports.push(options?.type ? { path, type: options.type } : { path });
     };
     let app = {

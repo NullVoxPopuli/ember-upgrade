@@ -282,12 +282,16 @@ export function placements(name, sources, read, taken) {
   }
 
   /**
-   * A template goes where its component went.
+   * A template goes where its component went: `templates/components/x.hbs`, or `components/x/template.hbs` of a pod.
    */
   for (let [file, target] of placed) {
-    if (!file.startsWith("addon/templates/components/")) continue;
+    let pod = /^addon\/components\/(.+)\/template\.hbs$/.exec(file)?.[1];
 
-    let module = withoutExtension(file.slice("addon/templates/components/".length));
+    if (!file.startsWith("addon/templates/components/") && !pod) continue;
+
+    let module = pod
+      ? `${pod}/component`
+      : withoutExtension(file.slice("addon/templates/components/".length));
     let component = Array.from(placed).find(
       ([from]) => withoutExtension(from) === `addon/components/${module}`,
     )?.[1];
@@ -683,6 +687,22 @@ function rewriteSource(source, { origin, target, imports, modules }) {
 
   for (let local of layouts) {
     output = output.replace(new RegExp(`^\\s*layout(\\s*:\\s*${local})?\\s*,?\\s*\\n`, "m"), "");
+
+    /**
+     * `@layout(layout)` of @ember-decorators/component set the template, as the colocated one does now.
+     */
+    let decorator = new RegExp(`^[ \\t]*@(\\w+)\\(${local}\\)[ \\t]*\\n`, "m").exec(output);
+
+    if (decorator) {
+      output = output.replace(decorator[0], "");
+      output = output.replace(
+        new RegExp(
+          `^import \\{\\s*layout(?: as ${decorator[1]})?\\s*\\} from ["']@ember-decorators/component["'];?\\n`,
+          "m",
+        ),
+        "",
+      );
+    }
   }
 
   return output.replace(SPECIFIER, (match, before, quote, specifier) => {

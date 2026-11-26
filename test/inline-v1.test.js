@@ -499,7 +499,16 @@ module.exports = {
     [`${addon}/vendor/ember-toggle/base.css`]: ".x-toggle { display: none; }\n",
     [`${addon}/vendor/ember-toggle/themes/light.css`]: ".x-toggle-light {}\n",
     [`${addon}/vendor/ember-toggle/themes/ios.css`]: ".x-toggle-ios {}\n",
-    [`${addon}/addon/components/x-toggle/component.js`]: "export default class XToggle {}\n",
+    [`${addon}/addon/components/x-toggle/component.js`]: `import classic from 'ember-classic-decorator';
+import { layout as templateLayout } from '@ember-decorators/component';
+import Component from '@ember/component';
+import layout from './template';
+
+@classic
+@templateLayout(layout)
+export default class XToggle extends Component {}
+`,
+    [`${addon}/addon/components/x-toggle/template.hbs`]: "<label>{{this.onLabel}}</label>\n",
     [`${addon}/app/components/x-toggle.js`]:
       "export { default } from 'ember-toggle/components/x-toggle/component';\n",
   });
@@ -515,6 +524,8 @@ module.exports = {
   expect({
     build: app.read("ember-cli-build.js"),
     theme: app.read("vendor/ember-toggle/themes/ios.css"),
+    component: app.read("app/components/x-toggle.js"),
+    template: app.read("app/components/x-toggle.hbs"),
   }).toMatchInlineSnapshot(`
     {
       "build": "'use strict';
@@ -529,6 +540,14 @@ module.exports = {
 
       return app.toTree();
     };
+    ",
+      "component": "import classic from 'ember-classic-decorator';
+    import Component from '@ember/component';
+
+    @classic
+    export default class XToggle extends Component {}
+    ",
+      "template": "<label>{{this.onLabel}}</label>
     ",
       "theme": ".x-toggle-ios {}
     ",
@@ -559,4 +578,25 @@ test("an addon whose included hook reads the build options stays a v1 addon", ()
   });
 
   expect(inlineV1Stage(app, "ember-bootstrap-like")).toBeUndefined();
+});
+
+test("an addon whose included hook imports a file for each environment stays a v1 addon", () => {
+  let addon = "node_modules/env-imports";
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "env-imports": "1.0.0" } }),
+    "config/environment.js": "module.exports = function () {\n  return {};\n};\n",
+    "ember-cli-build.js": "let app = new EmberApp(defaults, {});\n",
+    [`${addon}/package.json`]: JSON.stringify({ name: "env-imports", keywords: ["ember-addon"] }),
+    [`${addon}/index.js`]: `module.exports = {
+  name: 'env-imports',
+  included(app) {
+    app.import({ development: 'vendor/a.js', production: 'vendor/a.min.js' });
+  }
+};
+`,
+    [`${addon}/vendor/a.js`]: "",
+    [`${addon}/addon/components/x.js`]: "export default class {}\n",
+  });
+
+  expect(inlineV1Stage(app, "env-imports")).toBeUndefined();
 });

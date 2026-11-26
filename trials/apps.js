@@ -348,6 +348,7 @@ export const apps = [
       "update-ember-intl",
       "ember-onbeforeunload",
       "update-ember-power-select",
+      "ember-qrcode-shim",
       "ember-radio-button",
       "ember-responsive",
       "update-ember-simple-auth",
