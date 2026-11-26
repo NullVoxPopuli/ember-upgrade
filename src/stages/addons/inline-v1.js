@@ -790,7 +790,7 @@ function asJavaScript(files, imports) {
  * @param {Project} project
  * @param {string} name
  * @param {string} [from] where the addon is installed, when it is a dependency of another addon and not of the app
- * @returns {(import('#types.js').Stage & { dependencies: Record<string, string>, directory: string }) | undefined} undefined when the addon is not only code that the app can hold
+ * @returns {(import('#types.js').Stage & { dependencies: Record<string, string>, directory: string, needsVite: boolean }) | undefined} undefined when the addon is not only code that the app can hold
  */
 export function inlineV1Stage(project, name, from) {
   let installed = from ?? join(project.directory, "node_modules", name);
@@ -851,5 +851,17 @@ export function inlineV1Stage(project, name, from) {
       : `${name} is a v1 addon with no v2 release, so its code is in the app now, where ember-cli merged it.`,
   });
 
-  return Object.assign(stage, { dependencies: ranges, directory });
+  /**
+   * The classic build pairs a template with its component only in app/components. A component that stays in
+   * app/addons/<addon> keeps its template next to it, and only the Vite build pairs them.
+   */
+  let targets = new Set(Array.from(files.keys()));
+  let needsVite = Array.from(targets).some(
+    (file) =>
+      file.startsWith("app/addons/") &&
+      file.endsWith(".hbs") &&
+      [".js", ".ts"].some((extension) => targets.has(file.replace(/\.hbs$/, extension))),
+  );
+
+  return Object.assign(stage, { dependencies: ranges, directory, needsVite });
 }

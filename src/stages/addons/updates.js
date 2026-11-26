@@ -705,75 +705,101 @@ function copyUpdates(project) {
  *
  * @type {import('#types.js').StageGroup}
  */
-export const v2Addons = {
-  name: "v2-addons",
-  label: "Update each v1 addon that has a v2 release, one commit for each",
-  needsInstall: true,
+/**
+ * @param {boolean} afterVite
+ * @returns {import('#types.js').StageGroup}
+ */
+function v2AddonsGroup(afterVite) {
+  return {
+    name: afterVite ? "v2-addons-vite" : "v2-addons",
+    label: afterVite
+      ? "Move the v1 addons whose components only the Vite build pairs with their templates into the app"
+      : "Update each v1 addon that has a v2 release, one commit for each",
+    needsInstall: true,
 
-  async expand(project) {
-    /** @type {Stage[]} */
-    let stages = [];
+    async expand(project) {
+      /** @type {Stage[]} */
+      let stages = [];
 
-    /**
-     * v2 addons need ember-source 3.28 or newer, and the vite stage stops an older app.
-     */
-    if (!atLeast(project.dependency("ember-source"), 3, 28)) return stages;
-    /** @type {{ name: string, note: string, links: string[] }[]} */
-    let v1Only = [];
+      /**
+       * v2 addons need ember-source 3.28 or newer, and the vite stage stops an older app.
+       */
+      if (!atLeast(project.dependency("ember-source"), 3, 28)) return stages;
+      /** @type {{ name: string, note: string, links: string[] }[]} */
+      let v1Only = [];
 
-    /**
-     * An addon that moves into the app brings its dependencies to the app's package.json.
-     * Its v1 addons get the same treatment, after it.
-     *
-     * @type {{ name: string, from?: string }[]}
-     */
-    let queue = installedV1Addons(project).map((name) => ({ name }));
-    let seen = new Set(queue.map((entry) => entry.name));
+      /**
+       * An addon that moves into the app brings its dependencies to the app's package.json.
+       * Its v1 addons get the same treatment, after it.
+       *
+       * @type {{ name: string, from?: string }[]}
+       */
+      let queue = installedV1Addons(project).map((name) => ({ name }));
+      let seen = new Set(queue.map((entry) => entry.name));
 
-    for (let index = 0; index < queue.length; index++) {
-      let { name, from } = queue[index];
+      for (let index = 0; index < queue.length; index++) {
+        let { name, from } = queue[index];
 
-      if (IGNORED.has(name) || hasOwnStage(name)) continue;
+        if (IGNORED.has(name) || hasOwnStage(name)) continue;
 
-      let known = NO_V2_YET.get(name);
+        let known = NO_V2_YET.get(name);
 
-      if (known) {
-        v1Only.push({ name, note: known.note, links: known.links });
-        continue;
-      }
-
-      let release = published(name, MAJOR_CAPS.get(name));
-      let inline = release?.v2 ? undefined : inlineV1Stage(project, name, from);
-
-      if (release?.v2) {
-        stages.push(updateStage(name, release));
-      } else if (inline) {
-        stages.push(inline);
-
-        for (let dependency of Object.keys(inline.dependencies)) {
-          let directory = dependencyDirectory(inline.directory, dependency);
-
-          if (seen.has(dependency) || !directory || !isV1Addon(directory)) continue;
-          if (project.dependency(dependency)) continue;
-
-          seen.add(dependency);
-          queue.push({ name: dependency, from: directory });
+        if (known) {
+          if (!afterVite) v1Only.push({ name, note: known.note, links: known.links });
+          continue;
         }
-      } else {
-        v1Only.push({
-          name,
-          note: release
-            ? `The latest release, ${release.version}, is a v1 addon. Replace it, or help to convert it to a v2 addon.`
-            : "The registry does not have this package. Check whether it is a v1 addon that needs conversion.",
-          links: release?.repository ? [release.repository] : [],
-        });
+
+        let release = published(name, MAJOR_CAPS.get(name));
+        let inline = release?.v2 ? undefined : inlineV1Stage(project, name, from);
+
+        if (release?.v2) {
+          if (!afterVite) stages.push(updateStage(name, release));
+        } else if (inline) {
+          /**
+           * Before the vite stage, the classic build checks each step, and it pairs templates only in app/components.
+           */
+          if (Boolean(inline.needsVite) !== afterVite) continue;
+
+          stages.push(inline);
+
+          for (let dependency of Object.keys(inline.dependencies)) {
+            let directory = dependencyDirectory(inline.directory, dependency);
+
+            if (seen.has(dependency) || !directory || !isV1Addon(directory)) continue;
+            if (project.dependency(dependency)) continue;
+
+            seen.add(dependency);
+            queue.push({ name: dependency, from: directory });
+          }
+        } else if (!afterVite) {
+          v1Only.push({
+            name,
+            note: release
+              ? `The latest release, ${release.version}, is a v1 addon. Replace it, or help to convert it to a v2 addon.`
+              : "The registry does not have this package. Check whether it is a v1 addon that needs conversion.",
+            links: release?.repository ? [release.repository] : [],
+          });
+        }
       }
-    }
 
-    for (let stage of copyUpdates(project)) stages.push(stage);
+      if (afterVite) return stages;
 
-    if (v1Only.length > 0) stages.push(v1Record(v1Only));
+      for (let stage of copyUpdates(project)) stages.push(stage);
 
-    return stages;
-  },
-};
+      if (v1Only.length > 0) stages.push(v1Record(v1Only));
+
+      return stages;
+    },
+  };
+}
+
+/**
+ * One stage for each v1 addon with a v2 release, so that each update is its own commit, and the v1 addons
+ * that move into the app. The v1 addons with no v2 release go in the progress file.
+ */
+export const v2Addons = v2AddonsGroup(false);
+
+/**
+ * After the vite stage: the v1 addons whose components stay in app/addons with their templates.
+ */
+export const v2AddonsVite = v2AddonsGroup(true);

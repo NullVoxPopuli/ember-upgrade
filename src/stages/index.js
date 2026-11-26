@@ -28,6 +28,7 @@ import {
   emberStyleguideCss,
   svgJar,
   v2Addons,
+  v2AddonsVite,
 } from "./addons/updates.js";
 import appClass from "./app-class/index.js";
 import appTree from "./app-tree/index.js";
@@ -139,6 +140,10 @@ export const stages = [
   proxyScriptsStage,
   vite,
   emberStyleguideCss,
+  /**
+   * After vite, which pairs the templates of components outside app/components.
+   */
+  v2AddonsVite,
   /** Later stages boot the compat build, where ember-cli-sass can load node-sass. */
   viteSass,
   emberScopedCss,

@@ -634,3 +634,28 @@ export default {
     }
   `);
 });
+
+/**
+ * From @ember/legacy-built-in-components 0.4.2 (MIT), shortened: a colocated component and no app/ tree,
+ * so the component stays in app/addons with its template.
+ */
+test("a v1 addon whose component stays in app/addons with its template waits for the Vite build", () => {
+  let addon = "node_modules/@ember/legacy-built-in-components";
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@ember/legacy-built-in-components": "^0.4.2" },
+    }),
+    [`${addon}/package.json`]: JSON.stringify({
+      name: "@ember/legacy-built-in-components",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-cli-babel": "^7.26.11", "ember-cli-htmlbars": "^6.0.1" },
+    }),
+    [`${addon}/index.js`]:
+      "'use strict';\n\nmodule.exports = {\n  name: require('./package').name,\n};\n",
+    [`${addon}/addon/components/checkbox.js`]:
+      "import Component from '@ember/component';\nexport default class Checkbox extends Component {}\n",
+    [`${addon}/addon/components/checkbox.hbs`]: "<input type='checkbox' />\n",
+  });
+
+  expect(inlineV1Stage(app, "@ember/legacy-built-in-components")?.needsVite).toBe(true);
+});
