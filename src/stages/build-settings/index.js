@@ -20,6 +20,8 @@ const BABEL_CONFIGS = ["babel.config.mjs", "babel.config.cjs", "babel.config.js"
 const DROPPED_BABEL_PLUGINS = new Set(["ember-auto-import/babel-plugin"]);
 
 const MSW_WORKER = "msw/mockServiceWorker.js";
+const OUTPUT_CSS = "app/styles/output-paths.js";
+const STYLE_EXTENSIONS = [".scss", ".sass", ".less", ".css"];
 
 /**
  * @param {string} source
@@ -39,12 +41,44 @@ function pluginModule(source, node) {
 }
 
 /**
+ * @param {Node | undefined} node an object
+ * @param {string} name
+ * @returns {Node | undefined} the value of the property
+ */
+function propertyValue(node, name) {
+  return node?.properties?.find((/** @type {Node} */ property) => propertyName(property) === name)
+    ?.value;
+}
+
+/**
+ * The main stylesheet, `app`, is the one that Vite builds from the app's imports.
+ *
+ * @param {Node} outputPaths
+ * @returns {{ name: string, path: string }[]} the other entries of `outputPaths.app.css`
+ */
+function outputCss(outputPaths) {
+  let css = propertyValue(propertyValue(outputPaths, "app"), "css");
+
+  return (css?.properties ?? [])
+    .map((/** @type {Node} */ property) => ({
+      name: propertyName(property),
+      path: property.value?.type === "Literal" ? property.value.value : undefined,
+    }))
+    .filter(
+      (/** @type {{ name: string | undefined, path: unknown }} */ entry) =>
+        entry.name && entry.name !== "app" && typeof entry.path === "string",
+    );
+}
+
+/**
  * @typedef {object} Settings
  * @property {string[]} babelPlugins plugins from `babel.plugins` that babel.config needs
  * @property {string[]} otherBabel parts of the `babel` option that the stage cannot move
  * @property {string | undefined} autoImport the source of the `autoImport` option
  * @property {{ statement: Node, file: string, type: string, amd?: string }[]} imports the `app.import()` calls, with the module name of an `amd` transformation
  * @property {boolean} msw the build copies the MSW service worker into the public files
+ * @property {boolean} outputPaths ember-cli-build has the `outputPaths` option
+ * @property {{ name: string, path: string }[]} outputCss the extra CSS files of `outputPaths.app.css`, such as `themes/forest` at `/assets/theme-forest.css`
  */
 
 /**
@@ -64,6 +98,8 @@ export function readSettings(source, file) {
     autoImport: undefined,
     imports: [],
     msw: source.includes(MSW_WORKER),
+    outputPaths: false,
+    outputCss: [],
   };
 
   walk(program, (node, parent) => {
@@ -72,6 +108,10 @@ export function readSettings(source, file) {
         let name = propertyName(property);
 
         if (name === "autoImport") settings.autoImport = source.slice(property.start, property.end);
+        if (name === "outputPaths") {
+          settings.outputPaths = true;
+          settings.outputCss = outputCss(property.value);
+        }
 
         if (name !== "babel") continue;
 
@@ -255,6 +295,37 @@ function firstOf(project, candidates) {
 }
 
 /**
+ * @param {Project} project
+ * @param {{ name: string, path: string }[]} entries
+ * @returns {string | undefined} a module with the URL of each stylesheet, by its old path
+ */
+function outputStylesheets(project, entries) {
+  /** @type {string[]} */
+  let imports = [];
+  /** @type {string[]} */
+  let urls = [];
+
+  for (let [index, entry] of entries.entries()) {
+    let file = STYLE_EXTENSIONS.map((extension) => `app/styles/${entry.name}${extension}`).find(
+      (candidate) => project.has(candidate),
+    );
+
+    if (!file) continue;
+
+    imports.push(`import stylesheet${index} from "./${file.slice("app/styles/".length)}?url";\n`);
+    urls.push(`  ${JSON.stringify(entry.path)}: stylesheet${index},\n`);
+  }
+
+  if (imports.length === 0) return;
+
+  return (
+    imports.join("") +
+    "\n/**\n * The URL of each stylesheet that ember-cli-build built as its own file, by the path that it had.\n */\n" +
+    `export default {\n${urls.join("")}};\n`
+  );
+}
+
+/**
  * Moves the settings of ember-cli-build that a Vite build has another place for.
  * ember.nvp builds with Vite alone, so it refuses an ember-cli-build that still has them.
  *
@@ -277,7 +348,8 @@ export default {
         settings.otherBabel.length > 0 ||
         settings.autoImport ||
         settings.imports.length > 0 ||
-        settings.msw),
+        settings.msw ||
+        settings.outputPaths),
     );
   },
 
@@ -456,8 +528,23 @@ export default {
       });
     }
 
+    let stylesheets = outputStylesheets(project, settings.outputCss);
+
+    if (stylesheets) {
+      project.write(OUTPUT_CSS, stylesheets);
+      recordProgress(project, {
+        id: "build-settings: outputPaths",
+        status: "moved",
+        note:
+          `ember-cli-build built these stylesheets as their own files: ${settings.outputCss.map((entry) => entry.path).join(", ")}. ` +
+          `${OUTPUT_CSS} maps each of those paths to the URL that Vite builds. Load the stylesheets through it.`,
+        links: ["https://vite.dev/guide/assets#explicit-url-imports"],
+      });
+    }
+
     /**
-     * Vite minifies, fingerprints, and writes source maps with its own settings.
+     * Vite minifies, fingerprints, and writes source maps with its own settings,
+     * and names its output files.
      */
     removeBuildOptions(project, [
       "babel",
@@ -465,6 +552,7 @@ export default {
       "fingerprint",
       "minifyJS",
       "minifyCSS",
+      "outputPaths",
       "sourcemaps",
     ]);
 

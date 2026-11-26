@@ -186,3 +186,56 @@ module.exports = async function (defaults) {
     }
   `);
 });
+
+/**
+ * From documize/community gui/ember-cli-build.js, after the vite stage, shortened.
+ */
+test("the extra stylesheets of outputPaths become URL imports, by the path that they had", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "@embroider/vite": "^1.0.0" } }),
+    "ember-cli-build.js": `'use strict';
+
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { compatBuild } = require('@embroider/compat');
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  let app = new EmberApp(defaults, {
+    outputPaths: {
+      app: {
+        css: {
+          'app': '/assets/documize.css',
+          'themes/forest': '/assets/theme-forest.css',
+          'themes/brave': '/assets/theme-brave.css',
+        }
+      }
+    },
+  });
+
+  return compatBuild(app, buildOnce);
+};
+`,
+    "app/styles/app.scss": "",
+    "app/styles/themes/forest.scss": "",
+    "app/styles/themes/brave.scss": "",
+  });
+
+  expect(buildSettings.detect(app)).toBe(true);
+
+  await buildSettings.run(app);
+
+  expect(app.read("ember-cli-build.js")).not.toContain("outputPaths");
+  expect(app.read("app/styles/output-paths.js")).toMatchInlineSnapshot(`
+    "import stylesheet0 from "./themes/forest.scss?url";
+    import stylesheet1 from "./themes/brave.scss?url";
+
+    /**
+     * The URL of each stylesheet that ember-cli-build built as its own file, by the path that it had.
+     */
+    export default {
+      "/assets/theme-forest.css": stylesheet0,
+      "/assets/theme-brave.css": stylesheet1,
+    };
+    "
+  `);
+});
