@@ -179,3 +179,69 @@ test("an import into a package with exports gets the path that the package expor
     "
   `);
 });
+
+/**
+ * From hashicorp-forge/hermes (MPL-2.0), shortened. The Sass of @hashicorp/design-system-components uses `@use "tokens"`.
+ */
+test("the include paths in packages stay Sass load paths, in a Vite plugin", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@embroider/vite": "^1.0.0", "ember-cli-sass": "^11.0.1" },
+    }),
+    "ember-cli-build.js": `module.exports = function (defaults) {
+  let app = new EmberApp(defaults, {
+    sassOptions: {
+      includePaths: [
+        "node_modules",
+        "./node_modules/@hashicorp/design-system-tokens/dist/products/css",
+      ],
+    },
+  });
+};
+`,
+    "vite.config.mjs": `import { defineConfig } from 'vite';
+import { ember } from '@embroider/vite';
+
+export default defineConfig({
+  plugins: [ember()],
+});
+`,
+    "app/styles/app.scss": "",
+  });
+
+  await viteSass.run(app);
+
+  expect(app.read("vite.config.mjs")).toMatchInlineSnapshot(`
+    "import { defineConfig } from 'vite';
+    import { ember } from '@embroider/vite';
+    import sassLoadPaths from './vite/sass-load-paths.mjs';
+
+    export default defineConfig({
+      plugins: [ember(), sassLoadPaths],
+    });
+    "
+  `);
+  expect(app.read("vite/sass-load-paths.mjs")).toMatchInlineSnapshot(`
+    "import { resolve } from 'node:path';
+
+    /**
+     * The stylesheets of packages import from these folders, which ember-cli-sass searched with \`includePaths\`.
+     */
+    const LOAD_PATHS = ["node_modules/@hashicorp/design-system-tokens/dist/products/css"].map((path) => resolve(import.meta.dirname, '..', path));
+
+    export default {
+      name: 'sass-load-paths',
+      config() {
+        return {
+          css: {
+            preprocessorOptions: {
+              scss: { loadPaths: LOAD_PATHS },
+              sass: { loadPaths: LOAD_PATHS },
+            },
+          },
+        };
+      },
+    };
+    "
+  `);
+});

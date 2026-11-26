@@ -1,7 +1,7 @@
 import { existsSync, globSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 
-import { buildFile, removeBuildOptions } from "#config-files.js";
+import { addVitePlugin, buildFile, removeBuildOptions, viteConfig } from "#config-files.js";
 import { addOverride } from "#manager-settings.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
@@ -351,6 +351,36 @@ function includePaths(project) {
   );
 }
 
+const LOAD_PATHS_FILE = "vite/sass-load-paths.mjs";
+
+/**
+ * @param {string[]} paths folders in packages, relative to the app
+ * @returns {string} a Vite plugin that gives Sass the folders, as ember.nvp carries plugins and not other Vite options
+ */
+export function loadPathsPlugin(paths) {
+  return `import { resolve } from 'node:path';
+
+/**
+ * The stylesheets of packages import from these folders, which ember-cli-sass searched with \`includePaths\`.
+ */
+const LOAD_PATHS = ${JSON.stringify(paths)}.map((path) => resolve(import.meta.dirname, '..', path));
+
+export default {
+  name: 'sass-load-paths',
+  config() {
+    return {
+      css: {
+        preprocessorOptions: {
+          scss: { loadPaths: LOAD_PATHS },
+          sass: { loadPaths: LOAD_PATHS },
+        },
+      },
+    };
+  },
+};
+`;
+}
+
 /**
  * Vite compiles Sass when the app installs `sass`, so ember-cli-sass and its include paths can go.
  * ember-cli-sass resolved `@import` from app/styles, the include paths, and the styles that addons add.
@@ -424,6 +454,28 @@ export default {
         where: ["index.html"],
         action: "Vite compiles a stylesheet that index.html links, such as `/app/styles/app.scss`.",
       });
+    }
+
+    let packagePaths = includePaths(project)
+      .map((path) => path.replace(/^\.\//, ""))
+      .filter((path) => path.startsWith("node_modules/"));
+
+    if (packagePaths.length > 0) {
+      project.write(LOAD_PATHS_FILE, loadPathsPlugin(packagePaths));
+
+      let added = addVitePlugin(project, {
+        importLine: `import sassLoadPaths from './${LOAD_PATHS_FILE}';`,
+        call: "sassLoadPaths",
+        specifier: `./${LOAD_PATHS_FILE}`,
+      });
+
+      if (!added) {
+        todo.push({
+          title: `Add the plugin of ${LOAD_PATHS_FILE} to the Vite config`,
+          where: [viteConfig(project) ?? "vite.config.mjs"],
+          action: "Import its default export, and add it to `plugins`.",
+        });
+      }
     }
 
     let removed = removeBuildOptions(project, ["sassOptions"]);
