@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { removeBuildOptions } from "#config-files.js";
+import { buildFile, removeBuildOptions, removeUnusedRequires } from "#config-files.js";
 import {
   dependencyNames,
   editPackageJson,
@@ -63,6 +63,14 @@ function removalStage(removal) {
       });
 
       removeBuildOptions(project, removal.buildOptions ?? []);
+
+      for (let module of removeUnusedRequires(project, names)) {
+        todo.push({
+          title: `ember-cli-build still uses ${module}, which is removed`,
+          where: [buildFile(project) ?? "ember-cli-build.js"],
+          action: "Remove the code that uses it.",
+        });
+      }
 
       for (let file of removal.files ?? []) {
         rmSync(join(project.directory, file), { force: true });

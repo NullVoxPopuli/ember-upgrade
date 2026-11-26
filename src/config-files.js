@@ -340,3 +340,94 @@ export function addVitePlugin(project, plugin) {
 
   return true;
 }
+
+/**
+ * @param {Node} statement
+ * @param {string[]} packages
+ * @returns {string[] | undefined} the names that `const x = require("package")` or `const { x } = require("package/y")` declares
+ */
+function requiredNames(statement, packages) {
+  if (statement.type !== "VariableDeclaration" || statement.declarations.length !== 1) return;
+
+  let [declarator] = statement.declarations;
+  let init = declarator.init;
+  let module =
+    init?.type === "CallExpression" && init.callee.name === "require"
+      ? init.arguments[0]?.value
+      : undefined;
+
+  if (
+    typeof module !== "string" ||
+    !packages.some((name) => module === name || module.startsWith(`${name}/`))
+  ) {
+    return;
+  }
+
+  if (declarator.id.type === "Identifier") return [declarator.id.name];
+  if (declarator.id.type !== "ObjectPattern") return;
+
+  return declarator.id.properties
+    .map((/** @type {Node} */ property) =>
+      property.value?.type === "Identifier" ? property.value.name : "",
+    )
+    .filter(Boolean);
+}
+
+/**
+ * Removes each `require()` of the packages from ember-cli-build, when nothing reads what it declares.
+ *
+ * @param {import('#project.js').Project} project
+ * @param {string[]} packages
+ * @returns {string[]} the packages that ember-cli-build still reads
+ */
+export function removeUnusedRequires(project, packages) {
+  let file = buildFile(project);
+
+  if (!file || packages.length === 0) return [];
+
+  let source = project.read(file);
+  let program = parseProgram(source, file);
+
+  if (!program) return [];
+
+  /** @type {{ statement: Node, names: string[] }[]} */
+  let requires = [];
+
+  walk(program, (node) => {
+    let names = requiredNames(node, packages);
+
+    if (names) requires.push({ statement: node, names });
+  });
+
+  if (requires.length === 0) return [];
+
+  /** @type {Set<string>} */
+  let read = new Set();
+
+  walk(program, (node, parent) => {
+    if (requires.some(({ statement }) => statement === node)) return SKIP;
+    if (node.type !== "Identifier") return;
+    if (parent?.type === "MemberExpression" && parent.property === node && !parent.computed) return;
+    if (parent?.type === "Property" && parent.key === node && !parent.computed) return;
+
+    read.add(node.name);
+  });
+
+  let edits = new Edits(source);
+  /** @type {string[]} */
+  let kept = [];
+
+  for (let { statement, names } of requires) {
+    if (names.some((name) => read.has(name))) {
+      let module = statement.declarations[0].init.arguments[0].value;
+
+      kept.push(module);
+    } else {
+      edits.removeLine(statement);
+    }
+  }
+
+  if (edits.size > 0) project.write(file, edits.apply());
+
+  return kept;
+}
