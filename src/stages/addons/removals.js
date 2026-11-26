@@ -464,3 +464,14 @@ export const obsoleteAddons = {
 export function isObsoleteAddon(name) {
   return OBSOLETE.some((entry) => entry.name === name);
 }
+
+/**
+ * Changes the app's code as the removal stage of the addon does, for code that came into the app after that stage,
+ * such as the code of an inlined addon.
+ *
+ * @param {import('#project.js').Project} project
+ * @param {string} name
+ */
+export function removeFromCode(project, name) {
+  OBSOLETE.find((entry) => entry.name === name)?.after?.(project);
+}

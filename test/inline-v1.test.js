@@ -426,7 +426,7 @@ module.exports = function (defaults) {
     [`${addon}/package.json`]: JSON.stringify({
       name: "ember-toggle",
       keywords: ["ember-addon"],
-      dependencies: { "ember-cli-babel": "7.22.1" },
+      dependencies: { "ember-classic-decorator": "^2.0.0", "ember-cli-babel": "7.22.1" },
     }),
     [`${addon}/index.js`]: `'use strict';
 
@@ -526,6 +526,7 @@ export default class XToggle extends Component {}
     theme: app.read("vendor/ember-toggle/themes/ios.css"),
     component: app.read("app/components/x-toggle.js"),
     template: app.read("app/components/x-toggle.hbs"),
+    dependencies: app.packageJson.devDependencies,
   }).toMatchInlineSnapshot(`
     {
       "build": "'use strict';
@@ -541,12 +542,11 @@ export default class XToggle extends Component {}
       return app.toTree();
     };
     ",
-      "component": "import classic from 'ember-classic-decorator';
-    import Component from '@ember/component';
+      "component": "import Component from '@ember/component';
 
-    @classic
     export default class XToggle extends Component {}
     ",
+      "dependencies": {},
       "template": "<label>{{this.onLabel}}</label>
     ",
       "theme": ".x-toggle-ios {}

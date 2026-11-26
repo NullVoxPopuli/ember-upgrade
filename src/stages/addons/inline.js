@@ -4,6 +4,7 @@ import { dirname, join, relative } from "node:path";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
+import { isObsoleteAddon, removeFromCode } from "./removals.js";
 
 /** @typedef {import('#project.js').Project} Project */
 
@@ -135,6 +136,14 @@ export function inlineStage(inline) {
         if (output !== source) project.write(file, output);
       }
 
+      /**
+       * The removal stages ran before the addon's code came into the app,
+       * so the code of an obsolete dependency, such as `@classic`, goes now, and the dependency stays out.
+       */
+      let obsolete = Object.keys(inline.ranges ?? {}).filter((name) => isObsoleteAddon(name));
+
+      for (let name of obsolete) removeFromCode(project, name);
+
       editPackageJson(project, (pkg) => {
         removeDependency(pkg, inline.name);
 
@@ -145,7 +154,8 @@ export function inlineStage(inline) {
         }
 
         for (let [name, range] of Object.entries(inline.ranges ?? {})) {
-          if (!project.dependency(name)) setDependency(pkg, name, range);
+          if (!project.dependency(name) && !obsolete.includes(name))
+            setDependency(pkg, name, range);
         }
       });
 

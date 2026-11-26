@@ -94,6 +94,7 @@ export const apps = [
       "ember-macro-helpers",
       "update-ember-moment",
       "ember-multiselect-checkboxes",
+      "ember-phoenix",
       "update-ember-power-select",
       "ember-radio-button",
       "ember-responsive",
