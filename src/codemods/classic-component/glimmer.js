@@ -379,6 +379,14 @@ function methodParts(source, entry) {
     fn = args[args.length - 1];
 
     if (entry.observes) fn = fn?.arguments?.[fn.arguments.length - 1];
+
+    /**
+     * `computed('a', { get() {} })` with no `set` is the same as `computed('a', function () {})`.
+     */
+    let only =
+      fn?.type === "ObjectExpression" && fn.properties.length === 1 ? fn.properties[0] : undefined;
+
+    if (entry.kind === "computed" && only?.key?.name === "get" && !only.computed) fn = only.value;
   }
 
   if (fn?.type !== "FunctionExpression" && fn?.type !== "ArrowFunctionExpression") return;

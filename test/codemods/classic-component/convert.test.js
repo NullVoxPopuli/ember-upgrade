@@ -1145,6 +1145,77 @@ export default Component.extend(Notifier, {
 });
 
 /**
+ * From documize/community (AGPL-3.0), section/code/type-editor.js and user/user-profile.js, shortened.
+ */
+test("an action with the name of a field gets its own name, and a computed with only get is a getter", () => {
+  let sources = new Map([
+    [
+      "app/components/code-editor.js",
+      `import Component from '@ember/component';
+import { computed } from '@ember/object';
+
+export default Component.extend({
+  tagName: '',
+  isDirty: false,
+  hasError: computed('error', {
+    get() {
+      return this.error ? 'is-invalid' : '';
+    },
+  }),
+
+  actions: {
+    onType() {
+      this.set('isDirty', true);
+      this.send('isDirty');
+    },
+
+    isDirty() {
+      return this.isDirty;
+    },
+  },
+});
+`,
+    ],
+    [
+      "app/components/code-editor.hbs",
+      `<BaseEditor @isDirty={{action "isDirty"}} @onType={{action "onType"}} class={{this.hasError}} />\n`,
+    ],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/code-editor.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { action } from '@ember/object';
+
+    export default class CodeEditor extends Component {
+      isDirty = false;
+
+      get hasError() {
+          return this.args.error ? 'is-invalid' : '';
+        }
+
+      @action
+      onType() {
+        this.isDirty = true;
+        this.isDirtyAction();
+      }
+
+      @action
+      isDirtyAction() {
+        return this.isDirty;
+      }
+    }
+    "
+  `);
+  expect(result.files.get("app/components/code-editor.hbs")).toMatchInlineSnapshot(`
+    "<BaseEditor @isDirty={{this.isDirtyAction}} @onType={{this.onType}} class={{this.hasError}} />
+    "
+  `);
+});
+
+/**
  * From code-corps-ember (MIT), shortened.
  */
 test("the hooks of a task become calls of perform", () => {

@@ -5,6 +5,7 @@ import { toGlimmer } from "./glimmer.js";
 import { findInvocations } from "./invocations.js";
 import { rewriteJQuery } from "./jquery.js";
 import { inlineMixins, inlineSuperclass } from "./mixins.js";
+import { renameShadowedActions } from "./shadowed-actions.js";
 import { rewriteKeyboard } from "./keyboard.js";
 import { rewritePrototypeExtensions } from "./prototype-extensions.js";
 import { readClassicComponent } from "./read.js";
@@ -170,7 +171,12 @@ export function convertComponents(sources, options = {}) {
     if (!/@ember\/component['"]/.test(own)) continue;
     if (!readClassicComponent(own, file)) continue;
 
-    candidates.push({ name, file, templateFile: file.replace(/\.(js|ts)$/, ".hbs"), source });
+    let templateFile = file.replace(/\.(js|ts)$/, ".hbs");
+    let shadowed = renameShadowedActions(source, file, templates.get(templateFile));
+
+    if (shadowed.template !== undefined) templates.set(templateFile, shadowed.template);
+
+    candidates.push({ name, file, templateFile, source: shadowed.source });
   }
 
   let templateOf = (/** @type {Candidate} */ candidate) =>
@@ -217,6 +223,13 @@ export function convertComponents(sources, options = {}) {
 
     if (!analysis || reasons.length > 0) {
       result.skipped.push({ file: candidate.file, reasons });
+
+      /**
+       * The template keeps its renamed actions, so the classic module keeps them too.
+       */
+      if (candidate.source !== sources.get(candidate.file)) {
+        result.files.set(candidate.file, candidate.source);
+      }
       continue;
     }
 
