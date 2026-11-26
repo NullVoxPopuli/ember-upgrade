@@ -286,6 +286,7 @@ function hasOwnStage(name) {
       "ember-web-app",
       "ember-power-select-typeahead",
       "ember-router-scroll",
+      "ember-scoped-css-compat",
     ].includes(name)
   );
 }
