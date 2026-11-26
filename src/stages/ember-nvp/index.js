@@ -5,6 +5,7 @@ import { buildFile, removeCompatBuildOptions } from "#config-files.js";
 import { updateNodePins } from "#node-version.js";
 import { recordProgress } from "#progress.js";
 import { fixStylesheetImports } from "./css-imports.js";
+import { ESLINT_CONFIGS, withoutBabelConfigFile } from "./eslint-babel.js";
 import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
 
@@ -212,6 +213,15 @@ export default {
           `These imports named stylesheets that their packages do not have, and the Vite build of ember.nvp resolves each import. ` +
           `They name each package's one stylesheet now: ${stylesheets.join(", ")}.`,
       });
+    }
+
+    for (let file of ESLINT_CONFIGS) {
+      if (!project.has(file)) continue;
+
+      let config = project.read(file);
+      let output = withoutBabelConfigFile(config, file);
+
+      if (output !== config) project.write(file, output);
     }
 
     if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];
