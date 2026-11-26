@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { dirname } from "node:path";
+import { rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { editPackageJson, setDependency, sorted } from "#package-json.js";
 import { packageManager } from "#process.js";
@@ -370,4 +371,62 @@ function entryName(entry) {
  */
 function yamlScalar(value) {
   return /^[\w.-]+$/.test(value) ? value : `'${value.replaceAll("'", "''")}'`;
+}
+
+/**
+ * pnpm stops on a patch of a package that the project no longer installs, so a removal takes its patches too.
+ *
+ * @param {Project} project
+ * @param {string} name such as `ember-data-fastboot`, for the keys `ember-data-fastboot` and `ember-data-fastboot@0.1.2`
+ * @returns {string[]} the patch files that went
+ */
+export function removePatches(project, name) {
+  let root = workspaceRoot(project);
+  /** @type {string[]} */
+  let removed = [];
+  let matches = (/** @type {string} */ key) => key === name || key.startsWith(`${name}@`);
+
+  if (root.has(WORKSPACE_FILE)) {
+    let source = root.read(WORKSPACE_FILE);
+    let lines = source.split("\n");
+    let start = lines.findIndex((line) => line.startsWith("patchedDependencies:"));
+    /** @type {string[]} */
+    let keys = [];
+
+    for (let index = start + 1; start !== -1 && index < lines.length; index++) {
+      let line = String(lines[index]);
+
+      if (line.trim() !== "" && !/^\s/.test(line)) break;
+
+      let key = entryName(line);
+
+      if (key && matches(key)) keys.push(key);
+    }
+
+    for (let key of keys) {
+      let file = yamlMapEntry(source, "patchedDependencies", key);
+
+      source = removeYamlMapEntry(source, "patchedDependencies", key);
+      if (file) removed.push(file);
+    }
+
+    if (keys.length > 0) root.write(WORKSPACE_FILE, source);
+  }
+
+  editPackageJson(root, (pkg) => {
+    let patches = pkg.pnpm?.patchedDependencies;
+
+    if (!patches) return;
+
+    for (let key of Object.keys(patches)) {
+      if (!matches(key)) continue;
+
+      removed.push(String(patches[key]));
+      delete patches[key];
+    }
+  });
+
+  for (let file of removed) rmSync(join(root.directory, file), { force: true });
+
+  return removed;
 }

@@ -5,6 +5,7 @@ import { recordProgress } from "#progress.js";
 import { atLeast } from "#version.js";
 import { ADDON_CONTENT, contentAddons, withAddonContentOff } from "./config-module.js";
 import { removeDeadTrees } from "./dead-trees.js";
+import { removeFastBoot } from "./fastboot.js";
 
 /**
  * v1 addons depend on older copies of these packages, and the Vite build needs the latest one.
@@ -121,6 +122,8 @@ export default {
           "The app's own config/environment module and index.html do this work. The ember-nvp stage removes the option.",
       });
     }
+
+    for (let item of removeFastBoot(project)) todo.push(item);
 
     for (let [name, fallback] of Object.entries(PINS)) {
       addOverride(project, name, `^${published(name)?.version ?? fallback}`);
