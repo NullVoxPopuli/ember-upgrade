@@ -23,7 +23,7 @@ function project(files) {
 /**
  * From emberobserver/client, after the vite stage, shortened.
  */
-test("an update removes older pins of what the release needs, and declares its peers", async () => {
+test("an update moves older pins of what the release needs to its ranges, and declares its peers", async () => {
   let app = project({
     "yarn.lock": "",
     "package.json": JSON.stringify({
@@ -62,6 +62,7 @@ test("an update removes older pins of what the release needs, and declares its p
         "ember-power-select": "^9.0.6",
       },
       "resolutions": {
+        "ember-basic-dropdown": "^9.0.1",
         "ember-element-helper": "^1.0.0",
       },
     }

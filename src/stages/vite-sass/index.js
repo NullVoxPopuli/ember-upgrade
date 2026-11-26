@@ -142,7 +142,7 @@ function styleNames(source) {
  */
 
 /**
- * @param {Source} source
+ * @param {{ folder: string }} source
  * @returns {Record<string, any> | undefined} the `exports` of the package, when it is an object
  */
 function exportsOf(source) {
@@ -178,11 +178,61 @@ function exportsResolve(source, specifier) {
 function fromExports(source, specifier) {
   if (!specifier.startsWith(`${source.name}/`)) return;
 
+  let path = exportedSpecifier(source, specifier.slice(source.name.length + 1));
+
+  if (path) return { specifier: path, declare: source.name, range: source.range };
+}
+
+/**
+ * @param {unknown} target
+ * @returns {string | undefined} the file of an `exports` target, for the conditions that Vite gives Sass
+ */
+function targetFile(target) {
+  if (typeof target === "string") return target;
+  if (!target || typeof target !== "object") return;
+
+  let conditions = /** @type {Record<string, unknown>} */ (target);
+
+  return targetFile(conditions.sass ?? conditions.style ?? conditions.default);
+}
+
+/**
+ * @param {Record<string, any>} exports
+ * @param {string} file a file of the package, such as `dist/styles/x.scss`
+ * @returns {string | undefined} the subpath that the package exports the file at, such as `styles/x.scss`
+ */
+function exportedPath(exports, file) {
+  let local = `./${file}`;
+
+  for (let [key, target] of Object.entries(exports)) {
+    let path = targetFile(target);
+
+    if (!path || key === ".") continue;
+    if (path === local) return key.slice(2);
+
+    let star = path.indexOf("*");
+
+    if (star === -1 || key.split("*").length !== 2) continue;
+
+    let prefix = path.slice(0, star);
+    let suffix = path.slice(star + 1);
+
+    if (local.startsWith(prefix) && local.endsWith(suffix)) {
+      return key.slice(2).replace("*", local.slice(prefix.length, local.length - suffix.length));
+    }
+  }
+}
+
+/**
+ * @param {{ name: string, folder: string }} source
+ * @param {string} rest the import after the package name, such as `dist/styles/x`
+ * @returns {string | undefined} the import of the same file through the package's `exports`;
+ * undefined when the package has no `exports`, or does not export the file
+ */
+function exportedSpecifier(source, rest) {
   let exports = exportsOf(source);
 
   if (!exports) return;
-
-  let rest = specifier.slice(source.name.length + 1);
 
   let file = globSync("**/*.{scss,sass,css}", {
     cwd: source.folder,
@@ -192,13 +242,11 @@ function fromExports(source, specifier) {
     .find((path) => sassName(path) === rest);
 
   if (!file) return;
+  if (exports["."]?.sass === `./${file}`) return source.name;
 
-  let resolved = { declare: source.name, range: source.range };
+  let exported = exportedPath(exports, file);
 
-  if (exports["."]?.sass === `./${file}`)
-    return Object.assign({ specifier: source.name }, resolved);
-  if (`./${file}` in exports)
-    return Object.assign({ specifier: `${source.name}/${file}` }, resolved);
+  return exported && `${source.name}/${exported}`;
 }
 
 /**
@@ -245,8 +293,14 @@ export function resolveImport(project, file, specifier, context) {
     let installed = source ? undefined : packageFolder(project.directory, name);
     let version =
       installed && JSON.parse(readFileSync(join(installed, "package.json"), "utf8")).version;
+    let folder = source?.folder ?? installed;
+    let exported = folder && exportedSpecifier({ name, folder }, path.slice(name.length + 1));
 
-    return { specifier: path, declare: name, range: source?.range ?? (version && `^${version}`) };
+    return {
+      specifier: exported ?? path,
+      declare: name,
+      range: source?.range ?? (version && `^${version}`),
+    };
   }
 
   if (sassFileExists(join(project.directory, folder, specifier))) return;

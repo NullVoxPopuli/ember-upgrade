@@ -3,14 +3,15 @@ import { join } from "node:path";
 import { parseProgram } from "#ast.js";
 import { addVitePlugin, removeBuildOptions, viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
-import { allowBuild, overrideRange, removeOverride } from "#manager-settings.js";
+import { addOverride, allowBuild, overrideRange } from "#manager-settings.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
-import { packageManager, published, runUpstream } from "#process.js";
+import { install, packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
 import { atLeast, minorOf } from "#version.js";
 import { rewriteClickOutside } from "./click-outside.js";
 import { addBasicDropdownWormhole, updateOptionClicks, updatePowerSelect } from "./power-select.js";
 import { dependencyDirectory, inlineV1Stage } from "./inline-v1.js";
+import { mergedStyleImports, moveMergedStyleImports } from "./merged-styles.js";
 import { isObsoleteAddon } from "./removals.js";
 import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
 import { ICONS_MODULE, iconsModule, rewriteDynamicIcons } from "./svg-jar-icons.js";
@@ -329,6 +330,8 @@ export function updateStage(name, release) {
     async run(project) {
       /**
        * An override of the addon itself, or of what it needs, can hold back the update.
+       * The override goes to the range that the release asks for, because it kept the dependency tree on one copy,
+       * and two copies of some v1 addons, such as @ember/test-waiters 3, break the build.
        */
       let wanted = Object.assign({}, release.dependencies, release.peerDependencies, {
         [name]: `^${release.version}`,
@@ -340,10 +343,12 @@ export function updateStage(name, release) {
         let pin = overrideRange(project, dependency);
 
         if (pin && olderRelease(pin, range)) {
-          removeOverride(project, dependency);
+          addOverride(project, dependency, range);
           unpinned.push(`${dependency} (${pin}, and ${name} ${release.version} asks for ${range})`);
         }
       }
+
+      let styleImports = mergedStyleImports(project, name);
 
       editPackageJson(project, (pkg) => {
         setDependency(pkg, name, `^${release.version}`);
@@ -361,25 +366,28 @@ export function updateStage(name, release) {
       let todo = [];
       let codemod = TEMPLATE_CODEMODS.get(name);
 
+      /**
+       * The new files are in the v2 addon, so it must be installed first.
+       */
+      if (styleImports.size > 0) {
+        if (!install(project)) throw new Error(`The install of ${name} ${release.version} failed.`);
+
+        let missing = moveMergedStyleImports(project, name, styleImports);
+
+        if (missing.length > 0) {
+          todo.push({
+            title: `Sass imports of the styles that ${name} merged into the app: ${missing.join(", ")}`,
+            where: ["app/styles"],
+            action: `Import the styles from where ${name} ${release.version} has them. Check its upgrade guide.`,
+          });
+        }
+      }
+
       if (name === "ember-power-select" || name === "ember-basic-dropdown") {
         addBasicDropdownWormhole(project);
       }
 
       if (name === "ember-power-select") updateOptionClicks(project);
-
-      /**
-       * The vite-sass stage pointed Sass imports at the v1 addon's app/styles, which a v2 addon does not have.
-       * Its package entry has the styles, through the `sass` export condition.
-       */
-      let escaped = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-      let stylePath = new RegExp(`(["'])${escaped}/app/styles/[^"']+\\1`, "g");
-
-      for (let file of project.files(["app/styles/**/*.{scss,sass}"])) {
-        let source = project.read(file);
-        let output = source.replace(stylePath, `$1${name}$1`);
-
-        if (output !== source) project.write(file, output);
-      }
 
       for (let file of codemod ? project.files([codemod.files]) : []) {
         let result = /** @type {{ codemod: TemplateCodemod }} */ (codemod).codemod(
@@ -400,10 +408,10 @@ export function updateStage(name, release) {
       if (unpinned.length > 0) {
         recordProgress(project, {
           id: `${name}: overrides`,
-          status: "removed",
+          status: "override",
           note:
-            `package.json forced versions that ${name} ${release.version} does not accept, so they are gone: ` +
-            `${unpinned.join(", ")}.`,
+            `package.json forced versions that ${name} ${release.version} does not accept, so the overrides force the ranges that it asks for: ` +
+            `${unpinned.join(", ")}. Remove each override when the dependency tree has one copy without it.`,
         });
       }
 
