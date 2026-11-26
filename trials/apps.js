@@ -592,10 +592,6 @@ export const apps = [
       "build-settings",
       "app-tree",
     ],
-    /**
-     * The in-repo addon lib/content-generator writes JSON files with broccoli-static-site-json, which has no Vite replacement yet.
-     */
-    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "rfcs-app",
