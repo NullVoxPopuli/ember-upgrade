@@ -430,3 +430,46 @@ export function removePatches(project, name) {
 
   return removed;
 }
+
+/**
+ * @param {Project} project
+ * @returns {string[]} the keys of the pnpm patches, such as `ember-page-title` or `ember-page-title@9.0.3`
+ */
+export function patchKeys(project) {
+  let root = workspaceRoot(project);
+  /** @type {string[]} */
+  let keys = [];
+
+  if (root.has(WORKSPACE_FILE)) {
+    let lines = root.read(WORKSPACE_FILE).split("\n");
+    let start = lines.findIndex((line) => line.startsWith("patchedDependencies:"));
+
+    for (let index = start + 1; start !== -1 && index < lines.length; index++) {
+      let line = String(lines[index]);
+
+      if (line.trim() !== "" && !/^\s/.test(line)) break;
+
+      let key = entryName(line);
+
+      if (key) keys.push(key);
+    }
+  }
+
+  for (let key of Object.keys(
+    JSON.parse(root.read("package.json")).pnpm?.patchedDependencies ?? {},
+  )) {
+    keys.push(key);
+  }
+
+  return keys;
+}
+
+/**
+ * @param {string} key a key of the pnpm patches
+ * @returns {string} the package, such as `ember-page-title` for `ember-page-title@9.0.3`
+ */
+export function patchedPackage(key) {
+  let at = key.indexOf("@", key.startsWith("@") ? 1 : 0);
+
+  return at === -1 ? key : key.slice(0, at);
+}

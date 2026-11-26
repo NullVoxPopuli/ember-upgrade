@@ -12,6 +12,7 @@ import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
 import { updateNodePins } from "#node-version.js";
+import { dropPatches } from "#stages/patched-packages/index.js";
 import { BABEL_CONFIGS, withoutCompilerPath } from "./compiler-path.js";
 import { explicitRelationshipOptions } from "./ember-data.js";
 import { KEYWORD_FILES, withoutKeywordImports } from "./helper-keywords.js";
@@ -113,6 +114,9 @@ function step(lts) {
         parse(project.dependency("ember-source"))
       );
 
+      /** @type {string[]} */
+      let updated = [];
+
       editPackageJson(project, (pkg) => {
         for (let [name, range] of Object.entries(TABLE[lts])) {
           let current = project.dependency(name);
@@ -132,7 +136,10 @@ function step(lts) {
            * Only packages that the app has, and only up. A step never moves a package back.
            * A range with no version, such as `catalog:` or a git URL, stays as the app wrote it.
            */
-          if (from && to && compare(from, to) < 0) setDependency(pkg, name, range);
+          if (from && to && compare(from, to) < 0) {
+            setDependency(pkg, name, range);
+            updated.push(name);
+          }
         }
 
         /**
@@ -164,6 +171,8 @@ function step(lts) {
           if (output !== config) project.write(file, output);
         }
       }
+
+      dropPatches(project, updated);
 
       let newPageTitle = parse(project.dependency("ember-page-title"));
       let newGlimmerComponent = project.dependency("@glimmer/component");

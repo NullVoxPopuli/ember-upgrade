@@ -19,6 +19,7 @@ import {
 } from "#package-json.js";
 import { install, packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
+import { dropPatches } from "#stages/patched-packages/index.js";
 import { atLeast, minorOf } from "#version.js";
 import { rewriteClickOutside } from "./click-outside.js";
 import { addBasicDropdownWormhole, updateOptionClicks, updatePowerSelect } from "./power-select.js";
@@ -474,6 +475,8 @@ export function updateStage(name, release) {
       }
 
       let styleImports = mergedStyleImports(project, name);
+
+      dropPatches(project, [name]);
 
       editPackageJson(project, (pkg) => {
         setDependency(pkg, name, `^${release.version}`);

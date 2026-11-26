@@ -65,6 +65,7 @@ import dynamicComponents from "./dynamic-components/index.js";
 import missingComponents from "./missing-components/index.js";
 import { classicLts, viteLts } from "./ember-source/index.js";
 import packageManager from "./package-manager/index.js";
+import patchedPackages from "./patched-packages/index.js";
 import truthHelpersPaths from "./addons/truth-helpers.js";
 import noImplicitThis from "./no-implicit-this/index.js";
 import peerCopies from "./peer-copies/index.js";
@@ -98,6 +99,10 @@ export const stages = [
    */
   emberCliApp,
   packageManager,
+  /**
+   * After package-manager, whose install gives the versions that the patches are for.
+   */
+  patchedPackages,
   emberGlobals,
   emberWebApp,
   truthHelpersPaths,
