@@ -71,9 +71,17 @@ export function declareService(source, file, injection, read = false) {
 
   /** @type {string | undefined} */
   let local;
+  /** @type {string | undefined} */
+  let mixin;
   let declared = false;
 
   for (let node of program.body) {
+    if (node.type === "ImportDeclaration" && node.source.value === "@ember/object/mixin") {
+      mixin = node.specifiers.find(
+        (/** @type {Node} */ specifier) => specifier.type === "ImportDefaultSpecifier",
+      )?.local.name;
+    }
+
     if (node.type !== "ImportDeclaration" || node.source.value !== "@ember/service") continue;
 
     for (let specifier of node.specifiers) {
@@ -113,7 +121,15 @@ export function declareService(source, file, injection, read = false) {
       (/** @type {Node} */ arg) => arg.type === "ObjectExpression",
     );
 
-    if (callee?.type === "MemberExpression" && callee.property?.name === "extend" && object) {
+    /**
+     * `Mixin.create({ ... })` defines a mixin, which also got the injected property.
+     */
+    let defines =
+      callee?.type === "MemberExpression" &&
+      (callee.property?.name === "extend" ||
+        (callee.property?.name === "create" && mixin && callee.object.name === mixin));
+
+    if (defines && object) {
       insert = { at: object.start + 1, text: `\n  ${property}: ${name}(${argument}),` };
     }
   });
