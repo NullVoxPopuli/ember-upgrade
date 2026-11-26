@@ -14,6 +14,11 @@ import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 
 /**
+ * The settings and the install state of yarn 1 and of yarn 2 and later.
+ */
+const YARN_FILES = [".yarnrc", ".yarnrc.yml", ".yarn", ".pnp.cjs", ".pnp.loader.mjs"];
+
+/**
  * The fallback when the registry does not answer.
  */
 const PNPM_FALLBACK = "12.21.0";
@@ -31,7 +36,7 @@ const YARN_USERS = [
 ];
 
 /**
- * Moves yarn 1 and npm 6 projects to pnpm.
+ * Moves yarn and npm 6 projects to pnpm.
  *
  * yarn 1 and npm 6 can install a tree with a package that another package does not see, or two copies of one package.
  * pnpm installs exactly what each package.json asks for.
@@ -40,7 +45,7 @@ const YARN_USERS = [
  */
 export default {
   name: "package-manager",
-  label: "Move from yarn 1 or npm 6 to pnpm",
+  label: "Move from yarn or npm 6 to pnpm",
 
   detect(project) {
     return Boolean(legacyLockfile(project));
@@ -183,7 +188,9 @@ export default {
     }
 
     rmSync(join(root.directory, lockfile));
-    rmSync(join(root.directory, ".yarnrc"), { force: true });
+    for (let file of YARN_FILES) {
+      rmSync(join(root.directory, file), { force: true, recursive: true });
+    }
 
     let where = yarnUsers(root);
 
@@ -249,7 +256,10 @@ export function hoistedVersions(root, lockfile) {
 
   for (let block of source.split(/\n\n+/)) {
     let [header] = block.split("\n");
-    let version = block.match(/^ {2}version "([^"]+)"$/m)?.[1];
+    /**
+     * yarn 1 writes `version "1.0.0"`, and yarn 2 and later write `version: 1.0.0`.
+     */
+    let version = block.match(/^ {2}version:? "?([^"\n]+?)"?$/m)?.[1];
 
     if (!version || !header.endsWith(":")) continue;
 
@@ -327,7 +337,7 @@ export function pinGitDependencies(pkg, commits) {
 
 /**
  * @param {import('#project.js').Project} project
- * @returns {string | undefined} the name of a yarn 1 or npm 6 lockfile
+ * @returns {string | undefined} the name of a yarn or npm 6 lockfile
  */
 function legacyLockfile(project) {
   let lockfile = project.lockfile;
@@ -336,7 +346,13 @@ function legacyLockfile(project) {
 
   let root = workspaceRoot(project);
 
-  if (lockfile.name === "yarn.lock" && root.read("yarn.lock").includes("# yarn lockfile v1")) {
+  /**
+   * yarn 2 and later write `__metadata:` at the top. `pnpm import` reads both formats.
+   */
+  if (
+    lockfile.name === "yarn.lock" &&
+    /^(# yarn lockfile v1|__metadata:)/m.test(root.read("yarn.lock"))
+  ) {
     return "yarn.lock";
   }
 
@@ -374,7 +390,10 @@ export function pnpmSelector(selector) {
    */
   if (names.includes("**")) return names[names.length - 1];
 
-  return names.join(">");
+  /**
+   * A pnpm selector has at most one parent, so a deeper path keeps its last parent.
+   */
+  return names.slice(-2).join(">");
 }
 
 /**
