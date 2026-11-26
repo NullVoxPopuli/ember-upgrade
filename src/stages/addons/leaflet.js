@@ -280,7 +280,7 @@ export function convertImports(source, file) {
     (/** @type {Node} */ node) => node.type === "ImportDefaultSpecifier",
   );
 
-  if (!declaration || !specifier) return;
+  if (!program || !declaration || !specifier) return;
 
   let edits = new Edits(source);
   let helpers = program.body.find(
