@@ -23,24 +23,34 @@ const CALL = `
   setConfig(app, __dirname, {});`;
 
 /**
+ * The same call in a function that is not async. Node 24 loads the ES module of the package with `require()`.
+ */
+const REQUIRE_CALL = `
+  const { setConfig } = require('${PACKAGE}');
+  setConfig(app, __dirname, {});`;
+
+/**
  * @param {string} source ember-cli-build
  * @param {string} file
- * @returns {string} the same source when it calls setConfig, has no `new EmberApp()` in an async function, or does not parse
+ * @returns {string} the same source when it calls setConfig, has no `new EmberApp()`, or does not parse
  */
 export function withWarpDriveConfig(source, file) {
   if (source.includes("setConfig(")) return source;
 
   let program = parseProgram(source, file);
-  /** @type {{ end: number, name: string } | undefined} */
+  /** @type {{ start: number, end: number, name: string } | undefined} */
   let app;
-  let async = false;
+  /** @type {Node[]} */
+  let functions = [];
 
   walk(program, (node, parent) => {
     if (
-      (node.type === "FunctionExpression" || node.type === "ArrowFunctionExpression") &&
-      node.async
-    )
-      async = true;
+      node.type === "FunctionExpression" ||
+      node.type === "ArrowFunctionExpression" ||
+      node.type === "FunctionDeclaration"
+    ) {
+      functions.push(node);
+    }
 
     if (
       !app &&
@@ -50,16 +60,92 @@ export function withWarpDriveConfig(source, file) {
       node.init.callee.name === "EmberApp" &&
       parent?.type === "VariableDeclaration"
     ) {
-      app = { end: parent.end, name: node.id.name };
+      app = { start: parent.start, end: parent.end, name: node.id.name };
     }
   });
 
-  if (!app || !async) return source;
+  if (!app) return source;
 
-  let found = /** @type {{ end: number, name: string }} */ (app);
+  let declaration = app;
+  let enclosing = functions
+    .filter((fn) => fn.start < declaration.start && declaration.end <= fn.end)
+    .sort((a, b) => b.start - a.start)[0];
+  let async = Boolean(enclosing?.async);
+  let commonJs = /\brequire\(/.test(source);
+
+  if (!async && !commonJs) return source;
+
+  let edits = new Edits(source);
+  let call = async ? CALL : REQUIRE_CALL;
+
+  edits.insert(declaration.end, call.replace("setConfig(app,", `setConfig(${declaration.name},`));
+
+  return edits.apply();
+}
+
+export const BABEL_CONFIGS = ["babel.config.mjs", "babel.config.js", "babel.config.cjs"];
+
+/**
+ * The Vite build compiles the v2 code of ember-data 5 with the macros of the Babel config,
+ * so the app blueprints set the config in `buildMacros()`.
+ *
+ * @param {string} source a Babel config
+ * @param {string} file
+ * @returns {string} the same source when it calls setConfig, has no `buildMacros()` call, or does not parse
+ */
+export function withMacrosConfig(source, file) {
+  if (source.includes("setConfig(")) return source;
+
+  let program = parseProgram(source, file);
+  /** @type {Node | undefined} */
+  let call;
+
+  walk(program, (node) => {
+    if (!call && node.type === "CallExpression" && node.callee.name === "buildMacros") call = node;
+  });
+
+  if (!program || !call) return source;
+
+  let found = /** @type {Node} */ (call);
+  let options = found.arguments[0];
   let edits = new Edits(source);
 
-  edits.insert(found.end, CALL.replace("setConfig(app,", `setConfig(${found.name},`));
+  if (!options) {
+    edits.replace(
+      found,
+      "buildMacros({\n  configure(config) {\n    setConfig(config, {});\n  },\n})",
+    );
+  } else if (options.type === "ObjectExpression") {
+    let configure = options.properties.find(
+      (/** @type {Node} */ property) => property.key?.name === "configure",
+    );
+    let fn =
+      configure?.type === "Property" && configure.method ? configure.value : configure?.value;
+
+    if (!configure) {
+      edits.insert(options.start + 1, "\n  configure(config) {\n    setConfig(config, {});\n  },");
+    } else if (
+      (fn?.type === "FunctionExpression" || fn?.type === "ArrowFunctionExpression") &&
+      fn.params[0]?.type === "Identifier" &&
+      fn.body.type === "BlockStatement"
+    ) {
+      edits.insert(fn.body.start + 1, `\n    setConfig(${fn.params[0].name}, {});`);
+    } else {
+      return source;
+    }
+  } else {
+    return source;
+  }
+
+  let imports = program.body.filter(
+    (/** @type {Node} */ node) => node.type === "ImportDeclaration",
+  );
+  let last = imports[imports.length - 1];
+  let line = file.endsWith(".cjs")
+    ? `const { setConfig } = require('${PACKAGE}');`
+    : `import { setConfig } from '${PACKAGE}';`;
+
+  edits.insert(last ? last.end : 0, last ? `\n${line}` : `${line}\n`);
 
   return edits.apply();
 }
@@ -74,12 +160,22 @@ export function addWarpDriveConfig(project) {
 
   if (!file || !atLeast(project.dependency("ember-data"), 5, 0)) return;
 
-  let source = project.read(file);
-  let output = withWarpDriveConfig(source, file);
+  let changed = false;
 
-  if (output === source) return;
+  for (let config of [file].concat(BABEL_CONFIGS)) {
+    if (!project.has(config)) continue;
 
-  project.write(file, output);
+    let source = project.read(config);
+    let output =
+      config === file ? withWarpDriveConfig(source, config) : withMacrosConfig(source, config);
+
+    if (output === source) continue;
+
+    project.write(config, output);
+    changed = true;
+  }
+
+  if (!changed) return;
 
   let emberData = resolvePackage(project.directory, "ember-data");
   let config = emberData ? resolvePackage(emberData, PACKAGE) : undefined;
@@ -101,7 +197,7 @@ export function addWarpDriveConfig(project) {
     id: `${PACKAGE}: setConfig`,
     status: "added",
     note:
-      `ember-cli-build calls setConfig() of ${PACKAGE}, as the app blueprints of ember-source 6 do. ` +
+      `ember-cli-build and the macros of the Babel config call setConfig() of ${PACKAGE}, as the app blueprints of ember-source 6 do. ` +
       "Set `compatWith` and the deprecations that the app has resolved there.",
     links: ["https://docs.warp-drive.io/api/@warp-drive/core/build-config/"],
   });

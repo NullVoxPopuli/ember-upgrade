@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 
 import { withAddonContentOff } from "#stages/vite/config-module.js";
 import { removeDeadTrees } from "#stages/vite/dead-trees.js";
-import { withWarpDriveConfig } from "#stages/vite/warp-drive-config.js";
+import { withMacrosConfig, withWarpDriveConfig } from "#stages/vite/warp-drive-config.js";
 
 /**
  * From hashicorp-forge/hermes web/ember-cli-build.js, after ember-vite-codemod, with the app options shortened.
@@ -218,6 +218,93 @@ test("an app on ember-data 5 calls setConfig of @warp-drive/build-config", () =>
 
       return compatBuild(app, buildOnce);
     };
+    "
+  `);
+});
+
+test("a plain function in CommonJS loads setConfig with require", () => {
+  expect(
+    withWarpDriveConfig(
+      `const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+module.exports = function (defaults) {
+  let app = new EmberApp(defaults, {});
+
+  return app.toTree();
+};
+
+async function unrelated() {}
+`,
+      "ember-cli-build.js",
+    ),
+  ).toMatchInlineSnapshot(`
+    "const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    module.exports = function (defaults) {
+      let app = new EmberApp(defaults, {});
+      const { setConfig } = require('@warp-drive/build-config');
+      setConfig(app, __dirname, {});
+
+      return app.toTree();
+    };
+
+    async function unrelated() {}
+    "
+  `);
+});
+
+/**
+ * From ember-learn/deprecation-app babel.config.mjs (MIT), shortened.
+ */
+test("the macros of the Babel config set the config of ember-data 5", () => {
+  expect(
+    withMacrosConfig(
+      `import { buildMacros } from '@embroider/macros/babel';
+
+const macros = buildMacros();
+
+export default { plugins: [...macros.babelMacros] };
+`,
+      "babel.config.mjs",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import { buildMacros } from '@embroider/macros/babel';
+    import { setConfig } from '@warp-drive/build-config';
+
+    const macros = buildMacros({
+      configure(config) {
+        setConfig(config, {});
+      },
+    });
+
+    export default { plugins: [...macros.babelMacros] };
+    "
+  `);
+});
+
+test("a configure hook of the macros gets the setConfig call", () => {
+  expect(
+    withMacrosConfig(
+      `const { buildMacros } = require('@embroider/macros/babel');
+
+const macros = buildMacros({
+  configure(config) {
+    config.enableRuntimeMode();
+  },
+});
+`,
+      "babel.config.cjs",
+    ),
+  ).toMatchInlineSnapshot(`
+    "const { setConfig } = require('@warp-drive/build-config');
+    const { buildMacros } = require('@embroider/macros/babel');
+
+    const macros = buildMacros({
+      configure(config) {
+        setConfig(config, {});
+        config.enableRuntimeMode();
+      },
+    });
     "
   `);
 });
