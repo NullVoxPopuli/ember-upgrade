@@ -24,6 +24,7 @@ import {
   queryParamsList,
   rewriteWith,
   useServiceImport,
+  withoutPrototypeExtensions,
 } from "#stages/ember-source/removed-apis.js";
 import { moveImports } from "#codemods/move-imports.js";
 
@@ -609,6 +610,43 @@ const options = hash;
     <template>
       <MapLibreGL @initOptions={{hash center=(array 0 20)}} @x={{fn this.a}} @y={{h}} @z={{list}} />
     </template>
+    "
+  `);
+});
+
+/**
+ * From ember-learn/deprecation-app config/environment.js, shortened.
+ */
+test("EXTEND_PROTOTYPES is false for ember-source 6", () => {
+  expect(
+    withoutPrototypeExtensions(
+      `module.exports = function (environment) {
+  const ENV = {
+    EmberENV: {
+      FEATURES: {},
+      EXTEND_PROTOTYPES: {
+        // Prevent Ember Data from overriding Date.parse.
+        Date: false,
+      },
+    },
+  };
+
+  return ENV;
+};
+`,
+      "config/environment.js",
+    ),
+  ).toMatchInlineSnapshot(`
+    "module.exports = function (environment) {
+      const ENV = {
+        EmberENV: {
+          FEATURES: {},
+          EXTEND_PROTOTYPES: false,
+        },
+      };
+
+      return ENV;
+    };
     "
   `);
 });

@@ -2,6 +2,8 @@ import { renameSync, rmSync } from "node:fs";
 import { join, posix } from "node:path";
 
 import { buildFile, removeCompatBuildOptions } from "#config-files.js";
+import { NODE_LTS, NODE_MINIMUM, updateNodePins } from "#node-version.js";
+import { recordProgress } from "#progress.js";
 import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
 
@@ -148,6 +150,14 @@ export default {
      * The compat build of the stages before this one needs it, when a v1 addon has a config module.
      */
     removeCompatBuildOptions(project, ["useAddonConfigModule"]);
+
+    for (let file of updateNodePins(project)) {
+      recordProgress(project, {
+        id: `${file}: Node.js`,
+        status: "updated",
+        note: `${file} pinned a Node.js version older than ${NODE_MINIMUM}, which the ember.nvp build tooling needs. It pins Node.js ${NODE_LTS} now.`,
+      });
+    }
 
     /**
      * Without a name, ember.nvp gives the app the name of its template, and imports of `<name>/...` stop resolving.

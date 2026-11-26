@@ -20,6 +20,7 @@ import { renameTitleHelpers } from "./page-title.js";
 import {
   builtInAttributesInTemplates,
   keepArrayPrototypeExtensions,
+  withoutPrototypeExtensions,
   moveHtmlSafe,
   queryParamsLists,
   rewriteWithHelpers,
@@ -207,7 +208,21 @@ function step(lts) {
         if (output !== targets) project.write(TARGETS, output);
       }
 
-      if (before[0] < 6 && target[0] >= 6) keepArrayPrototypeExtensions(project);
+      if (before[0] < 6 && target[0] >= 6) {
+        keepArrayPrototypeExtensions(project);
+
+        /**
+         * After keepArrayPrototypeExtensions, which reads whether the app had the extensions.
+         */
+        for (let file of ["config/environment.js", "config/environment.cjs"]) {
+          if (!project.has(file)) continue;
+
+          let config = project.read(file);
+          let output = withoutPrototypeExtensions(config, file);
+
+          if (output !== config) project.write(file, output);
+        }
+      }
       if (before[0] < 5 && target[0] >= 5) {
         routerServiceTransitions(project);
         queryParamsLists(project);

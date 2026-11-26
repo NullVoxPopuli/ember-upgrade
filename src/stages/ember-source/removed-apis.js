@@ -147,6 +147,52 @@ export function extendsArrays(config) {
 }
 
 /**
+ * ember-source 6 throws when `EXTEND_PROTOTYPES` leaves the array extensions on, which is the default of an object
+ * such as `{ Date: false }`. The app blueprint sets `EXTEND_PROTOTYPES: false`.
+ *
+ * @param {string} config config/environment.js
+ * @param {string} file
+ * @returns {string} the same source when the config has `EXTEND_PROTOTYPES: false`, or no EmberENV
+ */
+export function withoutPrototypeExtensions(config, file) {
+  let program = parseProgram(config, file);
+
+  if (!program) return config;
+
+  let edits = new Edits(config);
+  let found = false;
+
+  walk(program, (node) => {
+    if (found || node.type !== "Property" || node.computed) return;
+
+    let key = node.key.type === "Identifier" ? node.key.name : node.key.value;
+
+    if (key === "EXTEND_PROTOTYPES") {
+      found = true;
+
+      if (!(node.value.type === "Literal" && node.value.value === false))
+        edits.replace(node.value, "false");
+      return;
+    }
+
+    if (key === "EmberENV" && node.value.type === "ObjectExpression") {
+      let inner = node.value.properties.some(
+        (/** @type {import('#ast.js').Node} */ property) =>
+          property.type === "Property" &&
+          (property.key.name ?? property.key.value) === "EXTEND_PROTOTYPES",
+      );
+
+      if (!inner) {
+        found = true;
+        edits.insert(node.value.start + 1, "\n      EXTEND_PROTOTYPES: false,");
+      }
+    }
+  });
+
+  return edits.size > 0 ? edits.apply() : config;
+}
+
+/**
  * Ember 6 removed the array prototype extensions, such as `mapBy` and `objectAt` on native arrays.
  * An app that used them gets them back from a library, until its code uses native array methods.
  *
