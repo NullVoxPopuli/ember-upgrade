@@ -49,6 +49,7 @@ import powerSelectTypeahead from "./addons/power-select-typeahead.js";
 import routerScroll from "./addons/router-scroll.js";
 import documentTitle from "./document-title/index.js";
 import dynamicComponents from "./dynamic-components/index.js";
+import missingComponents from "./missing-components/index.js";
 import { classicLts, viteLts } from "./ember-source/index.js";
 import packageManager from "./package-manager/index.js";
 import noImplicitThis from "./no-implicit-this/index.js";
@@ -140,6 +141,7 @@ export const stages = [
   noImplicitThis,
   templateColocation,
   dynamicComponents,
+  missingComponents,
   classicComponents,
   templateTag,
   /**
