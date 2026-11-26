@@ -314,7 +314,11 @@ export function resolveImport(project, file, specifier, context) {
   for (let root of context.roots) {
     if (!sassFileExists(join(project.directory, root, specifier))) continue;
 
-    let relative = posix.relative(folder, posix.join(root, specifier));
+    let found = posix.join(root, specifier);
+
+    if (found.startsWith("node_modules/")) return resolveImport(project, file, found, context);
+
+    let relative = posix.relative(folder, found);
 
     return { specifier: relative.startsWith(".") ? relative : `./${relative}` };
   }

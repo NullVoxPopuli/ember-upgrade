@@ -249,7 +249,7 @@ export default defineConfig({
 /**
  * From hashicorp-forge/hermes (MPL-2.0), shortened, after the update to ember-power-select 8.
  */
-test("a relative import of a package folder names the index file that the package exports", async () => {
+test("an import of a package folder through node_modules names the index file that the package exports", async () => {
   let app = project({
     "package.json": JSON.stringify({
       devDependencies: {
@@ -269,13 +269,18 @@ test("a relative import of a package folder names the index file that the packag
     "node_modules/ember-power-select/_index.scss": "",
     "node_modules/ember-power-select/ember-power-select.scss": "",
     "app/styles/app.scss": `@use "ember-power-select-theme";\n`,
-    "app/styles/ember-power-select-theme.scss": `@import "../../node_modules/ember-power-select";\n`,
+    "app/styles/ember-power-select-theme.scss": `@import "../../node_modules/ember-power-select";\n@import "ember-power-select";\n`,
+    "ember-cli-build.js": `module.exports = function (defaults) {
+  let app = new EmberApp(defaults, { sassOptions: { includePaths: ["node_modules"] } });
+};
+`,
   });
 
   await viteSass.run(app);
 
   expect(app.read("app/styles/ember-power-select-theme.scss")).toMatchInlineSnapshot(`
     "@import "ember-power-select/_index.scss";
+    @import "ember-power-select/_index.scss";
     "
   `);
 });
