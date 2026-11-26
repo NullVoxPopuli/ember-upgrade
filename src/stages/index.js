@@ -142,6 +142,10 @@ export const stages = [
    */
   typeImports,
   /**
+   * Before vite, which removes FastBoot. compatBuild still runs the ember-cli build, where prember would prerender with it.
+   */
+  prember,
+  /**
    * Before vite, which replaces the `start` script.
    */
   proxyScriptsStage,
@@ -157,7 +161,6 @@ export const stages = [
   emberCliDeploy,
   emberCliAutoprefixer,
   emberTestSelectors,
-  prember,
   emberCliBundleAnalyzer,
   emberCliDependencyLint,
   emberDisablePrototypeExtensions,
