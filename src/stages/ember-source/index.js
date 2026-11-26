@@ -11,6 +11,7 @@ import { published } from "#process.js";
 import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
 import BLUEPRINTS from "./blueprints.json" with { type: "json" };
+import { BABEL_CONFIGS, withoutCompilerPath } from "./compiler-path.js";
 import { explicitRelationshipOptions } from "./ember-data.js";
 import { explicitInjections, routerServiceTransitions } from "./injections.js";
 import { renameTitleHelpers } from "./page-title.js";
@@ -127,6 +128,17 @@ function step(lts) {
          */
         if (target[0] >= 7) removeDependency(pkg, "ember-cli-htmlbars");
       });
+
+      if (target[0] >= 7) {
+        for (let file of BABEL_CONFIGS) {
+          if (!project.has(file)) continue;
+
+          let config = project.read(file);
+          let output = withoutCompilerPath(config, file);
+
+          if (output !== config) project.write(file, output);
+        }
+      }
 
       let newPageTitle = parse(project.dependency("ember-page-title"));
       let newGlimmerComponent = project.dependency("@glimmer/component");

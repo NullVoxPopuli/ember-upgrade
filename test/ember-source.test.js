@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
 import { classicLts, viteLts } from "#stages/ember-source/index.js";
+import { withoutCompilerPath } from "#stages/ember-source/compiler-path.js";
 import {
   arrayMacroGetters,
   explicitRelationships,
@@ -502,4 +503,39 @@ let names = list.mapBy('name');
   let first = once(source);
 
   expect(once(first)).toBe(first);
+});
+
+/**
+ * From ember-learn/rfcs-app babel.config.cjs, shortened.
+ */
+test("the compilerPath of ember-source 6 goes for ember-source 7", () => {
+  expect(
+    withoutCompilerPath(
+      `module.exports = {
+  plugins: [
+    [
+      'babel-plugin-ember-template-compilation',
+      {
+        compilerPath: 'ember-source/dist/ember-template-compiler.js',
+        enableLegacyModules: ['ember-cli-htmlbars'],
+      },
+    ],
+  ],
+};
+`,
+      "babel.config.cjs",
+    ),
+  ).toMatchInlineSnapshot(`
+    "module.exports = {
+      plugins: [
+        [
+          'babel-plugin-ember-template-compilation',
+          {
+            enableLegacyModules: ['ember-cli-htmlbars'],
+          },
+        ],
+      ],
+    };
+    "
+  `);
 });
