@@ -23,6 +23,7 @@ import {
   qunitConsoleGrouper,
 } from "./addons/removals.js";
 import { deprecationWorkflow, emberStyleguide, svgJar, v2Addons } from "./addons/updates.js";
+import appClass from "./app-class/index.js";
 import appTree from "./app-tree/index.js";
 import ciWorkflows from "./ci-workflows/index.js";
 import classicComponents from "./classic-components/index.js";
@@ -172,6 +173,7 @@ export const stages = [
    */
   appTree,
   declareImports,
+  appClass,
   emberNvp,
   /**
    * After ember-nvp, which writes the Vite config.
