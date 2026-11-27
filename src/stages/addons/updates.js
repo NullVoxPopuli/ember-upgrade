@@ -38,6 +38,8 @@ const WORKFLOW = "app/deprecation-workflow.js";
 const OLD_WORKFLOW = "config/deprecation-workflow.js";
 
 const STYLEGUIDE_CSS = "import 'ember-styleguide/styles.css';";
+const STYLEGUIDE_CSS_IMPORT = '@import "ember-styleguide/styles.css";';
+const APP_STYLESHEET = "app/styles/app.css";
 
 /**
  * ember-styleguide 11 added its CSS to the ember-cli build. The v2 addon exports it, and the app imports it,
@@ -62,6 +64,20 @@ function importStyleguideCss(project) {
     /\.(css|scss|sass|less)$/.test(String(node.source.value)),
   );
   let last = imports[imports.length - 1];
+
+  /**
+   * Vite puts the CSS that the modules import after the stylesheet that index.html links,
+   * so the styleguide goes at the top of that stylesheet, as vendor.css came before the app's CSS.
+   */
+  if (!stylesheet && project.has(APP_STYLESHEET)) {
+    let css = project.read(APP_STYLESHEET);
+    let firstImport = css.search(/^@import\b/m);
+    let at = firstImport === -1 ? 0 : firstImport;
+
+    project.write(APP_STYLESHEET, `${css.slice(0, at)}${STYLEGUIDE_CSS_IMPORT}\n${css.slice(at)}`);
+    return;
+  }
+
   let edits = new Edits(source);
 
   if (stylesheet) edits.insert(stylesheet.start, `${STYLEGUIDE_CSS}\n`);
@@ -83,7 +99,11 @@ function needsStyleguideCss(project) {
     range &&
     (range === STYLEGUIDE_REF || atLeast(range, 12, 0)) &&
     file &&
-    !project.read(file).includes("ember-styleguide/styles.css"),
+    !project.read(file).includes("ember-styleguide/styles.css") &&
+    !(
+      project.has(APP_STYLESHEET) &&
+      project.read(APP_STYLESHEET).includes("ember-styleguide/styles.css")
+    ),
   );
 }
 
@@ -95,7 +115,7 @@ function needsStyleguideCss(project) {
  */
 export const emberStyleguideCss = {
   name: "ember-styleguide-css",
-  label: "Import the CSS of the v2 ember-styleguide in app/app.js",
+  label: "Import the CSS of the v2 ember-styleguide before the app's own CSS",
 
   detect(project) {
     return Boolean(project.dependency("@embroider/vite")) && needsStyleguideCss(project);

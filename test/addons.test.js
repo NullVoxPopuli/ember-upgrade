@@ -976,6 +976,31 @@ test("a classic app imports the CSS of the v2 ember-styleguide after the vite st
 });
 
 /**
+ * From ember-learn/ember-website (MIT), after the vite stage, shortened: index.html links app.css.
+ */
+test("the CSS of the v2 ember-styleguide goes at the top of the stylesheet that index.html links", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "ember-styleguide": "^12.0.0", "@embroider/vite": "^1.7.2" } }`,
+    "package-lock.json": "{}",
+    "app/app.js": "import Application from '@ember/application';\n",
+    "app/styles/app.css": `/* stylelint-disable import-notation */\n@import "components/faqs.css";\n`,
+  });
+
+  expect(emberStyleguideCss.detect(app)).toBe(true);
+
+  await emberStyleguideCss.run(app);
+
+  expect(app.read("app/styles/app.css")).toMatchInlineSnapshot(`
+    "/* stylelint-disable import-notation */
+    @import "ember-styleguide/styles.css";
+    @import "components/faqs.css";
+    "
+  `);
+  expect(app.read("app/app.js")).toBe("import Application from '@ember/application';\n");
+  expect(emberStyleguideCss.detect(app)).toBe(false);
+});
+
+/**
  * From ember-learn/ember-website ember-cli-build.js (MIT), after the vite stage, shortened.
  */
 test("the require of a removed package goes when nothing reads it", async () => {
