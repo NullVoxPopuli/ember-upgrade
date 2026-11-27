@@ -181,7 +181,7 @@ export function withoutBuildOptions(source, file, names) {
 /**
  * @param {string} source
  * @param {string} file
- * @returns {string} the source without the top-level `const x = require('y')` lines whose binding nothing reads
+ * @returns {string} the source without the top-level requires and helper functions whose binding nothing reads
  */
 function withoutUnusedRequires(source, file) {
   let program = parseProgram(source, file);
@@ -206,10 +206,21 @@ function withoutUnusedRequires(source, file) {
       init.callee?.name === "require" &&
       only.id?.type === "Identifier";
 
-    if (isRequire && counts.get(only.id.name) === 1) edits.removeLine(statement);
+    let isHelper =
+      (init?.type === "FunctionExpression" || init?.type === "ArrowFunctionExpression") &&
+      only.id?.type === "Identifier";
+
+    if ((isRequire || isHelper) && counts.get(only.id.name) === 1) edits.removeLine(statement);
+
+    if (statement.type === "FunctionDeclaration" && counts.get(statement.id?.name) === 1) {
+      edits.removeLine(statement);
+    }
   }
 
-  return edits.size > 0 ? edits.apply() : source;
+  /**
+   * A helper that goes can leave the requires that only it read.
+   */
+  return edits.size > 0 ? withoutUnusedRequires(edits.apply(), file) : source;
 }
 
 /**

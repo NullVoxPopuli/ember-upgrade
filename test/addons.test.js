@@ -1017,6 +1017,48 @@ module.exports = async function (defaults) {
 });
 
 /**
+ * From ember-learn/deprecation-app ember-cli-build.js (MIT), after the vite stage, shortened.
+ */
+test("a helper that only the prember URLs called goes, with its requires", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "prember": "^2.1.0" } }`,
+    "package-lock.json": "{}",
+    "ember-cli-build.js": `'use strict';
+const walkSync = require('walk-sync');
+const path = require('path');
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+const getDeprecationFilenames = function () {
+  return walkSync('content', { globs: ['**/*.md'] }).map(
+    (filename) => \`/id/\${path.basename(filename, '.md')}\`
+  );
+};
+
+module.exports = async function (defaults) {
+  let app = new EmberApp(defaults, {
+    prember: { urls: ['/', ...getDeprecationFilenames()] },
+  });
+
+  return app;
+};
+`,
+  });
+
+  expect(await prember.run(app)).toEqual([]);
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    module.exports = async function (defaults) {
+      let app = new EmberApp(defaults, {});
+
+      return app;
+    };
+    "
+  `);
+});
+
+/**
  * From ember-body-class 3.x (MIT), as the inline step writes it into the app.
  */
 test("ember-get-config goes, and its imports name the app's config/environment", async () => {

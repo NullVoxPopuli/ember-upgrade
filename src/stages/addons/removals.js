@@ -293,6 +293,24 @@ const OBSOLETE = [
   },
   { name: "ember-cli-release", label: "It is an ember-cli command" },
   {
+    name: "ember-cli-cjs-transform",
+    label: "It converts the CommonJS files of `app.import()`. Vite imports CommonJS packages",
+    todo: (project) => {
+      let file = buildFile(project);
+
+      return file && /transformation:\s*['"]cjs['"]/.test(project.read(file))
+        ? [
+            {
+              title: "`app.import()` calls with the cjs transformation",
+              where: [file],
+              action:
+                "Import the package from the app's code instead. Vite converts CommonJS packages.",
+            },
+          ]
+        : [];
+    },
+  },
+  {
     name: "ember-cli-uglify",
     label: "Vite minifies the build",
     buildOptions: ["ember-cli-uglify"],

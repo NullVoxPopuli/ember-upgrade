@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { parseProgram, walk } from "#ast.js";
 import { Edits } from "#edits.js";
+import { removeBuildOptions } from "#config-files.js";
 import { removePatches } from "#manager-settings.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
@@ -302,6 +303,8 @@ export function removeFastBoot(project) {
   });
 
   for (let name of PACKAGES) removePatches(project, name);
+
+  removeBuildOptions(project, ["fastboot"]);
   for (let file of CONFIGS) rmSync(join(project.directory, file), { force: true });
 
   if (remaining.length > 0) {
