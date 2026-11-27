@@ -566,9 +566,11 @@ export function transform(source, filePath) {
   }
 
   if (imports.modules.size === 0) {
-    if (edits.size === 0) return { code: source, todo };
-
+    /**
+     * An `ember` import that nothing reads goes too, as Ember 7 has no `ember` module.
+     */
     if (remaining === 0 && emberImport.specifiers.length === 1) edits.removeLine(emberImport);
+    if (edits.size === 0) return { code: source, todo };
 
     return { code: edits.apply(), todo };
   }

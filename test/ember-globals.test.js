@@ -229,3 +229,26 @@ Ember.testing = true;
     "
   `);
 });
+
+/**
+ * From hashicorp-forge/hermes web/app/components/x/dropdown-list/item.ts (MPL-2.0), shortened.
+ */
+test("an ember import that nothing reads goes", () => {
+  expect(
+    transform(
+      `import Component from "@glimmer/component";
+import Ember from "ember";
+
+/** Ember's <LinkTo> handles the click. */
+export default class Item extends Component {}
+`,
+      "app/components/x/dropdown-list/item.ts",
+    ).code,
+  ).toMatchInlineSnapshot(`
+    "import Component from "@glimmer/component";
+
+    /** Ember's <LinkTo> handles the click. */
+    export default class Item extends Component {}
+    "
+  `);
+});
