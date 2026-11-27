@@ -832,7 +832,6 @@ export const apps = [
     sha: "c43fc18474ad0c2d4c9b1f6b6adaa254921ea650",
     completed: [
       "prember",
-      "guidemaker-ember-template",
       "ember-cli",
       "ember-fetch",
       "ember-source-4.4",
@@ -848,6 +847,7 @@ export const apps = [
       "v1-addons",
       "peer-copies",
       "vite",
+      "guidemaker-ember-template",
       "ember-export-application-global",
       "ember-maybe-import-regenerator",
       "ember-source-7.4",

@@ -120,7 +120,6 @@ export const stages = [
    */
   prember,
   emberStyleguide,
-  guidemakerEmberTemplate,
   emberCli,
   emberFetch,
   composableHelpers,
@@ -171,6 +170,11 @@ export const stages = [
   proxyScriptsStage,
   vite,
   emberStyleguideCss,
+  /**
+   * After vite, because its ember-styleguide CSS and macros need Vite, and before viteLts,
+   * because ember-source 7 needs its dependency upgrades.
+   */
+  guidemakerEmberTemplate,
   /**
    * After vite, which pairs the templates of components outside app/components.
    */
