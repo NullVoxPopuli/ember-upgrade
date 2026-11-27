@@ -103,8 +103,31 @@ function step(lts) {
       return current !== undefined && compare(current, target) < 0;
     },
 
-    async check() {
-      return { blockers: [], todo: [] };
+    async check(project) {
+      /**
+       * Ember 7 has no `ember` module. The ember-globals stages move each use that has a module.
+       */
+      let ember =
+        target[0] >= 7
+          ? project
+              .sourceFiles()
+              .filter((file) => /\bfrom\s*["']ember["']/.test(project.read(file)))
+          : [];
+
+      return {
+        blockers:
+          ember.length > 0
+            ? [
+                {
+                  title: "Code that imports the `ember` module, which Ember 7 does not have",
+                  where: ember,
+                  action:
+                    "Import each API from its @ember/* module. ember-upgrade lists the private ones that have no module in its earlier findings.",
+                },
+              ]
+            : [],
+        todo: [],
+      };
     },
 
     async run(project) {

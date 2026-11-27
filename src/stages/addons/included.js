@@ -76,19 +76,24 @@ export function includedImports(project, directory) {
 
       imports.push(options?.type ? { path, type: options.type } : { path });
     };
+    let host = {
+      root: project.directory,
+      config: () => config(environment),
+    };
+    /**
+     * ember-cli's app has the project too, which hooks such as torii's read for the app's config.
+     */
     let app = {
       env: environment,
       import: record,
       options: unreadable({}),
       registry: unreadable({}),
+      project: host,
     };
     let instance = Object.assign(Object.create(addon), {
       _super: { included() {} },
       import: record,
-      project: {
-        root: project.directory,
-        config: () => config(environment),
-      },
+      project: host,
     });
 
     try {

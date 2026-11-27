@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -134,6 +134,24 @@ test("the @ember-data packages that the app has move with ember-data", async () 
   expect(devDependencies?.["@ember-data/adapter"]).toBe(devDependencies?.["ember-data"]);
   expect(devDependencies?.["@ember-data/model"]).toBe(devDependencies?.["ember-data"]);
   expect(devDependencies?.["ember-data"]).not.toBe("~5.6.0");
+});
+
+/**
+ * From hashicorp-forge/hermes web/app/app.ts (MPL-2.0), shortened.
+ */
+test("the step to Ember 7 stops at code that imports the ember module", async () => {
+  let app = project({ devDependencies: { "ember-source": "~6.12.0" } });
+
+  mkdirSync(join(app.directory, "app"), { recursive: true });
+  writeFileSync(
+    join(app.directory, "app/app.ts"),
+    "import Ember from 'ember';\n\n(window as any).Ember = Ember;\n",
+  );
+
+  let [step] = await viteLts.expand(app);
+  let { blockers } = await step.check(app);
+
+  expect(blockers.map((finding) => finding.where)).toEqual([["app/app.ts"]]);
 });
 
 test("an app on an LTS gets no step for it", async () => {

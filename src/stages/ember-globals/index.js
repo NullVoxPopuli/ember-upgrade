@@ -14,7 +14,7 @@ function filesWithGlobals(project) {
 }
 
 /** @type {import('#types.js').Stage} */
-export default {
+const emberGlobals = {
   name: "ember-globals",
   label: "Replace `Ember.*` globals with `@ember/*` imports (RFC 176)",
 
@@ -53,3 +53,15 @@ export default {
     return todo;
   },
 };
+
+/**
+ * The same changes for the code of the v1 addons that the v2-addons stage copied into the app.
+ *
+ * @type {import('#types.js').Stage}
+ */
+export const emberGlobalsInlined = Object.assign({}, emberGlobals, {
+  name: "ember-globals-inlined",
+  label: "Replace `Ember.*` globals with `@ember/*` imports in the code of the inlined addons",
+});
+
+export default emberGlobals;

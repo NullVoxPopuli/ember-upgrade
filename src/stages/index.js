@@ -44,7 +44,7 @@ import emberCliApp from "./ember-cli-app/index.js";
 import emberConcurrency from "./ember-concurrency/index.js";
 import emberCssModules from "./ember-css-modules/index.js";
 import emberScopedCss from "./ember-css-modules/vite.js";
-import emberGlobals from "./ember-globals/index.js";
+import emberGlobals, { emberGlobalsInlined } from "./ember-globals/index.js";
 import emberNvp from "./ember-nvp/index.js";
 import dependencyCopies from "./dependency-copies/index.js";
 import format from "./format/index.js";
@@ -153,6 +153,10 @@ export const stages = [
    * Before vite, because the old dependencies of v1 addons break the Vite build.
    */
   v2Addons,
+  /**
+   * After v2-addons, which copies v1 addons into the app, such as torii with its `import Ember from 'ember'`.
+   */
+  emberGlobalsInlined,
   peerCopies,
   peerDependencies,
   /**
