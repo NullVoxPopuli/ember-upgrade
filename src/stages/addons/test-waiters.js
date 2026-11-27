@@ -1,5 +1,5 @@
 import { installedAddonTree } from "#installed.js";
-import { addOverride, hasOverride, setYamlNestedMap, workspaceRoot } from "#manager-settings.js";
+import { addOverride, hasOverride, setPnpmNestedSetting } from "#manager-settings.js";
 import { editPackageJson } from "#package-json.js";
 import { packageManager, published } from "#process.js";
 import { recordProgress } from "#progress.js";
@@ -12,7 +12,6 @@ const FALLBACK = "4.1.2";
 const SOURCES = ["{app,tests}/**/*.{js,ts,gjs,gts}"];
 const AUTO_IMPORT = "ember-auto-import";
 const AUTO_IMPORT_FALLBACK = "2.10.0";
-const WORKSPACE = "pnpm-workspace.yaml";
 
 /**
  * @param {Project} project
@@ -43,24 +42,18 @@ function addAutoImport(project, manifests) {
 
   if (missing.length === 0 || packageManager(project) !== "pnpm") return;
 
-  let root = workspaceRoot(project);
   let range = `^${published(AUTO_IMPORT, "2")?.version ?? AUTO_IMPORT_FALLBACK}`;
 
   for (let manifest of missing) {
     let selector = `${manifest.name}@${manifest.version}`;
-    let current = root.has(WORKSPACE) ? root.read(WORKSPACE) : "";
-
-    root.write(
-      WORKSPACE,
-      setYamlNestedMap(current, "packageExtensions", selector, "dependencies", {
-        [AUTO_IMPORT]: range,
-      }),
-    );
+    setPnpmNestedSetting(project, "packageExtensions", selector, "dependencies", {
+      [AUTO_IMPORT]: range,
+    });
     recordProgress(project, {
       id: `packageExtensions ${selector}`,
       status: "workaround",
       note:
-        `pnpm-workspace.yaml adds ${AUTO_IMPORT} to ${selector}, so that ember-cli loads ${NEW} into it. ` +
+        `The pnpm settings add ${AUTO_IMPORT} to ${selector}, so that ember-cli loads ${NEW} into it. ` +
         "Remove the entry when the app builds with Vite alone.",
       links: ["https://pnpm.io/settings#packageextensions"],
     });
