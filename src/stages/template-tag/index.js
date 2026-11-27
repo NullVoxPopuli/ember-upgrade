@@ -3,6 +3,7 @@ import { runUpstream } from "#process.js";
 import { addonComponents, replaceShims, writeShims } from "./addon-components.js";
 import { fixImports } from "./fix-imports.js";
 import { removeStaleTemplates } from "./stale-templates.js";
+import { withKeywordComponents } from "./keyword-components.js";
 import { recordProgress } from "#progress.js";
 import { atLeast } from "#version.js";
 
@@ -62,6 +63,13 @@ export default {
     }
 
     replaceShims(project, components);
+
+    for (let file of project.files(["{app,tests}/**/*.{gjs,gts}"])) {
+      let source = project.read(file);
+      let output = withKeywordComponents(source, file, project.directory);
+
+      if (output !== source) project.write(file, output);
+    }
 
     for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
       let source = project.read(file);
