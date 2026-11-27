@@ -88,7 +88,8 @@ jobs:
     if: ${{ !cancelled() && needs.trials.result != 'failure' && needs.trial-apps.outputs.wip != '[]' }}
     # Playwright does not support Chromium on Ubuntu 26.04, and some trial apps install it.
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # ember-api-docs runs many ember-source steps, with a build after each one.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
