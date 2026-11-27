@@ -25,6 +25,17 @@ const DROPPED_BABEL_PLUGINS = new Set(["ember-auto-import/babel-plugin"]);
  */
 const BLOCKING_OPTIONS = new Set(["babel", "ifa"]);
 
+/**
+ * The options of `new EmberApp()` that only an addon reads, by the addon.
+ * Without the addon, the option does nothing, and ember.nvp stops on it.
+ */
+const ADDON_OPTIONS = new Map([
+  ["asset-cache", "ember-service-worker-asset-cache"],
+  ["esw-cache-fallback", "ember-service-worker-cache-fallback"],
+  ["esw-index", "ember-service-worker-index"],
+  ["ember-service-worker", "ember-service-worker"],
+]);
+
 const MSW_WORKER = "msw/mockServiceWorker.js";
 const OUTPUT_CSS = "app/styles/output-paths.js";
 const STYLE_EXTENSIONS = [".scss", ".sass", ".less", ".css"];
@@ -87,6 +98,7 @@ function outputCss(outputPaths) {
  * @property {{ name: string, path: string }[]} outputCss the extra CSS files of `outputPaths.app.css`, such as `themes/forest` at `/assets/theme-forest.css`
  * @property {boolean} emptyPublicTrees compatBuild has `extraPublicTrees: []`, which adds nothing
  * @property {string[]} blockingOptions the options of `new EmberApp()` that ember.nvp stops on, and that the stage removes
+ * @property {string[]} optionNames each option of `new EmberApp()`
  */
 
 /**
@@ -110,6 +122,7 @@ export function readSettings(source, file) {
     outputCss: [],
     emptyPublicTrees: false,
     blockingOptions: [],
+    optionNames: [],
   };
 
   walk(program, (node, parent) => {
@@ -135,6 +148,7 @@ export function readSettings(source, file) {
         let name = propertyName(property);
 
         if (name && BLOCKING_OPTIONS.has(name)) settings.blockingOptions.push(name);
+        if (name) settings.optionNames.push(name);
 
         if (name === "autoImport") settings.autoImport = source.slice(property.start, property.end);
         if (name === "outputPaths") {
@@ -355,6 +369,19 @@ function outputStylesheets(project, entries) {
 }
 
 /**
+ * @param {import('#project.js').Project} project
+ * @param {{ optionNames: string[] }} settings
+ * @returns {string[]} the addon options of `new EmberApp()` whose addon the app does not have
+ */
+function orphanOptions(project, settings) {
+  return settings.optionNames.filter((name) => {
+    let addon = ADDON_OPTIONS.get(name);
+
+    return Boolean(addon) && !project.dependency(String(addon));
+  });
+}
+
+/**
  * Moves the settings of ember-cli-build that a Vite build has another place for.
  * ember.nvp builds with Vite alone, so it refuses an ember-cli-build that still has them.
  *
@@ -380,7 +407,8 @@ export default {
         settings.msw ||
         settings.outputPaths ||
         settings.emptyPublicTrees ||
-        settings.blockingOptions.length > 0),
+        settings.blockingOptions.length > 0 ||
+        orphanOptions(project, settings).length > 0),
     );
   },
 
@@ -579,6 +607,8 @@ export default {
      * Vite minifies, fingerprints, and writes source maps with its own settings,
      * and names its output files.
      */
+    removeBuildOptions(project, orphanOptions(project, settings));
+
     removeBuildOptions(project, [
       "babel",
       "autoImport",

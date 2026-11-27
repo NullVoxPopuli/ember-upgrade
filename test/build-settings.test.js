@@ -320,3 +320,36 @@ test("a babel option with only ember-auto-import's plugin, and the ifa option, g
   `);
   expect(buildSettings.detect(app)).toBe(false);
 });
+
+/**
+ * From ember-learn/ember-api-docs ember-cli-build.js (MIT), after the vite stage, shortened.
+ */
+test("an option of an addon that the app does not have goes", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "@embroider/vite": "^1.7.2" } }),
+    "ember-cli-build.js": `'use strict';
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { compatBuild } = require('@embroider/compat');
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  const app = new EmberApp(defaults, {
+    'asset-cache': {
+      version: '4',
+    },
+    svgJar: { sourceDirs: ['public/assets/images'] },
+  });
+
+  return compatBuild(app, buildOnce);
+};
+`,
+  });
+
+  expect(buildSettings.detect(app)).toBe(true);
+
+  await buildSettings.run(app);
+
+  expect(app.read("ember-cli-build.js")).toContain("svgJar");
+  expect(app.read("ember-cli-build.js")).not.toContain("asset-cache");
+  expect(buildSettings.detect(app)).toBe(false);
+});

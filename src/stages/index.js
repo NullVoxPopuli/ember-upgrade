@@ -54,6 +54,7 @@ import warpDrive from "./warp-drive/index.js";
 import warpDriveVersion from "./warp-drive/version.js";
 import sass from "./sass/index.js";
 import staticSiteJson from "./static-site-json/index.js";
+import publicFunnel from "./public-funnel/index.js";
 import jqueryIntegration from "./jquery-integration/index.js";
 import lint from "./lint/index.js";
 import inlineContent from "./addons/inline-content.js";
@@ -232,6 +233,7 @@ export const stages = [
    * Before ember-nvp, which does not build in-repo addons.
    */
   staticSiteJson,
+  publicFunnel,
   /**
    * After the addon stages, which change the app's addons, and before ember-nvp,
    * whose apps neither merge app trees nor resolve undeclared packages.
