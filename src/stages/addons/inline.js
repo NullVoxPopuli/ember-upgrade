@@ -1,7 +1,7 @@
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
-import { resolvePackage } from "#installed.js";
+import { installedAddonTree, resolvePackage } from "#installed.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
@@ -36,13 +36,32 @@ function specifier(from, to) {
 }
 
 /**
+ * @param {Project} project
+ * @param {string} file such as `app/templates/head.hbs`
+ * @returns {string | undefined} the app's file, or the file of an addon's app tree that ember-cli merged into the app,
+ * such as the head template of guidemaker
+ */
+function moveSource(project, file) {
+  if (project.has(file)) return project.read(file);
+
+  for (let { directory, manifest } of installedAddonTree(project)) {
+    if (!manifest.keywords?.includes("ember-addon")) continue;
+
+    let path = join(directory, file);
+
+    if (existsSync(path)) return readFileSync(path, "utf8");
+  }
+}
+
+/**
  * @param {string} name the addon
  * @param {string | undefined} version
+ * @param {string | undefined} license
  * @returns {string[]} the lines of the header of a copied file
  */
-function originLines(name, version) {
+function originLines(name, version, license) {
   return [
-    `Copied from ${name}${version ? ` ${version}` : ""} by ember-upgrade.`,
+    `Copied from ${name}${version ? ` ${version}` : ""}${license ? ` (${license})` : ""} by ember-upgrade.`,
     `${name} is a v1 addon with no v2 release,`,
     "and the Vite build does not load v1 addons.",
     "To use the library again, once it has a v2 release:",
@@ -99,7 +118,9 @@ export function inlineStage(inline) {
 
     async check(project) {
       let taken = targets.filter((file) => project.has(file));
-      let missing = Object.keys(inline.moves ?? {}).filter((file) => !project.has(file));
+      let missing = Object.keys(inline.moves ?? {}).filter(
+        (file) => moveSource(project, file) === undefined,
+      );
 
       /** @type {import('#types.js').Finding[]} */
       let blockers = [];
@@ -133,10 +154,14 @@ export function inlineStage(inline) {
 
     async run(project) {
       let installed = resolvePackage(project.directory, inline.name);
-      let version = installed
-        ? JSON.parse(readFileSync(join(installed, "package.json"), "utf8")).version
+      let manifest = installed
+        ? JSON.parse(readFileSync(join(installed, "package.json"), "utf8"))
         : undefined;
-      let lines = originLines(inline.name, version);
+      let lines = originLines(
+        inline.name,
+        manifest?.version,
+        typeof manifest?.license === "string" ? manifest.license : undefined,
+      );
 
       /**
        * @param {string} file
@@ -150,8 +175,11 @@ export function inlineStage(inline) {
         write(file, withOrigin(file, contents, lines));
       }
 
+      /**
+       * The app's own files that a stage changes, such as ember-cli-build or the HTML of a contentFor hook, keep no header.
+       */
       for (let [file, contents] of Object.entries(inline.generated?.(project) ?? {})) {
-        write(file, contents);
+        write(file, project.has(file) ? contents : withOrigin(file, contents, lines));
       }
 
       for (let [file, contents] of Object.entries(inline.defaults ?? {})) {
@@ -159,8 +187,9 @@ export function inlineStage(inline) {
       }
 
       for (let [from, to] of Object.entries(inline.moves ?? {})) {
-        write(to, project.read(from));
-        rmSync(join(project.directory, from));
+        write(to, /** @type {string} */ (moveSource(project, from)));
+
+        if (project.has(from)) rmSync(join(project.directory, from));
       }
 
       /**
@@ -216,19 +245,11 @@ export function inlineStage(inline) {
   };
 }
 
-/**
- * @param {string} name
- * @param {string} license
- */
-function origin(name, license = "MIT") {
-  return `/**\n * From ${name} (${license}). ember-upgrade moved it into the app.\n */\n`;
-}
-
 export const emberEventHelpers = inlineStage({
   name: "ember-event-helpers",
   label: "Move ember-event-helpers into the app",
   files: {
-    "app/helpers/prevent-default.js": `${origin("ember-event-helpers")}import { helper } from '@ember/component/helper';
+    "app/helpers/prevent-default.js": `import { helper } from '@ember/component/helper';
 
 export function preventDefault([handler]) {
   return function (event) {
@@ -240,7 +261,7 @@ export function preventDefault([handler]) {
 
 export default helper(preventDefault);
 `,
-    "app/helpers/stop-propagation.js": `${origin("ember-event-helpers")}import { helper } from '@ember/component/helper';
+    "app/helpers/stop-propagation.js": `import { helper } from '@ember/component/helper';
 
 export function stopPropagation([handler]) {
   return function (event) {
@@ -264,7 +285,7 @@ export const emberAutoFocus = inlineStage({
   name: "@zestia/ember-auto-focus",
   label: "Move @zestia/ember-auto-focus into the app",
   files: {
-    "app/modifiers/auto-focus.js": `${origin("@zestia/ember-auto-focus")}import { next, scheduleOnce } from '@ember/runloop';
+    "app/modifiers/auto-focus.js": `import { next, scheduleOnce } from '@ember/runloop';
 import Modifier from 'ember-modifier';
 
 export default class AutoFocusModifier extends Modifier {
@@ -322,7 +343,7 @@ export const emberErrorRoute = inlineStage({
   name: "ember-error-route",
   label: "Move ember-error-route into the app",
   files: {
-    "app/utils/error-route.js": `${origin("ember-error-route")}import Route from '@ember/routing/route';
+    "app/utils/error-route.js": `import Route from '@ember/routing/route';
 import { service } from '@ember/service';
 
 /**
@@ -376,20 +397,20 @@ export const emberCliHead = inlineStage({
   name: "ember-cli-head",
   label: "Move ember-cli-head into the app",
   defaults: {
-    "app/services/head-data.js": `${origin("ember-cli-head")}import Service from '@ember/service';
+    "app/services/head-data.js": `import Service from '@ember/service';
 
 export default class HeadData extends Service {}
 `,
   },
   files: {
-    "app/components/head-content.js": `${origin("ember-cli-head")}import Component from '@glimmer/component';
+    "app/components/head-content.js": `import Component from '@glimmer/component';
 import { service } from '@ember/service';
 
 export default class HeadContent extends Component {
   @service('head-data') model;
 }
 `,
-    "app/components/head-layout.gjs": `${origin("ember-cli-head")}import HeadContent from './head-content.js';
+    "app/components/head-layout.gjs": `import HeadContent from './head-content.js';
 
 const head = document.head;
 
@@ -414,7 +435,7 @@ export const emberApiActions = inlineStage({
   name: "@mainmatter/ember-api-actions",
   label: "Move @mainmatter/ember-api-actions into the app",
   files: {
-    "app/utils/api-action.js": `${origin("@mainmatter/ember-api-actions")}export async function apiAction(
+    "app/utils/api-action.js": `export async function apiAction(
   record,
   { requestType = 'updateRecord', method, path, data, adapterOptions },
 ) {
@@ -499,7 +520,7 @@ function convertedPackage(project, name, file, target) {
 
   if (code === undefined) return;
 
-  return { [target]: `${origin(name)}${code}` };
+  return { [target]: code };
 }
 
 /**

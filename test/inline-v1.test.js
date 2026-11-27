@@ -658,7 +658,16 @@ export default class XToggle extends Component {}
     --}}
     <label>{{this.onLabel}}</label>
     ",
-      "theme": ".x-toggle-ios {}
+      "theme": "/*
+     * Copied from ember-toggle by ember-upgrade.
+     * ember-toggle is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add ember-toggle to package.json, import its modules
+     * from ember-toggle again, and delete the files
+     * that have this comment.
+     */
+    .x-toggle-ios {}
     ",
     }
   `);

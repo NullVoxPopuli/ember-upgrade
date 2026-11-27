@@ -1179,3 +1179,34 @@ test("the decorators of ember-concurrency-decorators come from ember-concurrency
     "ember-concurrency",
   ]);
 });
+
+/**
+ * From ember-learn/guides-source: guidemaker's app tree has the head template, and the app has none.
+ */
+test("ember-cli-head takes the head template from an addon's app tree", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-cli-head": "^2.0.0", guidemaker: "^4.0.4" },
+    }),
+    "node_modules/ember-cli-head/package.json": JSON.stringify({
+      name: "ember-cli-head",
+      version: "2.0.0",
+      license: "MIT",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/guidemaker/package.json": JSON.stringify({
+      name: "guidemaker",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/guidemaker/app/templates/head.hbs": "<title>{{this.model.title}}</title>\n",
+  });
+
+  expect((await emberCliHead.check(app)).blockers).toEqual([]);
+
+  await emberCliHead.run(app);
+
+  expect(app.read("app/components/head-content.hbs")).toBe("<title>{{this.model.title}}</title>\n");
+  expect(app.read("app/components/head-content.js")).toContain(
+    "Copied from ember-cli-head 2.0.0 (MIT) by ember-upgrade.",
+  );
+});
