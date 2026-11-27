@@ -1,11 +1,13 @@
 import { renameSync, rmSync } from "node:fs";
 import { join, posix } from "node:path";
 
-import { buildFile, removeCompatBuildOptions } from "#config-files.js";
+import { buildFile, removeCompatBuildOptions, viteConfig } from "#config-files.js";
+import { editPackageJson, removeDependency } from "#package-json.js";
 import { updateNodePins } from "#node-version.js";
 import { recordProgress } from "#progress.js";
 import { fixStylesheetImports } from "./css-imports.js";
 import { resolveCopies } from "#stages/dependency-copies/index.js";
+import { BABEL_CONFIGS } from "#stages/vite/warp-drive-config.js";
 import { ESLINT_CONFIGS, withoutBabelConfigFile } from "./eslint-babel.js";
 import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
@@ -66,6 +68,34 @@ const SPECIFIER = /(?:require\(\s*|import\(\s*|from\s+|import\s+)["'](\.{1,2}\/[
  */
 function withoutExtension(file) {
   return file.replace(/\.[cm]?[jt]s$/, "");
+}
+
+/**
+ * The Vite config of the vite stage built with this plugin, and the one of ember.nvp does not.
+ * Its newest release still asks for Babel 7, which npm refuses next to the Babel 8 of ember.nvp.
+ */
+const CLASSIC_VITE_PACKAGES = ["@rollup/plugin-babel"];
+
+/**
+ * @param {import('#project.js').Project} project
+ * @returns {string[]} the packages of the classic Vite config that no config imports anymore
+ */
+export function removeClassicVitePackages(project) {
+  let configs = [viteConfig(project)]
+    .concat(BABEL_CONFIGS)
+    .filter((file) => file && project.has(file))
+    .map((file) => project.read(/** @type {string} */ (file)));
+  let unused = CLASSIC_VITE_PACKAGES.filter(
+    (name) => project.dependency(name) && !configs.some((source) => source.includes(name)),
+  );
+
+  if (unused.length > 0) {
+    editPackageJson(project, (pkg) => {
+      for (let name of unused) removeDependency(pkg, name);
+    });
+  }
+
+  return unused;
 }
 
 /**
@@ -198,6 +228,7 @@ export default {
 
     removeOrphanConfigModules(project, configUsers);
     renameCommonJs(project);
+    removeClassicVitePackages(project);
 
     /**
      * The migration changes dependency ranges, so the imports are checked against what its install gives.
