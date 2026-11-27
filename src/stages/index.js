@@ -10,6 +10,7 @@ import {
   macroDecorators,
 } from "./addons/inline.js";
 import emberMetrics from "./addons/ember-metrics.js";
+import { guidemaker } from "./addons/guidemaker.js";
 import emberWebApp from "./addons/ember-web-app.js";
 import {
   emberCliAutoprefixer,
@@ -175,6 +176,11 @@ export const stages = [
    * because ember-source 7 needs its dependency upgrades.
    */
   guidemakerEmberTemplate,
+  /**
+   * After vite, which writes the Vite config for its plugin,
+   * and before ember-cli-head, which keeps the head modules that guidemaker provides.
+   */
+  guidemaker,
   /**
    * After vite, which pairs the templates of components outside app/components.
    */

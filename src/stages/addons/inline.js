@@ -5,6 +5,7 @@ import { installedAddonTree, resolvePackage } from "#installed.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
+import { addonsOf } from "#stages/app-tree/index.js";
 import { isObsoleteAddon, removeFromCode } from "./removals.js";
 
 /** @typedef {import('#project.js').Project} Project */
@@ -38,18 +39,60 @@ function specifier(from, to) {
 /**
  * @param {Project} project
  * @param {string} file such as `app/templates/head.hbs`
+ * @param {string} inlined
  * @returns {string | undefined} the app's file, or the file of an addon's app tree that ember-cli merged into the app,
- * such as the head template of guidemaker
+ * such as the head template of ember-meta
  */
-function moveSource(project, file) {
+function moveSource(project, file, inlined) {
   if (project.has(file)) return project.read(file);
 
-  for (let { directory, manifest } of installedAddonTree(project)) {
-    if (!manifest.keywords?.includes("ember-addon")) continue;
+  let addons = installedAddonTree(project).filter(({ manifest }) =>
+    manifest.keywords?.includes("ember-addon"),
+  );
 
+  /**
+   * ember-cli merged the app trees of the addons that depend on the inlined addon over its own,
+   * as ember-meta's head template over the one of ember-cli-head.
+   */
+  let others = addons.filter(({ manifest }) => manifest.name !== inlined);
+  let own = addons.filter(({ manifest }) => manifest.name === inlined);
+
+  for (let { directory } of others.concat(own)) {
     let path = join(directory, file);
 
     if (existsSync(path)) return readFileSync(path, "utf8");
+  }
+}
+
+/**
+ * @param {Project} project
+ * @param {string} file such as `app/services/head-data.js`
+ * @param {string} inlined
+ * @returns {string | undefined} the module at the same path in the app tree of another addon,
+ * which ember-cli merged over the inlined addon's own, as guidemaker's head-data service over the one of ember-cli-head
+ */
+function providedModule(project, file, inlined) {
+  let base = file.replace(/^app\//, "").replace(/\.\w+$/, "");
+
+  for (let addon of addonsOf(project)) {
+    if (addon.name === inlined) continue;
+
+    let appJs = addon.manifest["ember-addon"]?.["app-js"];
+
+    if (appJs) {
+      let entry = Object.entries(appJs).find(
+        ([path]) => path.replace(/^\.\//, "").replace(/\.\w+$/, "") === base,
+      );
+
+      if (entry) return readFileSync(join(addon.directory, String(entry[1])), "utf8");
+      continue;
+    }
+
+    for (let extension of [".js", ".ts"]) {
+      let path = join(addon.directory, "app", base + extension);
+
+      if (existsSync(path)) return readFileSync(path, "utf8");
+    }
   }
 }
 
@@ -119,7 +162,7 @@ export function inlineStage(inline) {
     async check(project) {
       let taken = targets.filter((file) => project.has(file));
       let missing = Object.keys(inline.moves ?? {}).filter(
-        (file) => moveSource(project, file) === undefined,
+        (file) => moveSource(project, file, inline.name) === undefined,
       );
 
       /** @type {import('#types.js').Finding[]} */
@@ -171,8 +214,25 @@ export function inlineStage(inline) {
         project.write(file, contents);
       };
 
+      /**
+       * The files that re-export the module of another addon, without the moved template that the addon's own file replaces.
+       */
+      let provided = new Set();
+
+      /**
+       * @param {string} file
+       * @returns {string | undefined}
+       */
+      let provider = (file) => {
+        let contents = project.has(file) ? undefined : providedModule(project, file, inline.name);
+
+        if (contents !== undefined) provided.add(file.replace(/\.\w+$/, ""));
+
+        return contents;
+      };
+
       for (let [file, contents] of Object.entries(inline.files)) {
-        write(file, withOrigin(file, contents, lines));
+        write(file, provider(file) ?? withOrigin(file, contents, lines));
       }
 
       /**
@@ -183,11 +243,13 @@ export function inlineStage(inline) {
       }
 
       for (let [file, contents] of Object.entries(inline.defaults ?? {})) {
-        if (!project.has(file)) write(file, withOrigin(file, contents, lines));
+        if (!project.has(file)) write(file, provider(file) ?? withOrigin(file, contents, lines));
       }
 
       for (let [from, to] of Object.entries(inline.moves ?? {})) {
-        write(to, /** @type {string} */ (moveSource(project, from)));
+        if (!project.has(from) && provided.has(to.replace(/\.\w+$/, ""))) continue;
+
+        write(to, /** @type {string} */ (moveSource(project, from, inline.name)));
 
         if (project.has(from)) rmSync(join(project.directory, from));
       }

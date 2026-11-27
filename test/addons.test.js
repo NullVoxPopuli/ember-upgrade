@@ -22,6 +22,7 @@ import {
   obsoleteAddons,
   prember,
 } from "#stages/addons/removals.js";
+import { guidemaker } from "#stages/addons/guidemaker.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
 import {
@@ -351,12 +352,150 @@ test("guidemaker-ember-template installs from the built branch of its upgrade PR
 
   expect(guidemakerEmberTemplate.detect(app)).toBe(false);
   expect(app.dependency("guidemaker-ember-template")).toMatchInlineSnapshot(
-    `"github:NullVoxPopuli-ai-agent/guidemaker-ember-template#5a7bbed528cce2f8776e459c88915c4ab283226c"`,
+    `"github:NullVoxPopuli-ai-agent/guidemaker-ember-template#cdc0b796ab3db421d2181b46587fe84ec0c8fd67"`,
   );
   expect(app.read("pnpm-workspace.yaml")).toBe("onlyBuiltDependencies:\n  - ember-styleguide\n");
   expect(readProgress(app)[0].links).toEqual([
     "https://github.com/ember-learn/guidemaker-ember-template/pull/217",
   ]);
+});
+
+/**
+ * From ember-learn/guides-source, after the vite stage.
+ */
+const GUIDES_BUILD = `'use strict';
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+// All versions since this one will be built on every PR or locally
+const BUILD_SINCE = '5.8.0';
+
+let guidemakerConfig = {};
+
+const { compatBuild } = require('@embroider/compat');
+
+if (!process.env.ALL_VERSIONS) {
+  guidemakerConfig.premberVersionFilter = BUILD_SINCE;
+}
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+
+  const app = new EmberApp(defaults, {
+    guidemaker: guidemakerConfig,
+  });
+
+  return compatBuild(app, buildOnce);
+};
+
+module.exports.BUILD_SINCE = BUILD_SINCE;
+`;
+
+const GUIDES_VITE = `import { defineConfig } from 'vite';
+import { extensions, classicEmberSupport, ember } from '@embroider/vite';
+import { babel } from '@rollup/plugin-babel';
+
+export default defineConfig({
+  plugins: [
+    classicEmberSupport(),
+    ember(),
+    babel({
+      babelHelpers: 'runtime',
+      extensions,
+    }),
+  ],
+});
+`;
+
+test("guidemaker installs from the built branch of its v2 PR, and its options move out of ember-cli-build", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@embroider/vite": "^1.0.0", guidemaker: "^4.0.6", showdown: "^2.1.0" },
+    }),
+    "ember-cli-build.js": GUIDES_BUILD,
+    "vite.config.mjs": GUIDES_VITE,
+  });
+
+  expect(guidemaker.detect(app)).toBe(true);
+  expect((await guidemaker.check(app)).blockers).toEqual([]);
+
+  await guidemaker.run(app);
+
+  expect(guidemaker.detect(app)).toBe(false);
+  expect(app.dependency("guidemaker")).toMatchInlineSnapshot(
+    `"github:NullVoxPopuli-ai-agent/guidemaker#29c4ff1f6544012803d41f362502af205feac9dd"`,
+  );
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    // All versions since this one will be built on every PR or locally
+    const BUILD_SINCE = '5.8.0';
+
+    const { compatBuild } = require('@embroider/compat');
+
+    module.exports = async function (defaults) {
+      const { buildOnce } = await import('@embroider/vite');
+
+      const app = new EmberApp(defaults, {});
+
+      return compatBuild(app, buildOnce);
+    };
+
+    module.exports.BUILD_SINCE = BUILD_SINCE;
+    "
+  `);
+  expect(app.read("vite.config.mjs")).toMatchInlineSnapshot(`
+    "import { defineConfig } from 'vite';
+    import { extensions, classicEmberSupport, ember } from '@embroider/vite';
+    import { babel } from '@rollup/plugin-babel';
+    import { guidemaker } from "guidemaker/vite";
+
+    export default defineConfig({
+      plugins: [
+        classicEmberSupport(),
+        ember(),
+        babel({
+          babelHelpers: 'runtime',
+          extensions,
+        }),
+        guidemaker(),
+      ],
+    });
+    "
+  `);
+  expect(readProgress(app).map((entry) => `${entry.id}: ${entry.status}`)).toEqual([
+    "guidemaker: build options: removed",
+    "guidemaker: git-ref",
+  ]);
+});
+
+test("guidemaker passes a source package of the guides to its Vite plugin", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@embroider/vite": "^1.0.0", guidemaker: "^4.0.6" },
+    }),
+    "ember-cli-build.js": `const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+module.exports = function (defaults) {
+  let app = new EmberApp(defaults, {
+    fingerprint: { extensions: ['js'] },
+    guidemaker: { source: '@ember-learn/guides-source' },
+  });
+
+  return app.toTree();
+};
+`,
+    "vite.config.mjs": GUIDES_VITE,
+  });
+
+  await guidemaker.run(app);
+
+  expect(app.read("vite.config.mjs")).toContain(
+    `guidemaker({ source: "@ember-learn/guides-source" })`,
+  );
+  expect(app.read("ember-cli-build.js")).not.toContain("guidemaker");
+  expect(app.dependency("showdown")).toBe("^2.1.0");
+  expect(readProgress(app).map((entry) => entry.id)).toEqual(["guidemaker"]);
 });
 
 test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml, by the tarball URL for a git-hosted package", async () => {
@@ -372,7 +511,7 @@ test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml, by the tarbal
     "allowBuilds:
       esbuild: true
       ember-styleguide: true
-      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/62e57f01ea9fc27a75f72cc362d4379c9135f932': true
+      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/eb7f1b2dca5dca0f9351fae29243c52d7857c490': true
     "
   `);
   expect(app.packageJson.pnpm).toBeUndefined();
@@ -1228,4 +1367,82 @@ test("ember-cli-head takes the head template from an addon's app tree", async ()
   expect(app.read("app/components/head-content.js")).toContain(
     "Copied from ember-cli-head 2.0.0 (MIT) by ember-upgrade.",
   );
+});
+
+test("ember-cli-head keeps the head modules of the addons that ember-cli merged over its own", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-cli-head": "^2.0.0", guidemaker: "^4.0.6" },
+    }),
+    "node_modules/ember-cli-head/package.json": JSON.stringify({
+      name: "ember-cli-head",
+      version: "2.0.0",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/ember-cli-head/app/templates/head.hbs":
+      "<!-- ember-cli-head/templates/head.hbs -->\n",
+    "node_modules/guidemaker/package.json": JSON.stringify({
+      name: "guidemaker",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-meta": "^2.0.0" },
+    }),
+    "node_modules/guidemaker/app/services/head-data.js":
+      "export { default } from 'guidemaker/services/head-data';\n",
+    "node_modules/guidemaker/node_modules/ember-meta/package.json": JSON.stringify({
+      name: "ember-meta",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/guidemaker/node_modules/ember-meta/app/templates/head.hbs":
+      "<title>{{this.model.title}}</title>\n",
+  });
+
+  await emberCliHead.run(app);
+
+  expect(app.read("app/components/head-content.hbs")).toBe("<title>{{this.model.title}}</title>\n");
+  expect(app.read("app/services/head-data.js")).toBe(
+    "export { default } from 'guidemaker/services/head-data';\n",
+  );
+});
+
+test("ember-cli-head re-exports the head component of a v2 addon, without a head template", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-cli-head": "^2.0.0", guidemaker: "^5.0.0" },
+    }),
+    "node_modules/ember-cli-head/package.json": JSON.stringify({
+      name: "ember-cli-head",
+      version: "2.0.0",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/ember-cli-head/app/templates/head.hbs":
+      "<!-- ember-cli-head/templates/head.hbs -->\n",
+    "node_modules/guidemaker/package.json": JSON.stringify({
+      name: "guidemaker",
+      keywords: ["ember-addon"],
+      "ember-addon": {
+        version: 2,
+        "app-js": {
+          "./components/head-content.js": "./dist/_app_/components/head-content.js",
+          "./services/head-data.js": "./dist/_app_/services/head-data.js",
+        },
+      },
+    }),
+    "node_modules/guidemaker/dist/_app_/components/head-content.js":
+      'export { default } from "guidemaker/components/head-content";\n',
+    "node_modules/guidemaker/dist/_app_/services/head-data.js":
+      'export { default } from "guidemaker/services/head-data";\n',
+  });
+
+  expect((await emberCliHead.check(app)).blockers).toEqual([]);
+
+  await emberCliHead.run(app);
+
+  expect(app.read("app/components/head-content.js")).toBe(
+    'export { default } from "guidemaker/components/head-content";\n',
+  );
+  expect(app.read("app/services/head-data.js")).toBe(
+    'export { default } from "guidemaker/services/head-data";\n',
+  );
+  expect(app.has("app/components/head-content.hbs")).toBe(false);
+  expect(app.has("app/components/head-layout.gjs")).toBe(true);
 });

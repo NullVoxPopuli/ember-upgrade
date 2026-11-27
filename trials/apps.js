@@ -783,6 +783,7 @@ export const apps = [
       "peer-dependencies",
       "vite",
       "guidemaker-ember-template",
+      "guidemaker",
       "ember-cli-deploy",
       "ember-test-selectors",
       "ember-cli-head",
@@ -793,7 +794,7 @@ export const apps = [
       "declare-imports",
     ],
     /**
-     * guidemaker is a v1 addon with no v2 release, and ember-cli-build passes it options.
+     * guidemaker-ember-template depends on the v1 addons ember-get-config, ember-href-to and ember-tether.
      */
     stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
@@ -854,6 +855,7 @@ export const apps = [
   },
   {
     name: "cli-guides",
+    wip: true,
     repo: "ember-learn/cli-guides",
     sha: "c43fc18474ad0c2d4c9b1f6b6adaa254921ea650",
     completed: [
@@ -874,6 +876,7 @@ export const apps = [
       "peer-copies",
       "vite",
       "guidemaker-ember-template",
+      "guidemaker",
       "ember-export-application-global",
       "ember-maybe-import-regenerator",
       "ember-source-7.4",
@@ -881,7 +884,8 @@ export const apps = [
       "declare-imports",
     ],
     /**
-     * guidemaker and ember-cli-fastboot are v1 addons with no stage yet.
+     * ember-cli-fastboot is a v1 addon with no stage yet,
+     * and guidemaker-ember-template depends on the v1 addons ember-get-config, ember-href-to and ember-tether.
      */
     stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },

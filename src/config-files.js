@@ -121,11 +121,22 @@ export function withoutBuildOptions(source, file, names) {
     for (let property of matching) removeProperty(edits, property);
   }
 
-  for (let property of matching) removed.add(/** @type {string} */ (propertyName(property)));
+  /**
+   * The variables that hold the value of a removed option, such as `guidemakerConfig` in `guidemaker: guidemakerConfig`.
+   */
+  let optionVariables = new Map();
+
+  for (let property of matching) {
+    let name = /** @type {string} */ (propertyName(property));
+
+    removed.add(name);
+    if (property.value?.type === "Identifier") optionVariables.set(property.value.name, name);
+  }
 
   /**
    * @param {Node} statement
-   * @returns {string | undefined} the option that the statement sets, such as `inlineContent` for `options.inlineContent['x'] = 'y';`
+   * @returns {string | undefined} the option that the statement sets, such as `inlineContent` for `options.inlineContent['x'] = 'y';`,
+   * or `guidemaker` for `guidemakerConfig.premberVersionFilter = 'x';`
    */
   let setsOption = (statement) => {
     let target = statement.type === "ExpressionStatement" ? statement.expression : undefined;
@@ -135,13 +146,14 @@ export function withoutBuildOptions(source, file, names) {
       left = left.object;
     }
 
-    if (left?.type !== "MemberExpression" || left.object?.name !== variable || left.computed)
-      return;
+    if (left?.type !== "MemberExpression" || left.computed) return;
+    if (optionVariables.has(left.object?.name)) return optionVariables.get(left.object.name);
+    if (left.object?.name !== variable) return;
 
     return names.includes(left.property.name) ? left.property.name : undefined;
   };
 
-  if (variable) {
+  if (variable || optionVariables.size > 0) {
     walk(program, (node) => {
       let name = setsOption(node);
 
@@ -149,6 +161,19 @@ export function withoutBuildOptions(source, file, names) {
         edits.removeLine(node);
         removed.add(name);
         return;
+      }
+
+      let declarator =
+        node.type === "VariableDeclaration" && node.declarations.length === 1
+          ? node.declarations[0]
+          : undefined;
+
+      if (
+        optionVariables.has(declarator?.id?.name) &&
+        declarator.init?.type === "ObjectExpression"
+      ) {
+        edits.removeLine(node);
+        return SKIP;
       }
 
       let body =
