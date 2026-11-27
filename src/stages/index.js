@@ -235,16 +235,17 @@ export const stages = [
   staticSiteJson,
   publicFunnel,
   /**
+   * After the stages that update the app's addons, such as ember-concurrency, so that newer releases fit,
+   * and before app-tree, which writes the app modules of the addons' current releases.
+   */
+  v1Dependencies,
+  /**
    * After the addon stages, which change the app's addons, and before ember-nvp,
    * whose apps neither merge app trees nor resolve undeclared packages.
    */
   appTree,
   declareImports,
   appClass,
-  /**
-   * After the stages that update the app's addons, such as ember-concurrency, so that newer releases fit.
-   */
-  v1Dependencies,
   emberNvp,
   /**
    * After ember-nvp, whose install keeps the old copies that the lockfile has.
