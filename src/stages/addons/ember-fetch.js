@@ -38,7 +38,7 @@ const ERROR_HELPERS = {
  */
 const GLOBALS = new Set(["default", "Headers", "Request", "Response", "AbortController"]);
 
-const FASTBOOT_CONFIG = "config/fastboot.js";
+export const FASTBOOT_CONFIG = "config/fastboot.js";
 
 /**
  * The globals that FastBoot's sandbox needs for the global `fetch`. ember-fetch brought its own.
@@ -60,10 +60,11 @@ const DEFAULT_FASTBOOT_CONFIG = `module.exports = function () {
  * FastBoot runs the app in a sandbox with only the globals of config/fastboot.js.
  *
  * @param {string} source config/fastboot.js
- * @returns {string | undefined} the source with the fetch globals in the object of `buildSandboxGlobals`;
+ * @param {string[]} [names] the globals that the sandbox needs
+ * @returns {string | undefined} the source with the globals in the object of `buildSandboxGlobals`;
  * undefined when the file has no `Object.assign({}, defaultGlobals, { ... })` there
  */
-export function withFetchGlobals(source) {
+export function withSandboxGlobals(source, names = SANDBOX_GLOBALS) {
   let program = parseProgram(source, FASTBOOT_CONFIG);
   /** @type {Node | undefined} */
   let globals;
@@ -98,7 +99,7 @@ export function withFetchGlobals(source) {
       (/** @type {Node} */ property) => property.key?.name ?? property.key?.value,
     ),
   );
-  let missing = SANDBOX_GLOBALS.filter((name) => !present.has(name));
+  let missing = names.filter((name) => !present.has(name));
 
   if (missing.length === 0) return source;
 
@@ -177,7 +178,7 @@ export default {
 
     if (project.dependency("ember-cli-fastboot")) {
       let config = project.has(FASTBOOT_CONFIG) ? project.read(FASTBOOT_CONFIG) : undefined;
-      let output = config === undefined ? DEFAULT_FASTBOOT_CONFIG : withFetchGlobals(config);
+      let output = config === undefined ? DEFAULT_FASTBOOT_CONFIG : withSandboxGlobals(config);
 
       if (output === undefined) {
         todo.push({

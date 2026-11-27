@@ -17,6 +17,7 @@ import { BABEL_CONFIGS, withoutCompilerPath } from "./compiler-path.js";
 import { explicitRelationshipOptions } from "./ember-data.js";
 import { KEYWORD_FILES, withoutKeywordImports } from "./helper-keywords.js";
 import { TARGETS, withoutInternetExplorer } from "./targets.js";
+import { FASTBOOT_CONFIG, withSandboxGlobals } from "#stages/addons/ember-fetch.js";
 import { explicitInjections, routerServiceTransitions } from "./injections.js";
 import { renameTitleHelpers } from "./page-title.js";
 import {
@@ -239,6 +240,16 @@ function step(lts) {
               "Add both options. `async: true` and the inverse field were the defaults before.",
           });
         }
+      }
+
+      /**
+       * The ember-data of the newer blueprints calls structuredClone, which the FastBoot sandbox does not have.
+       */
+      if (project.has(FASTBOOT_CONFIG)) {
+        let config = project.read(FASTBOOT_CONFIG);
+        let output = withSandboxGlobals(config, ["structuredClone"]);
+
+        if (output && output !== config) project.write(FASTBOOT_CONFIG, output);
       }
 
       if (before[0] < 5 && target[0] >= 5 && project.has(TARGETS)) {
