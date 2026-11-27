@@ -110,6 +110,12 @@ export const stages = [
   emberGlobals,
   emberWebApp,
   truthHelpersPaths,
+  /**
+   * Early, so that no ember-cli build prerenders in FastBoot. Addons such as ember-styleguide refer to their
+   * assets with `new URL(..., import.meta.url)`, which webpack resolves through `document`.
+   * vite-ember-ssr prerenders the app after the ember-nvp stage.
+   */
+  prember,
   emberStyleguide,
   emberCli,
   emberFetch,
@@ -151,10 +157,6 @@ export const stages = [
    * Before vite, whose Babel config removes only the imports that say `type`.
    */
   typeImports,
-  /**
-   * Before vite, which removes FastBoot. compatBuild still runs the ember-cli build, where prember would prerender with it.
-   */
-  prember,
   /**
    * Before vite, which replaces the `start` script.
    */

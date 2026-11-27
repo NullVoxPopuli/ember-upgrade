@@ -658,6 +658,7 @@ export const apps = [
     sha: "d9092d93abc0e5cad4f644f64ee94d163695b0cf",
     completed: [
       "patched-packages",
+      "prember",
       "ember-styleguide",
       "percy-ember",
       "ember-leaflet",
@@ -666,7 +667,6 @@ export const apps = [
       "v1-addons",
       "peer-dependencies",
       "type-imports",
-      "prember",
       "vite",
       "ember-styleguide-css",
       "ember-source-7.4",
@@ -714,6 +714,7 @@ export const apps = [
     repo: "ember-learn/cli-guides",
     sha: "c43fc18474ad0c2d4c9b1f6b6adaa254921ea650",
     completed: [
+      "prember",
       "ember-cli",
       "ember-fetch",
       "ember-source-4.4",
@@ -728,7 +729,6 @@ export const apps = [
       "ember-cli-netlify",
       "v1-addons",
       "peer-copies",
-      "prember",
       "vite",
       "ember-export-application-global",
       "ember-maybe-import-regenerator",
@@ -746,6 +746,7 @@ export const apps = [
     repo: "ember-learn/ember-blog",
     sha: "beb67247068c847e1141344b794f72a64c0681f3",
     completed: [
+      "prember",
       "ember-cli",
       "ember-fetch",
       "ember-source-3.28",
@@ -761,7 +762,6 @@ export const apps = [
       "ember-metrics",
       "ember-cli-netlify",
       "v1-addons",
-      "prember",
       "vite",
       "ember-export-application-global",
       "ember-maybe-import-regenerator",
