@@ -36,6 +36,30 @@ function boundNames(program) {
 }
 
 /**
+ * @type {{ get: ModuleExport, set: ModuleExport }}
+ */
+const TESTING = {
+  get: { module: "@ember/debug", export: "isTesting", localName: "isTesting" },
+  set: { module: "@ember/debug", export: "setTesting", localName: "setTesting" },
+};
+
+/**
+ * @param {Node} node
+ * @param {string | undefined} ember the local name of the `ember` import
+ * @returns {boolean} the node is `Ember.testing`
+ */
+function isTestingMember(node, ember) {
+  return (
+    node.type === "MemberExpression" &&
+    !node.computed &&
+    node.property.type === "Identifier" &&
+    node.property.name === "testing" &&
+    Boolean(ember) &&
+    identifierName(node.object) === ember
+  );
+}
+
+/**
  * @param {Node} node a MemberExpression
  * @returns {{ root: string, names: string[], nodes: Node[] } | undefined}
  *   for `Ember.computed.alias`: root "Ember", names ["computed", "alias"],
@@ -408,6 +432,27 @@ export function transform(source, filePath) {
         action:
           "Check that the handler still gets the errors that it needs, such as rejected promises.",
       });
+
+      return SKIP;
+    }
+
+    /**
+     * `Ember.testing` is a function pair in @ember/debug now: `isTesting()` reads it, and `setTesting()` sets it.
+     */
+    if (
+      node.type === "AssignmentExpression" &&
+      node.operator === "=" &&
+      isTestingMember(node.left, ember)
+    ) {
+      let setTesting = imports.request(TESTING.set);
+
+      edits.replace(node, `${setTesting}(${source.slice(node.right.start, node.right.end)})`);
+
+      return SKIP;
+    }
+
+    if (isTestingMember(node, ember)) {
+      edits.replace(node, `${imports.request(TESTING.get)}()`);
 
       return SKIP;
     }

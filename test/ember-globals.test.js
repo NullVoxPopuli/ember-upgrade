@@ -104,7 +104,7 @@ export default { a: computed(() => K), b: inject };
     let result = transform(
       `import Ember from 'ember';
 
-if (Ember.testing) Ember.run.later(() => {}, 1);
+if (Ember.RouterDSL) Ember.run.later(() => {}, 1);
 `,
       "app/x.js",
     );
@@ -112,10 +112,10 @@ if (Ember.testing) Ember.run.later(() => {}, 1);
     expect(result.code).toBe(`import Ember from 'ember';
 import { later } from '@ember/runloop';
 
-if (Ember.testing) later(() => {}, 1);
+if (Ember.RouterDSL) later(() => {}, 1);
 `);
     expect(result.todo).toMatchObject([
-      { title: "`Ember.testing` has no module", where: ["app/x.js:3"] },
+      { title: "`Ember.RouterDSL` has no module", where: ["app/x.js:3"] },
     ]);
   });
 
@@ -204,6 +204,28 @@ if (config.environment === 'production') {
         console.error(error);
       });
     }
+    "
+  `);
+});
+
+/**
+ * From hashicorp-forge/hermes web/app/components/inputs/people-select.ts (MPL-2.0), shortened.
+ */
+test("Ember.testing becomes isTesting() of @ember/debug, and an assignment setTesting()", () => {
+  expect(
+    transform(
+      `import Ember from "ember";
+
+const DEBOUNCE_MS = Ember.testing ? 0 : 300;
+Ember.testing = true;
+`,
+      "app/components/inputs/people-select.ts",
+    ).code,
+  ).toMatchInlineSnapshot(`
+    "import { isTesting, setTesting } from "@ember/debug";
+
+    const DEBOUNCE_MS = isTesting() ? 0 : 300;
+    setTesting(true);
     "
   `);
 });
