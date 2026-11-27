@@ -787,16 +787,18 @@ export const apps = [
       "ember-cli-deploy",
       "ember-test-selectors",
       "ember-cli-head",
-      "template-tag",
       "ember-source-7.4",
       "build-settings",
       "app-tree",
       "declare-imports",
+      "ember-nvp",
+      "warp-drive-version",
+      "warp-drive",
+      "unused-dependencies",
+      "ci-workflows",
+      "format",
+      "lint",
     ],
-    /**
-     * guidemaker-ember-template depends on the v1 addons ember-get-config, ember-href-to and ember-tether.
-     */
-    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "deprecation-app",
@@ -887,6 +889,10 @@ export const apps = [
       "ember-nvp",
       "warp-drive-version",
       "warp-drive",
+      "unused-dependencies",
+      "ci-workflows",
+      "format",
+      "lint",
     ],
   },
   {
