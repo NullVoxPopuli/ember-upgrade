@@ -16,6 +16,7 @@ test("an addon's ember-test-waiters becomes @ember/test-waiters through an overr
     "pnpm-lock.yaml": "",
     "node_modules/ember-styleguide/package.json": JSON.stringify({
       name: "ember-styleguide",
+      version: "11.0.3",
       keywords: ["ember-addon"],
       dependencies: { "ember-test-waiters": "^2.1.3" },
     }),
@@ -38,6 +39,9 @@ test("an addon's ember-test-waiters becomes @ember/test-waiters through an overr
 
   expect(app.read("pnpm-workspace.yaml")).toMatch(
     /ember-test-waiters: 'npm:@ember\/test-waiters@\^\d+\.\d+\.\d+'/,
+  );
+  expect(app.read("pnpm-workspace.yaml")).toMatch(
+    /packageExtensions:\n {2}'ember-styleguide@11\.0\.3':\n {4}dependencies:\n {6}ember-auto-import: '\^2\./,
   );
   expect(stage.detect(app)).toBe(false);
 });
