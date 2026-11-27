@@ -194,7 +194,7 @@ export const deprecationWorkflow = {
 };
 
 const STYLEGUIDE_PR = "https://github.com/ember-learn/ember-styleguide/pull/551";
-const STYLEGUIDE_SHA = "94eb2c7558347956a575cec72f34dbbabbdcca6b";
+const STYLEGUIDE_SHA = "62e57f01ea9fc27a75f72cc362d4379c9135f932";
 const STYLEGUIDE_REF = `github:NullVoxPopuli-ai-agent/ember-styleguide#${STYLEGUIDE_SHA}`;
 const STYLEGUIDE_TARBALL = `https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/${STYLEGUIDE_SHA}`;
 
@@ -255,7 +255,7 @@ const GUIDEMAKER_PR = "https://github.com/ember-learn/guidemaker-ember-template/
  * The built package of the PR branch, from its dist branch, like the dist branch of the upstream repo.
  */
 const GUIDEMAKER_REF =
-  "github:NullVoxPopuli-ai-agent/guidemaker-ember-template#7b3fe5d53b536d822fd22042ab423e7691818321";
+  "github:NullVoxPopuli-ai-agent/guidemaker-ember-template#5a7bbed528cce2f8776e459c88915c4ab283226c";
 
 /**
  * guidemaker-ember-template 4.3.0 is a v2 addon, but it depends on ember-concurrency 4, which imports `ember`,

@@ -351,7 +351,7 @@ test("guidemaker-ember-template installs from the built branch of its upgrade PR
 
   expect(guidemakerEmberTemplate.detect(app)).toBe(false);
   expect(app.dependency("guidemaker-ember-template")).toMatchInlineSnapshot(
-    `"github:NullVoxPopuli-ai-agent/guidemaker-ember-template#7b3fe5d53b536d822fd22042ab423e7691818321"`,
+    `"github:NullVoxPopuli-ai-agent/guidemaker-ember-template#5a7bbed528cce2f8776e459c88915c4ab283226c"`,
   );
   expect(app.read("pnpm-workspace.yaml")).toBe("onlyBuiltDependencies:\n  - ember-styleguide\n");
   expect(readProgress(app)[0].links).toEqual([
@@ -372,7 +372,7 @@ test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml, by the tarbal
     "allowBuilds:
       esbuild: true
       ember-styleguide: true
-      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/94eb2c7558347956a575cec72f34dbbabbdcca6b': true
+      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/62e57f01ea9fc27a75f72cc362d4379c9135f932': true
     "
   `);
   expect(app.packageJson.pnpm).toBeUndefined();
