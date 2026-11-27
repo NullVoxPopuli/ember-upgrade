@@ -61,6 +61,7 @@ import inlineContent from "./addons/inline-content.js";
 import powerSelectTypeahead from "./addons/power-select-typeahead.js";
 import leaflet from "./addons/leaflet.js";
 import testWaiters from "./addons/test-waiters.js";
+import v1Dependencies from "./addons/v1-dependencies.js";
 import legacyBuiltInComponents from "./addons/legacy-built-in-components.js";
 import netlify from "./addons/netlify.js";
 import percyEmber from "./addons/percy.js";
@@ -241,6 +242,10 @@ export const stages = [
   appTree,
   declareImports,
   appClass,
+  /**
+   * After the stages that update the app's addons, such as ember-concurrency, so that newer releases fit.
+   */
+  v1Dependencies,
   emberNvp,
   /**
    * After ember-nvp, whose install keeps the old copies that the lockfile has.

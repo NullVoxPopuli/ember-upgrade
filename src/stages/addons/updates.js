@@ -660,7 +660,7 @@ const MAJOR_CAPS = new Map([["ember-concurrency", "4"]]);
  * @param {number} major
  * @returns {boolean} a part of the range starts at the major
  */
-function allowsMajor(range, major) {
+export function allowsMajor(range, major) {
   return range.split("||").some((part) => minorOf(part)?.[0] === major);
 }
 
