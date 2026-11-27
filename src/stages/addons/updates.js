@@ -174,7 +174,7 @@ export const deprecationWorkflow = {
 };
 
 const STYLEGUIDE_PR = "https://github.com/ember-learn/ember-styleguide/pull/551";
-const STYLEGUIDE_SHA = "43f286bbaede486bbff24392334cdd79bf11b168";
+const STYLEGUIDE_SHA = "dc63dbf4a7730061b4a8d2d6d28116a7a2fa7cc6";
 const STYLEGUIDE_REF = `github:NullVoxPopuli-ai-agent/ember-styleguide#${STYLEGUIDE_SHA}`;
 const STYLEGUIDE_TARBALL = `https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/${STYLEGUIDE_SHA}`;
 
