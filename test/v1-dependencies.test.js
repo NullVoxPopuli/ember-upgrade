@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import { plannedUpdates } from "#stages/addons/v1-dependencies.js";
+import stage, { plannedUpdates } from "#stages/addons/v1-dependencies.js";
 
 /**
  * @param {string} name
@@ -18,7 +18,7 @@ function installed(name, manifest) {
 /**
  * From ember-learn/ember-api-docs after the ember-concurrency stage, shortened.
  */
-test("ember-basic-dropdown leaves @embroider/util behind, and ember-power-select moves with it", () => {
+test("ember-basic-dropdown leaves @embroider/util behind, and ember-power-select moves with it", async () => {
   let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
   let files = Object.fromEntries([
     [
@@ -59,9 +59,16 @@ test("ember-basic-dropdown leaves @embroider/util behind, and ember-power-select
     writeFileSync(join(directory, file), contents);
   }
 
-  let { updates, blocked } = plannedUpdates(new Project(directory));
+  let app = new Project(directory);
+  let { updates, blocked } = plannedUpdates(app);
 
   expect(blocked).toEqual([]);
   expect(Array.from(updates.keys()).sort()).toEqual(["ember-basic-dropdown", "ember-power-select"]);
   expect(Number(updates.get("ember-basic-dropdown")?.version.split(".")[0])).toBeGreaterThan(8);
+
+  expect(stage.detect(app)).toBe(true);
+
+  await stage.run(app);
+
+  expect(stage.detect(app)).toBe(false);
 });

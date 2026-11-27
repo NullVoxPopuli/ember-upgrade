@@ -4,12 +4,14 @@ import { join } from "node:path";
 import { resolvePackage } from "#installed.js";
 import { dependencyNames, editPackageJson, setDependency } from "#package-json.js";
 import { published } from "#process.js";
-import { recordProgress } from "#progress.js";
+import { readProgress, recordProgress } from "#progress.js";
 import { minorOf } from "#version.js";
 import { isV1Addon } from "./known.js";
 import { allowsMajor } from "./updates.js";
 
 /** @typedef {import('#project.js').Project} Project */
+
+const BLOCKED_ID = "v1-dependencies: blocked";
 /** @typedef {{ version: string, dependencies?: Record<string, string>, peerDependencies?: Record<string, string> }} Release */
 
 /**
@@ -127,7 +129,27 @@ export function plannedUpdates(project) {
     }
   }
 
-  return { updates: blocked.length > 0 ? new Map() : updates, blocked };
+  if (blocked.length > 0) return { updates: new Map(), blocked };
+
+  /**
+   * The stage runs before the install, so the ranges of package.json tell whether an update is done.
+   */
+  for (let [name, release] of updates) {
+    let declared = majorOf(project.dependency(name));
+    let target = majorOf(release.version);
+
+    if (declared !== undefined && target !== undefined && declared >= target) updates.delete(name);
+  }
+
+  return { updates, blocked };
+}
+
+/**
+ * @param {Project} project
+ * @returns {boolean} the progress file already lists the blocked updates
+ */
+function blockedRecorded(project) {
+  return readProgress(project).some((entry) => entry.id === BLOCKED_ID);
 }
 
 /**
@@ -146,7 +168,7 @@ export default {
   detect(project) {
     let { updates, blocked } = plannedUpdates(project);
 
-    return updates.size > 0 || blocked.length > 0;
+    return updates.size > 0 || (blocked.length > 0 && !blockedRecorded(project));
   },
 
   async check(project) {
@@ -183,6 +205,16 @@ export default {
           "These addons depended on v1 addons, which the Vite build does not load, or moved with them: " +
           Array.from(updates, ([name, release]) => `${name} ${release.version}`).join(", ") +
           ". Check their changelogs for breaking changes.",
+      });
+    }
+
+    if (blocked.length > 0) {
+      recordProgress(project, {
+        id: BLOCKED_ID,
+        status: "check",
+        note:
+          "These v2 addons depend on v1 addons, which the Vite build does not load, and no newer release fits the app yet: " +
+          `${blocked.join("; ")}.`,
       });
     }
 
