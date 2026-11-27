@@ -59,6 +59,7 @@ import lint from "./lint/index.js";
 import inlineContent from "./addons/inline-content.js";
 import powerSelectTypeahead from "./addons/power-select-typeahead.js";
 import leaflet from "./addons/leaflet.js";
+import testWaiters from "./addons/test-waiters.js";
 import legacyBuiltInComponents from "./addons/legacy-built-in-components.js";
 import netlify from "./addons/netlify.js";
 import percyEmber from "./addons/percy.js";
@@ -151,6 +152,10 @@ export const stages = [
    * Before vite, because the old dependencies of v1 addons break the Vite build.
    */
   v2Addons,
+  /**
+   * Before vite, which rejects the type re-exports of the old package.
+   */
+  testWaiters,
   peerCopies,
   peerDependencies,
   /**
