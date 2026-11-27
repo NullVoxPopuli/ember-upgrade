@@ -1,5 +1,6 @@
 import { parseProgram, walk } from "#ast.js";
 import { modernizeTasks } from "#codemods/ember-concurrency/index.js";
+import { buildFile } from "#config-files.js";
 import { Edits } from "#edits.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
@@ -51,6 +52,18 @@ export function addTaskTransform(source, file) {
 }
 
 /**
+ * The compat build merges the `babel` options of ember-cli-build with the Babel config, and Babel stops at a plugin that is in both.
+ *
+ * @param {import('#project.js').Project} project
+ * @returns {boolean} ember-cli-build already adds the transform
+ */
+function buildHasTransform(project) {
+  let file = buildFile(project);
+
+  return Boolean(file && project.read(file).includes(TRANSFORM));
+}
+
+/**
  * @param {import('#project.js').Project} project
  */
 function babelConfig(project) {
@@ -89,7 +102,7 @@ function plan(project) {
 
   let babel = babelConfig(project);
 
-  if (!babel || !addTaskTransform(project.read(babel), babel)) {
+  if (!buildHasTransform(project) && (!babel || !addTaskTransform(project.read(babel), babel))) {
     blockers.push({
       title: "No babel config with a `plugins` array for the transform of ember-concurrency",
       where: babel ? [babel] : [],
@@ -129,9 +142,11 @@ export default {
 
     for (let [file, source] of changes) project.write(file, source);
 
-    let babel = /** @type {string} */ (babelConfig(project));
+    if (!buildHasTransform(project)) {
+      let babel = /** @type {string} */ (babelConfig(project));
 
-    project.write(babel, /** @type {string} */ (addTaskTransform(project.read(babel), babel)));
+      project.write(babel, /** @type {string} */ (addTaskTransform(project.read(babel), babel)));
+    }
 
     let release = published("ember-concurrency");
 
