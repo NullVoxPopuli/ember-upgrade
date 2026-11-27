@@ -255,7 +255,7 @@ const GUIDEMAKER_PR = "https://github.com/ember-learn/guidemaker-ember-template/
  * The built package of the PR branch, from its dist branch, like the dist branch of the upstream repo.
  */
 const GUIDEMAKER_REF =
-  "github:NullVoxPopuli-ai-agent/guidemaker-ember-template#cdc0b796ab3db421d2181b46587fe84ec0c8fd67";
+  "github:NullVoxPopuli-ai-agent/guidemaker-ember-template#7be64fcbfd4296287d8e930edc7553d5e474cb07";
 
 /**
  * guidemaker-ember-template 4.3.0 is a v2 addon, but it depends on ember-concurrency 4, which imports `ember`,
