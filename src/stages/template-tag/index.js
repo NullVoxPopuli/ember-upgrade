@@ -2,6 +2,8 @@ import { join } from "node:path";
 import { runUpstream } from "#process.js";
 import { addonComponents, replaceShims, writeShims } from "./addon-components.js";
 import { fixImports } from "./fix-imports.js";
+import { removeStaleTemplates } from "./stale-templates.js";
+import { recordProgress } from "#progress.js";
 import { atLeast } from "#version.js";
 
 /** @type {import('#types.js').Stage} */
@@ -38,6 +40,18 @@ export default {
       "app/components/**/*.{js,ts,hbs}",
       "app/addons/**/components/**/*.{js,ts,hbs}",
     ];
+
+    let stale = removeStaleTemplates(project);
+
+    if (stale.length > 0) {
+      recordProgress(project, {
+        id: "stale templates",
+        status: "removed",
+        note:
+          "These .hbs files had a .gjs or .gts file of the same name with its own <template>, which the component uses: " +
+          `${stale.join(", ")}. Check that the <template> has what the .hbs file had.`,
+      });
+    }
 
     let components = addonComponents(project);
 
