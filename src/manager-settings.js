@@ -57,34 +57,6 @@ export function pnpmMajor(project) {
 }
 
 /**
- * Sets one entry two levels down in the pnpm settings, such as `packageExtensions` > `name@range` > `dependencies`.
- * pnpm 10 and later read them from pnpm-workspace.yaml, and older versions from the `pnpm` field of package.json.
- *
- * @param {Project} project
- * @param {string} key such as `packageExtensions`
- * @param {string} name such as `ember-styleguide@11.0.3`
- * @param {string} field such as `dependencies`
- * @param {Record<string, string>} values
- */
-export function setPnpmNestedSetting(project, key, name, field, values) {
-  let root = workspaceRoot(project);
-
-  if (pnpmMajor(project) < 10) {
-    editPackageJson(root, (pkg) => {
-      pkg.pnpm ??= {};
-      pkg.pnpm[key] ??= {};
-      pkg.pnpm[key][name] ??= {};
-      pkg.pnpm[key][name][field] = Object.assign({}, pkg.pnpm[key][name][field], values);
-    });
-    return;
-  }
-
-  let source = root.has(WORKSPACE_FILE) ? root.read(WORKSPACE_FILE) : "";
-
-  root.write(WORKSPACE_FILE, setYamlNestedMap(source, key, name, field, values));
-}
-
-/**
  * pnpm 10 reads settings from pnpm-workspace.yaml. pnpm 11 and later read them only from there.
  * Older versions read the `pnpm` field of package.json.
  *

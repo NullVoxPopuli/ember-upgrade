@@ -7,6 +7,7 @@ import { ADDON_CONTENT, contentAddons, withAddonContentOff } from "./config-modu
 import { removeDeadTrees } from "./dead-trees.js";
 import { removeFastBoot } from "./fastboot.js";
 import { addWarpDriveConfig } from "./warp-drive-config.js";
+import { replaceTestWaiters } from "#stages/addons/test-waiters.js";
 
 /**
  * v1 addons depend on older copies of these packages, and the Vite build needs the latest one.
@@ -127,6 +128,7 @@ export default {
     for (let item of removeFastBoot(project)) todo.push(item);
 
     addWarpDriveConfig(project);
+    replaceTestWaiters(project);
 
     for (let [name, fallback] of Object.entries(PINS)) {
       addOverride(project, name, `^${published(name)?.version ?? fallback}`);
