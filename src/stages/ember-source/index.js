@@ -144,6 +144,25 @@ function step(lts) {
         }
 
         /**
+         * The @ember-data packages release together with ember-data, at the same version.
+         * An app that declares one of them gets a second copy of WarpDrive when only ember-data moves.
+         */
+        let emberData = TABLE[lts]["ember-data"];
+
+        if (emberData && updated.includes("ember-data")) {
+          for (let name of dependencyNames(project.packageJson)) {
+            let from = parse(project.dependency(name));
+            let to = parse(emberData);
+
+            if (!name.startsWith("@ember-data/") || !from || !to || compare(from, to) >= 0)
+              continue;
+
+            setDependency(pkg, name, emberData);
+            updated.push(name);
+          }
+        }
+
+        /**
          * A Vite app compiles its own templates with babel-plugin-ember-template-compilation,
          * so only v1 addons need ember-cli-htmlbars.
          */

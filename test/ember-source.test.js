@@ -113,6 +113,29 @@ test("an app on @embroider/webpack keeps @embroider/compat and @embroider/core 3
   expect(app.packageJson.devDependencies?.["ember-source"]).toMatch(/^~6\.8\./);
 });
 
+/**
+ * From ember-learn/guides-source package.json, shortened, after the 6.8 step.
+ */
+test("the @ember-data packages that the app has move with ember-data", async () => {
+  let app = project({
+    devDependencies: {
+      "@ember-data/adapter": "^4.12.0",
+      "@ember-data/model": "^4.12.0",
+      "ember-data": "~5.6.0",
+      "ember-source": "~6.8.0",
+    },
+  });
+  let [step] = await classicLts.expand(app);
+
+  await step.run(app);
+
+  let { devDependencies } = app.packageJson;
+
+  expect(devDependencies?.["@ember-data/adapter"]).toBe(devDependencies?.["ember-data"]);
+  expect(devDependencies?.["@ember-data/model"]).toBe(devDependencies?.["ember-data"]);
+  expect(devDependencies?.["ember-data"]).not.toBe("~5.6.0");
+});
+
 test("an app on an LTS gets no step for it", async () => {
   let app = project({ devDependencies: { "ember-source": "~6.12.0" } });
 
