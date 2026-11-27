@@ -91,16 +91,52 @@ test("a v1 addon with no v2 release moves into the app", async () => {
         "lodash": "^4.0.0",
       },
       "files": {
-        "app/addons/emberx-select/components/x-legacy.hbs": "Old
+        "app/addons/emberx-select/components/x-legacy.hbs": "{{!--
+      Copied from emberx-select by ember-upgrade.
+      emberx-select is a v1 addon with no v2 release,
+      and the Vite build does not load v1 addons.
+      To use the library again, once it has a v2 release:
+      add emberx-select to package.json, import its modules
+      from emberx-select again, and delete the files
+      that have this comment.
+    --}}
+    Old
     ",
-        "app/addons/emberx-select/components/x-legacy.js": "import Component from '@ember/component';
+        "app/addons/emberx-select/components/x-legacy.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    import Component from '@ember/component';
     export default Component.extend({
       tagName: '',
     });
     ",
-        "app/addons/emberx-select/services/x-registry.js": "export default class Registry {}
+        "app/addons/emberx-select/services/x-registry.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    export default class Registry {}
     ",
-        "app/addons/emberx-select/utils/helper.js": "import { noop } from 'lodash';
+        "app/addons/emberx-select/utils/helper.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    import { noop } from 'lodash';
     export function helper() {
       noop();
     }
@@ -108,22 +144,67 @@ test("a v1 addon with no v2 release moves into the app", async () => {
         "app/components/category-position-dropdown.js": "import XSelect from './x-select.js';
     export default class extends XSelect {}
     ",
-        "app/components/x-option.js": "export { default } from "./x-select";
+        "app/components/x-option.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    export { default } from "./x-select";
     ",
-        "app/components/x-select.hbs": "<select>{{yield}}</select>
+        "app/components/x-select.hbs": "{{!--
+      Copied from emberx-select by ember-upgrade.
+      emberx-select is a v1 addon with no v2 release,
+      and the Vite build does not load v1 addons.
+      To use the library again, once it has a v2 release:
+      add emberx-select to package.json, import its modules
+      from emberx-select again, and delete the files
+      that have this comment.
+    --}}
+    <select>{{yield}}</select>
     ",
-        "app/components/x-select.js": "import Component from '@ember/component';
+        "app/components/x-select.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    import Component from '@ember/component';
     import { helper } from '../addons/emberx-select/utils/helper';
     export default Component.extend({});
     ",
         "app/services/x-registry.js": "import Registry from '../addons/emberx-select/services/x-registry.js';
     export default class extends Registry {}
     ",
-        "tests/helpers/emberx-select/index.js": "export function selectOption() {}
+        "tests/helpers/emberx-select/index.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    export function selectOption() {}
     ",
         "tests/helpers/index.js": "export function setupApplicationTest() {}
     ",
-        "tests/helpers/x-select.js": "export default function select() {}
+        "tests/helpers/x-select.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    export default function select() {}
     ",
         "tests/integration/x-select-test.js": "import { selectOption } from '../helpers/emberx-select/index.js';
     ",
@@ -302,7 +383,16 @@ module.exports = {
       </body>
     </html>
     ",
-      "service": "export default class StripeService {}
+      "service": "/**
+     * Copied from ember-stripe-elements by ember-upgrade.
+     * ember-stripe-elements is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add ember-stripe-elements to package.json, import its modules
+     * from ember-stripe-elements again, and delete the files
+     * that have this comment.
+     */
+    export default class StripeService {}
     ",
       "tests": "<html>
       <body>
@@ -543,12 +633,30 @@ export default class XToggle extends Component {}
       return app.toTree();
     };
     ",
-      "component": "import Component from '@ember/component';
+      "component": "/**
+     * Copied from ember-toggle by ember-upgrade.
+     * ember-toggle is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add ember-toggle to package.json, import its modules
+     * from ember-toggle again, and delete the files
+     * that have this comment.
+     */
+    import Component from '@ember/component';
 
     export default class XToggle extends Component {}
     ",
       "dependencies": {},
-      "template": "<label>{{this.onLabel}}</label>
+      "template": "{{!--
+      Copied from ember-toggle by ember-upgrade.
+      ember-toggle is a v1 addon with no v2 release,
+      and the Vite build does not load v1 addons.
+      To use the library again, once it has a v2 release:
+      add ember-toggle to package.json, import its modules
+      from ember-toggle again, and delete the files
+      that have this comment.
+    --}}
+    <label>{{this.onLabel}}</label>
     ",
       "theme": ".x-toggle-ios {}
     ",

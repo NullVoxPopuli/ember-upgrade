@@ -1,6 +1,7 @@
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
+import { resolvePackage } from "#installed.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
@@ -32,6 +33,43 @@ function specifier(from, to) {
   let path = relative(dirname(from), to).split("\\").join("/");
 
   return path.startsWith(".") ? path : `./${path}`;
+}
+
+/**
+ * @param {string} name the addon
+ * @param {string | undefined} version
+ * @returns {string[]} the lines of the header of a copied file
+ */
+function originLines(name, version) {
+  return [
+    `Copied from ${name}${version ? ` ${version}` : ""} by ember-upgrade.`,
+    `${name} is a v1 addon with no v2 release,`,
+    "and the Vite build does not load v1 addons.",
+    "To use the library again, once it has a v2 release:",
+    `add ${name} to package.json, import its modules`,
+    `from ${name} again, and delete the files`,
+    "that have this comment.",
+  ];
+}
+
+/**
+ * @param {string} file
+ * @param {string} contents
+ * @param {string[]} lines
+ * @returns {string} the contents with the header in the comment syntax of the file; HTML and JSON stay as they are
+ */
+export function withOrigin(file, contents, lines) {
+  if (/\.(js|ts|gjs|gts)$/.test(file)) {
+    return `/**\n${lines.map((line) => ` * ${line}`).join("\n")}\n */\n${contents}`;
+  }
+
+  if (/\.hbs$/.test(file))
+    return `{{!--\n${lines.map((line) => `  ${line}`).join("\n")}\n--}}\n${contents}`;
+  if (/\.(css|scss|sass|less)$/.test(file)) {
+    return `/*\n${lines.map((line) => ` * ${line}`).join("\n")}\n */\n${contents}`;
+  }
+
+  return contents;
 }
 
 /**
@@ -94,6 +132,12 @@ export function inlineStage(inline) {
     },
 
     async run(project) {
+      let installed = resolvePackage(project.directory, inline.name);
+      let version = installed
+        ? JSON.parse(readFileSync(join(installed, "package.json"), "utf8")).version
+        : undefined;
+      let lines = originLines(inline.name, version);
+
       /**
        * @param {string} file
        * @param {string} contents
@@ -102,14 +146,16 @@ export function inlineStage(inline) {
         project.write(file, contents);
       };
 
-      for (let [file, contents] of Object.entries(inline.files)) write(file, contents);
+      for (let [file, contents] of Object.entries(inline.files)) {
+        write(file, withOrigin(file, contents, lines));
+      }
 
       for (let [file, contents] of Object.entries(inline.generated?.(project) ?? {})) {
         write(file, contents);
       }
 
       for (let [file, contents] of Object.entries(inline.defaults ?? {})) {
-        if (!project.has(file)) write(file, contents);
+        if (!project.has(file)) write(file, withOrigin(file, contents, lines));
       }
 
       for (let [from, to] of Object.entries(inline.moves ?? {})) {
