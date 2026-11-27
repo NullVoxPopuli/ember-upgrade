@@ -352,7 +352,7 @@ test("guidemaker-ember-template installs from the built branch of its upgrade PR
 
   expect(guidemakerEmberTemplate.detect(app)).toBe(false);
   expect(app.dependency("guidemaker-ember-template")).toMatchInlineSnapshot(
-    `"github:NullVoxPopuli-ai-agent/guidemaker-ember-template#7be64fcbfd4296287d8e930edc7553d5e474cb07"`,
+    `"github:NullVoxPopuli-ai-agent/guidemaker-ember-template#06e4c1025c06d0a5432ff57e3a4d45eb8d13d69c"`,
   );
   expect(app.read("pnpm-workspace.yaml")).toBe("onlyBuiltDependencies:\n  - ember-styleguide\n");
   expect(readProgress(app)[0].links).toEqual([

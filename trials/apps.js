@@ -884,12 +884,10 @@ export const apps = [
       "ember-source-7.4",
       "app-tree",
       "declare-imports",
+      "ember-nvp",
+      "warp-drive-version",
+      "warp-drive",
     ],
-    /**
-     * ember-cli-fastboot is a v1 addon with no stage yet,
-     * and guidemaker-ember-template depends on the v1 addons ember-get-config, ember-href-to and ember-tether.
-     */
-    stopsAt: { stage: "ember-nvp", message: "ember.nvp failed" },
   },
   {
     name: "ember-blog",
