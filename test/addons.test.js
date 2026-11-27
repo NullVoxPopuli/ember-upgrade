@@ -28,6 +28,7 @@ import {
   deprecationWorkflow,
   emberStyleguide,
   emberStyleguideCss,
+  guidemakerEmberTemplate,
 } from "#stages/addons/updates.js";
 
 /**
@@ -340,6 +341,24 @@ test("ember-styleguide installs from git, and pnpm 10 may build it", async () =>
   ]);
 });
 
+test("guidemaker-ember-template installs from the built branch of its upgrade PR, and pnpm may build its ember-styleguide", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "packageManager": "pnpm@10.28.0", "devDependencies": { "guidemaker-ember-template": "^4.2.0" } }`,
+    "pnpm-lock.yaml": "",
+  });
+
+  await guidemakerEmberTemplate.run(app);
+
+  expect(guidemakerEmberTemplate.detect(app)).toBe(false);
+  expect(app.dependency("guidemaker-ember-template")).toMatchInlineSnapshot(
+    `"github:NullVoxPopuli-ai-agent/guidemaker-ember-template#7b3fe5d53b536d822fd22042ab423e7691818321"`,
+  );
+  expect(app.read("pnpm-workspace.yaml")).toBe("onlyBuiltDependencies:\n  - ember-styleguide\n");
+  expect(readProgress(app)[0].links).toEqual([
+    "https://github.com/ember-learn/guidemaker-ember-template/pull/217",
+  ]);
+});
+
 test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml, by the tarball URL for a git-hosted package", async () => {
   let app = project({
     "package.json": `{ "name": "x", "packageManager": "pnpm@12.21.0", "devDependencies": { "ember-styleguide": "^11.3.1" } }`,
@@ -353,7 +372,7 @@ test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml, by the tarbal
     "allowBuilds:
       esbuild: true
       ember-styleguide: true
-      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/dc63dbf4a7730061b4a8d2d6d28116a7a2fa7cc6': true
+      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/94eb2c7558347956a575cec72f34dbbabbdcca6b': true
     "
   `);
   expect(app.packageJson.pnpm).toBeUndefined();

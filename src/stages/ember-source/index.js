@@ -38,9 +38,12 @@ const AMD_BUNDLES = "https://deprecations.emberjs.com/id/using-amd-bundles";
  * ember-source 7 has no AMD template compiler, so each v1 addon needs ember-cli-htmlbars 7,
  * which reads the ES module one. ember-cli-htmlbars 7 adds the async template compilation plugin,
  * which only ember-cli-babel 8 can run. classicEmberSupport() builds v1 addons with both.
+ * ember-cli-babel 8 runs the plugin through broccoli-babel-transpiler, which calls Babel asynchronously from 8.1.
+ * A lockfile can keep 8.0, because the range of ember-cli-babel accepts it.
  * The versions are the fallback when the registry does not answer.
  */
 const EMBER_7_PINS = {
+  "broccoli-babel-transpiler": "8.1.0",
   "ember-cli-babel": "8.3.2",
   "ember-cli-htmlbars": "7.0.1",
 };

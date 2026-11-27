@@ -194,7 +194,7 @@ export const deprecationWorkflow = {
 };
 
 const STYLEGUIDE_PR = "https://github.com/ember-learn/ember-styleguide/pull/551";
-const STYLEGUIDE_SHA = "dc63dbf4a7730061b4a8d2d6d28116a7a2fa7cc6";
+const STYLEGUIDE_SHA = "94eb2c7558347956a575cec72f34dbbabbdcca6b";
 const STYLEGUIDE_REF = `github:NullVoxPopuli-ai-agent/ember-styleguide#${STYLEGUIDE_SHA}`;
 const STYLEGUIDE_TARBALL = `https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/${STYLEGUIDE_SHA}`;
 
@@ -244,6 +244,72 @@ export const emberStyleguide = {
         "ember-styleguide installs from the branch of its v2 pull request, because no v2 version is released. " +
         "Change it to the released version when the pull request is merged.",
       links: [STYLEGUIDE_PR],
+    });
+
+    return [];
+  },
+};
+
+const GUIDEMAKER_PR = "https://github.com/ember-learn/guidemaker-ember-template/pull/217";
+/**
+ * The built package of the PR branch, from its dist branch, like the dist branch of the upstream repo.
+ */
+const GUIDEMAKER_REF =
+  "github:NullVoxPopuli-ai-agent/guidemaker-ember-template#7b3fe5d53b536d822fd22042ab423e7691818321";
+
+/**
+ * guidemaker-ember-template 4.3.0 is a v2 addon, but it depends on ember-concurrency 4, which imports `ember`,
+ * and on the v1 addons ember-power-select 7 and ember-styleguide 11.
+ *
+ * @type {Stage}
+ */
+export const guidemakerEmberTemplate = {
+  name: "guidemaker-ember-template",
+  label:
+    "Install guidemaker-ember-template from the branch of its open dependency upgrade pull request",
+
+  detect(project) {
+    let range = project.dependency("guidemaker-ember-template");
+
+    return Boolean(range) && !range?.includes(":");
+  },
+
+  async check() {
+    return { blockers: [], todo: [] };
+  },
+
+  async run(project) {
+    let release = published("guidemaker-ember-template");
+    let concurrency = release?.dependencies?.["ember-concurrency"];
+
+    if (release && concurrency && atLeast(concurrency, 5, 0)) {
+      editPackageJson(project, (pkg) =>
+        setDependency(pkg, "guidemaker-ember-template", `^${release.version}`),
+      );
+      return [];
+    }
+
+    editPackageJson(project, (pkg) =>
+      setDependency(pkg, "guidemaker-ember-template", GUIDEMAKER_REF),
+    );
+
+    /**
+     * The branch depends on ember-styleguide from git, which pnpm builds.
+     */
+    if (packageManager(project) === "pnpm") {
+      allowBuild(project, "ember-styleguide");
+
+      if (pnpmMajor(project) >= 11) allowBuild(project, `ember-styleguide@${STYLEGUIDE_TARBALL}`);
+    }
+
+    recordProgress(project, {
+      id: "guidemaker-ember-template",
+      status: "git-ref",
+      note:
+        "guidemaker-ember-template installs from the branch of its dependency upgrade pull request, " +
+        "because no release has ember-concurrency 5 and the v2 ember-styleguide. " +
+        "Change it to the released version when the pull request is merged.",
+      links: [GUIDEMAKER_PR],
     });
 
     return [];

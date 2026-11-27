@@ -28,6 +28,7 @@ import {
   deprecationWorkflow,
   emberStyleguide,
   emberStyleguideCss,
+  guidemakerEmberTemplate,
   svgJar,
   v2Addons,
   v2AddonsVite,
@@ -119,6 +120,7 @@ export const stages = [
    */
   prember,
   emberStyleguide,
+  guidemakerEmberTemplate,
   emberCli,
   emberFetch,
   composableHelpers,
