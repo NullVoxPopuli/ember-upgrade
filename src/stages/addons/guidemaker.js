@@ -12,7 +12,7 @@ const PR = "https://github.com/empress/guidemaker/pull/124";
 /**
  * The built package of the PR branch, from a dist branch.
  */
-const REF = "github:NullVoxPopuli-ai-agent/guidemaker#29c4ff1f6544012803d41f362502af205feac9dd";
+const REF = "github:NullVoxPopuli-ai-agent/guidemaker#26f2d4a4a876f0ce3e95d2ea44790fcff87a8fe3";
 
 /**
  * @param {Project} project

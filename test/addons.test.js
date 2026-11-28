@@ -422,7 +422,7 @@ test("guidemaker installs from the built branch of its v2 PR, and its options mo
 
   expect(guidemaker.detect(app)).toBe(false);
   expect(app.dependency("guidemaker")).toMatchInlineSnapshot(
-    `"github:NullVoxPopuli-ai-agent/guidemaker#29c4ff1f6544012803d41f362502af205feac9dd"`,
+    `"github:NullVoxPopuli-ai-agent/guidemaker#26f2d4a4a876f0ce3e95d2ea44790fcff87a8fe3"`,
   );
   expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
     "'use strict';
