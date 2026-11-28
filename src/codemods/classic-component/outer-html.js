@@ -156,14 +156,18 @@ export function writeOuterHtml(template, component, options = {}) {
 
   let opening = `<${tag} ${attributes.join(" ")}`;
 
-  if (VOID.has(tag) && template.trim() === "" && !start && !end) {
-    return { template: `${opening} />\n`, events };
-  }
-
   /**
    * The body stays as it was, because indentation would change the whitespace of rendered text.
    */
-  let body = template.endsWith("\n") ? template : `${template}\n`;
+  let body = template.trim() === "" || template.endsWith("\n") ? template : `${template}\n`;
+
+  /**
+   * A void element cannot hold content, such as the comment of a copied addon, or the helper calls.
+   * They go next to it, and the helpers render nothing.
+   */
+  if (VOID.has(tag)) {
+    return { template: `${body.trim() === "" ? "" : body}${start}${opening} />\n${end}`, events };
+  }
 
   return { template: `${opening}>\n${start}${body}${end}</${tag}>\n`, events };
 }

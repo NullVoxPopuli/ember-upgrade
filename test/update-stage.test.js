@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import { updateStage, v2Addons } from "#stages/addons/updates.js";
+import { updateStage, v2Addons, v2AddonsVite } from "#stages/addons/updates.js";
 
 /**
  * @param {Record<string, string>} files
@@ -194,4 +194,46 @@ test("an update stays at the major that the peer ranges of the installed addons 
   let stages = await v2Addons.expand(app);
 
   expect(stages.map((stage) => stage.name)).toEqual([]);
+});
+
+/**
+ * From documize: ember-toggle moves into the app after the vite stage, and brings its v1 ember-gesture-modifiers,
+ * whose latest release is a v2 addon.
+ */
+test("after the vite stage, a v1 dependency of an addon that moves into the app updates", async () => {
+  let toggle = "node_modules/ember-toggle";
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-source": "~6.12.0", "ember-toggle": "^7.1.1" },
+    }),
+    [`${toggle}/package.json`]: JSON.stringify({
+      name: "ember-toggle",
+      version: "7.1.1",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-cli-babel": "7.22.1", "ember-gesture-modifiers": "^1.0.0" },
+    }),
+    [`${toggle}/index.js`]:
+      "'use strict';\n\nmodule.exports = { name: require('./package').name };\n",
+    [`${toggle}/addon/components/x-toggle/component.js`]:
+      "import Component from '@ember/component';\nexport default Component.extend({});\n",
+    [`${toggle}/addon/components/x-toggle/template.hbs`]: "<span>{{yield}}</span>\n",
+    [`${toggle}/node_modules/ember-gesture-modifiers/package.json`]: JSON.stringify({
+      name: "ember-gesture-modifiers",
+      version: "1.1.1",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-cli-babel": "^7.26.0" },
+    }),
+    [`${toggle}/node_modules/ember-gesture-modifiers/index.js`]:
+      "'use strict';\n\nmodule.exports = { name: require('./package').name };\n",
+    [`${toggle}/node_modules/ember-gesture-modifiers/app/modifiers/did-pan.js`]:
+      "export { default } from 'ember-gesture-modifiers/modifiers/did-pan';\n",
+    "package-lock.json": "{}",
+  });
+
+  let stages = await v2AddonsVite.expand(app);
+
+  expect(stages.map((stage) => stage.name)).toEqual([
+    "ember-toggle",
+    "update-ember-gesture-modifiers",
+  ]);
 });

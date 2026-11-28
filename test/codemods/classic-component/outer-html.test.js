@@ -107,3 +107,33 @@ export default Component.extend({ tagName: 'input', attributeBindings: ['value']
     }
   `);
 });
+
+/**
+ * From code-corps, which copies ember-radio-button's input component with a comment as its template.
+ */
+test("a void tag keeps its comment and helper calls next to the element", () => {
+  let component = readClassicComponent(
+    `import Component from '@ember/component';
+export default Component.extend({ tagName: 'input' });
+`,
+    "component.js",
+  );
+
+  if (!component) throw new Error("not a classic component");
+
+  expect(
+    writeOuterHtml("{{! Copied from ember-radio-button }}\n", component, {
+      start: "{{(this.setup)}}",
+      end: "{{this.afterRender this.focus}}",
+    }),
+  ).toMatchInlineSnapshot(`
+    {
+      "events": [],
+      "template": "{{! Copied from ember-radio-button }}
+    {{(this.setup)}}
+    <input ...attributes />
+    {{this.afterRender this.focus}}
+    ",
+    }
+  `);
+});

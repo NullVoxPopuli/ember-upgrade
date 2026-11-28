@@ -909,7 +909,10 @@ function v2AddonsGroup(afterVite) {
         let inline = release?.v2 ? undefined : inlineV1Stage(project, name, from);
 
         if (release?.v2) {
-          if (!afterVite) stages.push(updateStage(name, release));
+          /**
+           * After the vite stage, only the dependencies of the addons that this group moves into the app are new.
+           */
+          if (!afterVite || from) stages.push(updateStage(name, release));
         } else if (inline) {
           /**
            * Before the vite stage, the classic build checks each step, and it pairs templates only in app/components.

@@ -252,3 +252,36 @@ export default class Item extends Component {}
     "
   `);
 });
+
+/**
+ * From ember-ajax 3.1.0 addon/mixins/ajax-request.js, which apps copy into app/addons.
+ */
+test("Ember.Logger becomes console, and a destructured testing reads isTesting() once", () => {
+  let result = transform(
+    `import { warn } from '@ember/debug';
+import Ember from 'ember';
+
+const { Logger, testing, run } = Ember;
+
+if (testing) Logger.warn('a');
+Ember.Logger.error('b');
+run(() => {});
+`,
+    "app/addons/ember-ajax/mixins/ajax-request.js",
+  );
+
+  expect(result.todo).toEqual([]);
+  expect(result.code).toMatchInlineSnapshot(`
+    "import { warn } from '@ember/debug';
+    import { run } from '@ember/runloop';
+    import { isTesting } from '@ember/debug';
+
+    const Logger = console;
+    const testing = isTesting();
+
+    if (testing) Logger.warn('a');
+    console.error('b');
+    run(() => {});
+    "
+  `);
+});
