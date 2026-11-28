@@ -892,7 +892,6 @@ export const apps = [
       "warp-drive",
       "undeprecate-inject",
       "unused-dependencies",
-      "ci-workflows",
       "format",
       "lint",
     ],
