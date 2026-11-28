@@ -869,7 +869,6 @@ export const apps = [
   },
   {
     name: "cli-guides",
-    wip: true,
     repo: "ember-learn/cli-guides",
     sha: "c43fc18474ad0c2d4c9b1f6b6adaa254921ea650",
     completed: [
