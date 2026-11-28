@@ -89,7 +89,8 @@ jobs:
     # Playwright does not support Chromium on Ubuntu 26.04, and some trial apps install it.
     runs-on: ubuntu-24.04
     # ember-api-docs runs many ember-source steps, with a build after each one.
-    timeout-minutes: 90
+    # guides-source builds its 14,610 content files after each stage: 64 to 90+ minutes.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
