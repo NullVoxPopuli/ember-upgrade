@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@glimmer/syntax':
+        specifier: ^0.97.0
+        version: 0.97.0
       '@oxc-parser/binding-wasm32-wasi':
         specifier: 0.130.0
         version: 0.130.0

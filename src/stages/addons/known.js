@@ -55,15 +55,7 @@ export const IGNORED = new Set([
  *
  * @type {Map<string, { note: string, links: string[] }>}
  */
-export const NO_V2_YET = new Map([
-  [
-    "@percy/ember",
-    {
-      note: "No v2 release, and no v2 branch to install from git. The addon is a small wrapper around @percy/sdk-utils.",
-      links: ["https://github.com/percy/ember-percy"],
-    },
-  ],
-]);
+export const NO_V2_YET = new Map([]);
 
 /**
  * @param {Record<string, any>} manifest

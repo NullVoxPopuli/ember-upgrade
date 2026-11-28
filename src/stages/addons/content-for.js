@@ -20,7 +20,7 @@ const PLACEHOLDER = /^([ \t]*)\{\{content-for ["']([\w-]+)["']\}\}[ \t]*$/gm;
  * @param {Project} project
  * @returns {((environment: string) => Record<string, unknown>) | undefined} the app's config/environment.js
  */
-function appConfig(project) {
+export function appConfig(project) {
   let require = createRequire(join(project.directory, "package.json"));
 
   for (let file of ["config/environment.js", "config/environment.cjs"]) {

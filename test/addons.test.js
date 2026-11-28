@@ -16,10 +16,21 @@ import {
   updatePowerSelect,
   withOptionClicks,
 } from "#stages/addons/power-select.js";
-import { emberCliDeploy, obsoleteAddons } from "#stages/addons/removals.js";
+import {
+  emberCliDeploy,
+  emberGetConfig,
+  obsoleteAddons,
+  prember,
+} from "#stages/addons/removals.js";
+import { guidemaker } from "#stages/addons/guidemaker.js";
 import { commonJsToEsm, emberCliHead } from "#stages/addons/inline.js";
 import { iconsModule, rewriteDynamicIcons } from "#stages/addons/svg-jar-icons.js";
-import { deprecationWorkflow, emberStyleguide } from "#stages/addons/updates.js";
+import {
+  deprecationWorkflow,
+  emberStyleguide,
+  emberStyleguideCss,
+  guidemakerEmberTemplate,
+} from "#stages/addons/updates.js";
 
 /**
  * @param {Record<string, string>} files
@@ -331,7 +342,163 @@ test("ember-styleguide installs from git, and pnpm 10 may build it", async () =>
   ]);
 });
 
-test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml", async () => {
+test("guidemaker-ember-template installs from the built branch of its upgrade PR, and pnpm may build its ember-styleguide", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "packageManager": "pnpm@10.28.0", "devDependencies": { "guidemaker-ember-template": "^4.2.0" } }`,
+    "pnpm-lock.yaml": "",
+  });
+
+  await guidemakerEmberTemplate.run(app);
+
+  expect(guidemakerEmberTemplate.detect(app)).toBe(false);
+  expect(app.dependency("guidemaker-ember-template")).toMatchInlineSnapshot(
+    `"github:NullVoxPopuli-ai-agent/guidemaker-ember-template#06e4c1025c06d0a5432ff57e3a4d45eb8d13d69c"`,
+  );
+  expect(app.read("pnpm-workspace.yaml")).toBe("onlyBuiltDependencies:\n  - ember-styleguide\n");
+  expect(readProgress(app)[0].links).toEqual([
+    "https://github.com/ember-learn/guidemaker-ember-template/pull/217",
+  ]);
+});
+
+/**
+ * From ember-learn/guides-source, after the vite stage.
+ */
+const GUIDES_BUILD = `'use strict';
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+// All versions since this one will be built on every PR or locally
+const BUILD_SINCE = '5.8.0';
+
+let guidemakerConfig = {};
+
+const { compatBuild } = require('@embroider/compat');
+
+if (!process.env.ALL_VERSIONS) {
+  guidemakerConfig.premberVersionFilter = BUILD_SINCE;
+}
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+
+  const app = new EmberApp(defaults, {
+    guidemaker: guidemakerConfig,
+  });
+
+  return compatBuild(app, buildOnce);
+};
+
+module.exports.BUILD_SINCE = BUILD_SINCE;
+`;
+
+const GUIDES_VITE = `import { defineConfig } from 'vite';
+import { extensions, classicEmberSupport, ember } from '@embroider/vite';
+import { babel } from '@rollup/plugin-babel';
+
+export default defineConfig({
+  plugins: [
+    classicEmberSupport(),
+    ember(),
+    babel({
+      babelHelpers: 'runtime',
+      extensions,
+    }),
+  ],
+});
+`;
+
+test("guidemaker installs from the built branch of its v2 PR, and its options move out of ember-cli-build", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@embroider/vite": "^1.0.0", guidemaker: "^4.0.6", showdown: "^2.1.0" },
+    }),
+    "ember-cli-build.js": GUIDES_BUILD,
+    "vite.config.mjs": GUIDES_VITE,
+  });
+
+  expect(guidemaker.detect(app)).toBe(true);
+  expect((await guidemaker.check(app)).blockers).toEqual([]);
+
+  await guidemaker.run(app);
+
+  expect(guidemaker.detect(app)).toBe(false);
+  expect(app.dependency("guidemaker")).toMatchInlineSnapshot(
+    `"github:NullVoxPopuli-ai-agent/guidemaker#26f2d4a4a876f0ce3e95d2ea44790fcff87a8fe3"`,
+  );
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    // All versions since this one will be built on every PR or locally
+    const BUILD_SINCE = '5.8.0';
+
+    const { compatBuild } = require('@embroider/compat');
+
+    module.exports = async function (defaults) {
+      const { buildOnce } = await import('@embroider/vite');
+
+      const app = new EmberApp(defaults, {});
+
+      return compatBuild(app, buildOnce);
+    };
+
+    module.exports.BUILD_SINCE = BUILD_SINCE;
+    "
+  `);
+  expect(app.read("vite.config.mjs")).toMatchInlineSnapshot(`
+    "import { defineConfig } from 'vite';
+    import { extensions, classicEmberSupport, ember } from '@embroider/vite';
+    import { babel } from '@rollup/plugin-babel';
+    import { guidemaker } from "guidemaker/vite";
+
+    export default defineConfig({
+      plugins: [
+        classicEmberSupport(),
+        ember(),
+        babel({
+          babelHelpers: 'runtime',
+          extensions,
+        }),
+        guidemaker(),
+      ],
+    });
+    "
+  `);
+  expect(readProgress(app).map((entry) => `${entry.id}: ${entry.status}`)).toEqual([
+    "guidemaker: build options: removed",
+    "guidemaker: git-ref",
+  ]);
+});
+
+test("guidemaker passes a source package of the guides to its Vite plugin", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@embroider/vite": "^1.0.0", guidemaker: "^4.0.6" },
+    }),
+    "ember-cli-build.js": `const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+module.exports = function (defaults) {
+  let app = new EmberApp(defaults, {
+    fingerprint: { extensions: ['js'] },
+    guidemaker: { source: '@ember-learn/guides-source' },
+  });
+
+  return app.toTree();
+};
+`,
+    "vite.config.mjs": GUIDES_VITE,
+  });
+
+  await guidemaker.run(app);
+
+  expect(app.read("vite.config.mjs")).toContain(
+    `guidemaker({ source: "@ember-learn/guides-source" })`,
+  );
+  expect(app.read("ember-cli-build.js")).not.toContain("guidemaker");
+  expect(app.dependency("showdown")).toBe("^2.1.0");
+  expect(readProgress(app).map((entry) => entry.id)).toEqual(["guidemaker"]);
+});
+
+test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml, by the tarball URL for a git-hosted package", async () => {
   let app = project({
     "package.json": `{ "name": "x", "packageManager": "pnpm@12.21.0", "devDependencies": { "ember-styleguide": "^11.3.1" } }`,
     "pnpm-lock.yaml": "",
@@ -340,9 +507,13 @@ test("pnpm 11 and later read allowBuilds from pnpm-workspace.yaml", async () => 
 
   await emberStyleguide.run(app);
 
-  expect(app.read("pnpm-workspace.yaml")).toBe(
-    "allowBuilds:\n  esbuild: true\n  ember-styleguide: true\n",
-  );
+  expect(app.read("pnpm-workspace.yaml")).toMatchInlineSnapshot(`
+    "allowBuilds:
+      esbuild: true
+      ember-styleguide: true
+      'ember-styleguide@https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/eb7f1b2dca5dca0f9351fae29243c52d7857c490': true
+    "
+  `);
   expect(app.packageJson.pnpm).toBeUndefined();
 });
 
@@ -781,6 +952,41 @@ test("selectChoose comes from the test-support entry of ember-power-select 9", (
   `);
 });
 
+/**
+ * From TryGhost/Ghost ghost/admin/app/components/power-select-vertical-collection-options.hbs (MIT), shortened, with a call of the `-present` helper added.
+ */
+test("ember-power-select-is-selected is ember-power-select-is-equal in ember-power-select 8 and later", () => {
+  expect(
+    updatePowerSelect(
+      `{{#vertical-collection @options minHeight=30 as |opt index|}}
+    <li class="ember-power-select-option"
+        aria-selected="{{ember-power-select-is-selected opt @select.selected}}"
+        {{ember-power-select-is-selected-present}}>
+    </li>
+{{/vertical-collection}}
+`,
+      "app/components/power-select-vertical-collection-options.hbs",
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "template": "{{#vertical-collection @options minHeight=30 as |opt index|}}
+        <li class="ember-power-select-option"
+            aria-selected="{{ember-power-select-is-equal opt @select.selected}}"
+            {{ember-power-select-is-selected-present}}>
+        </li>
+    {{/vertical-collection}}
+    ",
+      "unreadable": [],
+    }
+  `);
+  expect(
+    updatePowerSelect(
+      `import { emberPowerSelectIsSelected } from 'ember-power-select/helpers/ember-power-select-is-selected';\n`,
+      "app/utils/x.js",
+    ).unreadable,
+  ).toHaveLength(1);
+});
+
 test("the application template gets the wormhole of ember-basic-dropdown", () => {
   let app = project({
     "package.json": "{}",
@@ -863,4 +1069,380 @@ test('Each option is also a link to where it would go', async function (assert) 
     });
     "
   `);
+});
+
+/**
+ * From ember-learn/upgrade-guide app/app.js, shortened.
+ */
+test("an app on Vite imports the CSS of the v2 ember-styleguide, before its own stylesheets", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "@embroider/vite": "^1.7.2", "ember-styleguide": "^11.0.0" } }`,
+    "package-lock.json": "{}",
+    "app/app.js": `import Application from '@ember/application';
+import Resolver from 'ember-resolver';
+import './styles/app.css';
+
+export default class App extends Application {}
+`,
+  });
+
+  await emberStyleguide.run(app);
+  await emberStyleguide.run(app);
+
+  expect(app.read("app/app.js")).toMatchInlineSnapshot(`
+    "import Application from '@ember/application';
+    import Resolver from 'ember-resolver';
+    import 'ember-styleguide/styles.css';
+    import './styles/app.css';
+
+    export default class App extends Application {}
+    "
+  `);
+});
+
+test("a classic app imports the CSS of the v2 ember-styleguide after the vite stage", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "ember-styleguide": "^11.0.0" } }`,
+    "package-lock.json": "{}",
+    "app/app.js": "import './styles/app.css';\n",
+  });
+
+  await emberStyleguide.run(app);
+
+  expect(app.read("app/app.js")).toBe("import './styles/app.css';\n");
+  expect(emberStyleguideCss.detect(app)).toBe(false);
+
+  app.write(
+    "package.json",
+    JSON.stringify(
+      Object.assign(app.packageJson, {
+        devDependencies: Object.assign({}, app.packageJson.devDependencies, {
+          "@embroider/vite": "^1.7.2",
+        }),
+      }),
+    ),
+  );
+
+  expect(emberStyleguideCss.detect(app)).toBe(true);
+
+  await emberStyleguideCss.run(app);
+
+  expect(app.read("app/app.js")).toBe(
+    "import 'ember-styleguide/styles.css';\nimport './styles/app.css';\n",
+  );
+  expect(emberStyleguideCss.detect(app)).toBe(false);
+});
+
+/**
+ * From ember-learn/ember-website (MIT), after the vite stage, shortened: index.html links app.css.
+ */
+test("the CSS of the v2 ember-styleguide goes at the top of the stylesheet that index.html links", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "ember-styleguide": "^12.0.0", "@embroider/vite": "^1.7.2" } }`,
+    "package-lock.json": "{}",
+    "app/app.js": "import Application from '@ember/application';\n",
+    "app/styles/app.css": `/* stylelint-disable import-notation */\n@import "components/faqs.css";\n`,
+  });
+
+  expect(emberStyleguideCss.detect(app)).toBe(true);
+
+  await emberStyleguideCss.run(app);
+
+  expect(app.read("app/styles/app.css")).toMatchInlineSnapshot(`
+    "/* stylelint-disable import-notation */
+    @import "ember-styleguide/styles.css";
+    @import "components/faqs.css";
+    "
+  `);
+  expect(app.read("app/app.js")).toBe("import Application from '@ember/application';\n");
+  expect(emberStyleguideCss.detect(app)).toBe(false);
+});
+
+/**
+ * From ember-learn/ember-website ember-cli-build.js (MIT), after the vite stage, shortened.
+ */
+test("the require of a removed package goes when nothing reads it", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "prember": "^2.1.0" } }`,
+    "package-lock.json": "{}",
+    "ember-cli-build.js": `'use strict';
+
+const { compatBuild } = require('@embroider/compat');
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { prerender } = require('prember');
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  const app = new EmberApp(defaults, {
+    prember: { urls: ['/', 'teams'] },
+  });
+
+  return compatBuild(app, buildOnce);
+};
+`,
+  });
+
+  expect(await prember.run(app)).toEqual([]);
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+
+    const { compatBuild } = require('@embroider/compat');
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    module.exports = async function (defaults) {
+      const { buildOnce } = await import('@embroider/vite');
+      const app = new EmberApp(defaults, {});
+
+      return compatBuild(app, buildOnce);
+    };
+    "
+  `);
+});
+
+/**
+ * From ember-learn/deprecation-app ember-cli-build.js (MIT), after the vite stage, shortened.
+ */
+test("a helper that only the prember URLs called goes, with its requires", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "prember": "^2.1.0" } }`,
+    "package-lock.json": "{}",
+    "ember-cli-build.js": `'use strict';
+const walkSync = require('walk-sync');
+const path = require('path');
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+const getDeprecationFilenames = function () {
+  return walkSync('content', { globs: ['**/*.md'] }).map(
+    (filename) => \`/id/\${path.basename(filename, '.md')}\`
+  );
+};
+
+module.exports = async function (defaults) {
+  let app = new EmberApp(defaults, {
+    prember: { urls: ['/', ...getDeprecationFilenames()] },
+  });
+
+  return app;
+};
+`,
+  });
+
+  expect(await prember.run(app)).toEqual([]);
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    module.exports = async function (defaults) {
+      let app = new EmberApp(defaults, {});
+
+      return app;
+    };
+    "
+  `);
+});
+
+/**
+ * From ember-body-class 3.x (MIT), as the inline step writes it into the app.
+ */
+test("ember-get-config goes, and its imports name the app's config/environment", async () => {
+  let app = project({
+    "package.json": `{ "name": "ember-website", "devDependencies": { "ember-get-config": "^0.5.0" } }`,
+    "package-lock.json": "{}",
+    "app/instance-initializers/body-class.js":
+      "import config from 'ember-get-config';\nexport function initialize() {}\n",
+  });
+
+  await emberGetConfig.run(app);
+
+  expect(app.read("app/instance-initializers/body-class.js")).toMatchInlineSnapshot(`
+    "import config from 'ember-website/config/environment';
+    export function initialize() {}
+    "
+  `);
+  expect(emberGetConfig.detect(app)).toBe(false);
+});
+
+/**
+ * From ember-learn/ember-website ember-cli-build.js (MIT), before the vite stage, shortened.
+ */
+test("prember's prerender call leaves the tree that it wrapped", async () => {
+  let app = project({
+    "package.json": `{ "name": "x", "devDependencies": { "prember": "^2.1.0" } }`,
+    "package-lock.json": "{}",
+    "ember-cli-build.js": `'use strict';
+
+const { compatBuild } = require('@embroider/compat');
+const { Webpack } = require('@embroider/webpack');
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { prerender } = require('prember');
+
+module.exports = function (defaults) {
+  const app = new EmberApp(defaults, {
+    prember: { urls: ['/', 'teams'] },
+  });
+
+  const compiledApp = compatBuild(app, Webpack, {});
+
+  return prerender(app, compiledApp);
+};
+`,
+  });
+
+  expect(await prember.run(app)).toEqual([]);
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+
+    const { compatBuild } = require('@embroider/compat');
+    const { Webpack } = require('@embroider/webpack');
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    module.exports = function (defaults) {
+      const app = new EmberApp(defaults, {});
+
+      const compiledApp = compatBuild(app, Webpack, {});
+
+      return compiledApp;
+    };
+    "
+  `);
+});
+
+/**
+ * From ember-learn/deprecation-app app/services/search.js (MIT), shortened.
+ */
+test("the decorators of ember-concurrency-decorators come from ember-concurrency", async () => {
+  let { emberConcurrencyDecorators } = await import("#stages/addons/removals.js");
+  let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
+
+  mkdirSync(join(directory, "app/services"), { recursive: true });
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({
+      devDependencies: { "ember-concurrency": "^2.1.2", "ember-concurrency-decorators": "^2.0.3" },
+    }),
+  );
+  writeFileSync(
+    join(directory, "app/services/search.js"),
+    "import { task } from 'ember-concurrency-decorators';\n",
+  );
+
+  let app = new Project(directory);
+
+  expect(emberConcurrencyDecorators.detect(app)).toBe(true);
+
+  await emberConcurrencyDecorators.run(app);
+
+  expect(app.read("app/services/search.js")).toBe("import { task } from 'ember-concurrency';\n");
+  expect(Object.keys(JSON.parse(app.read("package.json")).devDependencies)).toEqual([
+    "ember-concurrency",
+  ]);
+});
+
+/**
+ * From ember-learn/guides-source: guidemaker's app tree has the head template, and the app has none.
+ */
+test("ember-cli-head takes the head template from an addon's app tree", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-cli-head": "^2.0.0", guidemaker: "^4.0.4" },
+    }),
+    "node_modules/ember-cli-head/package.json": JSON.stringify({
+      name: "ember-cli-head",
+      version: "2.0.0",
+      license: "MIT",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/guidemaker/package.json": JSON.stringify({
+      name: "guidemaker",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/guidemaker/app/templates/head.hbs": "<title>{{this.model.title}}</title>\n",
+  });
+
+  expect((await emberCliHead.check(app)).blockers).toEqual([]);
+
+  await emberCliHead.run(app);
+
+  expect(app.read("app/components/head-content.hbs")).toBe("<title>{{this.model.title}}</title>\n");
+  expect(app.read("app/components/head-content.js")).toContain(
+    "Copied from ember-cli-head 2.0.0 (MIT) by ember-upgrade.",
+  );
+});
+
+test("ember-cli-head keeps the head modules of the addons that ember-cli merged over its own", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-cli-head": "^2.0.0", guidemaker: "^4.0.6" },
+    }),
+    "node_modules/ember-cli-head/package.json": JSON.stringify({
+      name: "ember-cli-head",
+      version: "2.0.0",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/ember-cli-head/app/templates/head.hbs":
+      "<!-- ember-cli-head/templates/head.hbs -->\n",
+    "node_modules/guidemaker/package.json": JSON.stringify({
+      name: "guidemaker",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-meta": "^2.0.0" },
+    }),
+    "node_modules/guidemaker/app/services/head-data.js":
+      "export { default } from 'guidemaker/services/head-data';\n",
+    "node_modules/guidemaker/node_modules/ember-meta/package.json": JSON.stringify({
+      name: "ember-meta",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/guidemaker/node_modules/ember-meta/app/templates/head.hbs":
+      "<title>{{this.model.title}}</title>\n",
+  });
+
+  await emberCliHead.run(app);
+
+  expect(app.read("app/components/head-content.hbs")).toBe("<title>{{this.model.title}}</title>\n");
+  expect(app.read("app/services/head-data.js")).toBe(
+    "export { default } from 'guidemaker/services/head-data';\n",
+  );
+});
+
+test("ember-cli-head re-exports the head component of a v2 addon, without a head template", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "ember-cli-head": "^2.0.0", guidemaker: "^5.0.0" },
+    }),
+    "node_modules/ember-cli-head/package.json": JSON.stringify({
+      name: "ember-cli-head",
+      version: "2.0.0",
+      keywords: ["ember-addon"],
+    }),
+    "node_modules/ember-cli-head/app/templates/head.hbs":
+      "<!-- ember-cli-head/templates/head.hbs -->\n",
+    "node_modules/guidemaker/package.json": JSON.stringify({
+      name: "guidemaker",
+      keywords: ["ember-addon"],
+      "ember-addon": {
+        version: 2,
+        "app-js": {
+          "./components/head-content.js": "./dist/_app_/components/head-content.js",
+          "./services/head-data.js": "./dist/_app_/services/head-data.js",
+        },
+      },
+    }),
+    "node_modules/guidemaker/dist/_app_/components/head-content.js":
+      'export { default } from "guidemaker/components/head-content";\n',
+    "node_modules/guidemaker/dist/_app_/services/head-data.js":
+      'export { default } from "guidemaker/services/head-data";\n',
+  });
+
+  expect((await emberCliHead.check(app)).blockers).toEqual([]);
+
+  await emberCliHead.run(app);
+
+  expect(app.read("app/components/head-content.js")).toBe(
+    'export { default } from "guidemaker/components/head-content";\n',
+  );
+  expect(app.read("app/services/head-data.js")).toBe(
+    'export { default } from "guidemaker/services/head-data";\n',
+  );
+  expect(app.has("app/components/head-content.hbs")).toBe(false);
+  expect(app.has("app/components/head-layout.gjs")).toBe(true);
 });

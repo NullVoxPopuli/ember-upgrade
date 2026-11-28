@@ -186,3 +186,170 @@ module.exports = async function (defaults) {
     }
   `);
 });
+
+/**
+ * From documize/community gui/ember-cli-build.js, after the vite stage, shortened.
+ */
+test("the extra stylesheets of outputPaths become URL imports, by the path that they had", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "@embroider/vite": "^1.0.0" } }),
+    "ember-cli-build.js": `'use strict';
+
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { compatBuild } = require('@embroider/compat');
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  let app = new EmberApp(defaults, {
+    outputPaths: {
+      app: {
+        css: {
+          'app': '/assets/documize.css',
+          'themes/forest': '/assets/theme-forest.css',
+          'themes/brave': '/assets/theme-brave.css',
+        }
+      }
+    },
+  });
+
+  return compatBuild(app, buildOnce);
+};
+`,
+    "app/styles/app.scss": "",
+    "app/styles/themes/forest.scss": "",
+    "app/styles/themes/brave.scss": "",
+  });
+
+  expect(buildSettings.detect(app)).toBe(true);
+
+  await buildSettings.run(app);
+
+  expect(app.read("ember-cli-build.js")).not.toContain("outputPaths");
+  expect(app.read("app/styles/output-paths.js")).toMatchInlineSnapshot(`
+    "import stylesheet0 from "./themes/forest.scss?url";
+    import stylesheet1 from "./themes/brave.scss?url";
+
+    /**
+     * The URL of each stylesheet that ember-cli-build built as its own file, by the path that it had.
+     */
+    export default {
+      "/assets/theme-forest.css": stylesheet0,
+      "/assets/theme-brave.css": stylesheet1,
+    };
+    "
+  `);
+});
+
+/**
+ * From ember-learn/upgrade-guide ember-cli-build.js, shortened.
+ */
+test("an empty extraPublicTrees goes", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "@embroider/vite": "^1.7.2" } }),
+    "ember-cli-build.js": `'use strict';
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { compatBuild } = require('@embroider/compat');
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  const app = new EmberApp(defaults, {});
+
+  return compatBuild(app, buildOnce, {
+    extraPublicTrees: [],
+  });
+};
+`,
+  });
+
+  expect(buildSettings.detect(app)).toBe(true);
+
+  await buildSettings.run(app);
+
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "'use strict';
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+    const { compatBuild } = require('@embroider/compat');
+
+    module.exports = async function (defaults) {
+      const { buildOnce } = await import('@embroider/vite');
+      const app = new EmberApp(defaults, {});
+
+      return compatBuild(app, buildOnce, {
+      });
+    };
+    "
+  `);
+  expect(buildSettings.detect(app)).toBe(false);
+});
+
+/**
+ * From ember-learn/ember-website ember-cli-build.js (MIT), after the vite stage, shortened.
+ */
+test("a babel option with only ember-auto-import's plugin, and the ifa option, go", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "@embroider/vite": "^1.7.2" } }),
+    "ember-cli-build.js": `module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  const app = new EmberApp(defaults, {
+    babel: {
+      plugins: [require.resolve('ember-auto-import/babel-plugin')],
+    },
+    ifa: {
+      enabled: true,
+      inline: true,
+    },
+  });
+
+  return compatBuild(app, buildOnce);
+};
+`,
+  });
+
+  expect(buildSettings.detect(app)).toBe(true);
+
+  await buildSettings.run(app);
+
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "module.exports = async function (defaults) {
+      const { buildOnce } = await import('@embroider/vite');
+      const app = new EmberApp(defaults, {});
+
+      return compatBuild(app, buildOnce);
+    };
+    "
+  `);
+  expect(buildSettings.detect(app)).toBe(false);
+});
+
+/**
+ * From ember-learn/ember-api-docs ember-cli-build.js (MIT), after the vite stage, shortened.
+ */
+test("an option of an addon that the app does not have goes", async () => {
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "@embroider/vite": "^1.7.2" } }),
+    "ember-cli-build.js": `'use strict';
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+const { compatBuild } = require('@embroider/compat');
+
+module.exports = async function (defaults) {
+  const { buildOnce } = await import('@embroider/vite');
+  const app = new EmberApp(defaults, {
+    'asset-cache': {
+      version: '4',
+    },
+    svgJar: { sourceDirs: ['public/assets/images'] },
+  });
+
+  return compatBuild(app, buildOnce);
+};
+`,
+  });
+
+  expect(buildSettings.detect(app)).toBe(true);
+
+  await buildSettings.run(app);
+
+  expect(app.read("ember-cli-build.js")).toContain("svgJar");
+  expect(app.read("ember-cli-build.js")).not.toContain("asset-cache");
+  expect(buildSettings.detect(app)).toBe(false);
+});

@@ -1,3 +1,5 @@
+import { dirname, relative } from "node:path";
+
 import { toTree } from "ember-estree";
 
 import { parseProgram, SKIP, walk } from "#ast.js";
@@ -22,7 +24,43 @@ const SOURCES = ["{app,addon,addon-test-support,tests,src}/**/*.{js,ts,gjs,gts,h
  * @property {RegExp} loose a loose-mode template call, which resolves the helper by name through the addon's app tree
  * @property {string} keywordNames for the progress note
  * @property {string} link
+ * @property {Map<string, Replacement>} [replacements] by the helper's module name: where a helper that is no keyword goes
  */
+
+/**
+ * @typedef {object} Replacement
+ * @property {string} [module] a package that exports the same function, such as `@ember/utils`
+ * @property {string} [exported] its name there
+ * @property {string} [file] the app module that holds the helper
+ * @property {string} [source] the source of that module
+ */
+
+/**
+ * From ember-truth-helpers 5 (MIT): `xor` counts truth like the templates do, with `isTruthy` and empty arrays as false.
+ */
+const XOR = `import { isArray } from '@ember/array';
+
+function truthConvert(value) {
+  if (typeof value === 'object' && value && 'isTruthy' in value && typeof value.isTruthy === 'boolean') {
+    return value.isTruthy;
+  }
+
+  return isArray(value) ? value.length !== 0 : Boolean(value);
+}
+
+export default function xor(left, right) {
+  return truthConvert(left) !== truthConvert(right);
+}
+`;
+
+/**
+ * `is-array` of ember-truth-helpers 5 is true when each argument is an array. Native arrays are the arrays of Ember 7,
+ * so Ember arrays and objects with a `length`, which the `isArray` of @ember/array counted, are no arrays here.
+ */
+const IS_ARRAY = `export default function isArray(...values) {
+  return values.every((value) => Array.isArray(value));
+}
+`;
 
 /** @type {KeywordAddon} */
 export const TRUTH_HELPERS = {
@@ -45,6 +83,10 @@ export const TRUTH_HELPERS = {
     ["not", "not"],
     ["eq", "eq"],
     ["notEq", "not-eq"],
+    ["xor", "xor"],
+    ["isArray", "is-array"],
+    ["isEmpty", "is-empty"],
+    ["isEqual", "is-equal"],
     ["gt", "gt"],
     ["gte", "gte"],
     ["lt", "lt"],
@@ -53,6 +95,12 @@ export const TRUTH_HELPERS = {
   loose: /[({]\s*(and|or|not|eq|not-eq|gt|gte|lt|lte|xor|is-array|is-empty|is-equal)[\s)}]/,
   keywordNames: "and, or, not, eq, neq, gt, gte, lt and lte",
   link: "https://rfcs.emberjs.com/id/0562-add-logical-operators/",
+  replacements: new Map([
+    ["is-empty", { module: "@ember/utils", exported: "isEmpty" }],
+    ["is-equal", { module: "@ember/utils", exported: "isEqual" }],
+    ["xor", { file: "app/helpers/xor.js", source: XOR }],
+    ["is-array", { file: "app/helpers/is-array.js", source: IS_ARRAY }],
+  ]),
 };
 
 /** @type {KeywordAddon} */
@@ -252,6 +300,90 @@ function hasLooseUse(addon, file, source) {
 }
 
 /**
+ * @param {string} from a module of the app, such as `app/components/x.gjs`
+ * @param {string} file such as `app/helpers/xor.js`
+ * @returns {string} the relative import, such as `../helpers/xor`
+ */
+function relativeImport(from, file) {
+  let path = relative(dirname(from), file).split("\\").join("/").replace(/\.js$/, "");
+
+  return path.startsWith(".") ? path : `./${path}`;
+}
+
+/**
+ * Points the imports of the addon's helpers that are no keywords at their replacements.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @param {KeywordAddon} addon
+ * @param {(file: string, source: string) => boolean} canWrite the app has no other module at the path
+ * @returns {{ output: string, files: Map<string, string> } | undefined} the module, and the helper modules that it needs
+ */
+export function useReplacements(source, file, addon, canWrite) {
+  let replacements = addon.replacements;
+  let program = replacements && parseProgram(source, file);
+
+  if (!program || !replacements) return;
+
+  let edits = new Edits(source);
+  /** @type {Map<string, string>} */
+  let files = new Map();
+
+  for (let node of /** @type {Node[]} */ (program.body)) {
+    if (node.type !== "ImportDeclaration" || typeof node.source.value !== "string") continue;
+    if (node.importKind === "type") continue;
+
+    /** @type {string[]} */
+    let lines = [];
+    /** @type {Node[]} */
+    let moved = [];
+
+    for (let specifier of node.specifiers) {
+      let helper = helperOf(addon, specifier, node.source.value);
+      let replacement = helper ? replacements.get(helper) : undefined;
+
+      if (!replacement) continue;
+
+      let local = specifier.local.name;
+
+      if (replacement.module && replacement.exported) {
+        let named = local === replacement.exported ? local : `${replacement.exported} as ${local}`;
+
+        lines.push(`import { ${named} } from '${replacement.module}';`);
+      } else if (
+        replacement.file &&
+        replacement.source &&
+        canWrite(replacement.file, replacement.source)
+      ) {
+        lines.push(`import ${local} from '${relativeImport(file, replacement.file)}';`);
+        files.set(replacement.file, replacement.source);
+      } else {
+        continue;
+      }
+
+      moved.push(specifier);
+    }
+
+    if (moved.length === 0) continue;
+
+    let left = node.specifiers.filter(
+      (/** @type {Node} */ specifier) => !moved.includes(specifier),
+    );
+
+    if (left.length > 0) {
+      let names = left.map((/** @type {Node} */ s) => source.slice(s.start, s.end)).join(", ");
+      let from = source.slice(node.source.start, node.source.end);
+
+      lines.unshift(`import { ${names} } from ${from};`);
+    }
+
+    edits.replace(node, lines.join("\n"));
+  }
+
+  return edits.size > 0 ? { output: edits.apply(), files } : undefined;
+}
+
+/**
  * @param {KeywordAddon} addon
  * @param {Project} project
  */
@@ -270,6 +402,21 @@ function plan(addon, project) {
       if (output) {
         rewrites.set(file, output);
         source = output;
+      }
+
+      let replaced = useReplacements(
+        source,
+        file,
+        addon,
+        (path, content) =>
+          rewrites.get(path) === content || !project.has(path) || project.read(path) === content,
+      );
+
+      if (replaced) {
+        rewrites.set(file, replaced.output);
+        source = replaced.output;
+
+        for (let [path, content] of replaced.files) rewrites.set(path, content);
       }
     }
 
@@ -308,7 +455,21 @@ function keywordStage(addon) {
     async run(project) {
       let { rewrites, users } = plan(addon, project);
 
+      let helperFiles = Array.from(addon.replacements?.values() ?? [])
+        .map((replacement) => replacement.file)
+        .filter((file) => file !== undefined && rewrites.has(file) && !project.has(file));
+
       for (let [file, output] of rewrites) project.write(file, output);
+
+      if (helperFiles.length > 0) {
+        recordProgress(project, {
+          id: `${addon.name}: helpers`,
+          status: "moved into the app",
+          note:
+            `The app uses helpers of ${addon.name} that are no keywords. Their code is in ${helperFiles.join(", ")} now. ` +
+            "is-array checks with Array.isArray, so an Ember array or an object with a length is no array for it.",
+        });
+      }
 
       if (users.length === 0) {
         if (project.dependency(addon.name)) {

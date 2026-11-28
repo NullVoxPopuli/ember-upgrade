@@ -1,19 +1,10 @@
+import { NODE_LTS, NODE_MINIMUM } from "#node-version.js";
 import { workspaceRoot } from "#manager-settings.js";
 import { readProgress, recordProgress } from "#progress.js";
 
 /** @typedef {import('#project.js').Project} Project */
 
 const WORKFLOWS = [".github/workflows/*.{yml,yaml}"];
-
-/**
- * The Node.js LTS line for workflows that set a Node.js version that Vite does not run on.
- */
-const NODE_LTS = "24";
-
-/**
- * Vite 8 runs on Node.js 20.19 and later, and Node.js 20 is at its end of life.
- */
-const NODE_MINIMUM = 22;
 
 /**
  * pnpm commands that are not package.json scripts.

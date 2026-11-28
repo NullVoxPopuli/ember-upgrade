@@ -53,6 +53,11 @@ export function setDependency(pkg, name, range) {
   let section = SECTIONS.find((key) => pkg[key] && name in pkg[key]) ?? "devDependencies";
 
   pkg[section] = sorted(Object.assign({}, pkg[section], { [name]: range }));
+
+  /**
+   * npm refuses an override of a direct dependency with another range.
+   */
+  if (typeof pkg.overrides?.[name] === "string") pkg.overrides[name] = range;
 }
 
 /**

@@ -58,6 +58,19 @@ const HELPERS = new Set([
  */
 export function updatePowerSelect(source, file) {
   let output = /\.(js|ts)$/.test(file) ? source : rewritePowerSelectMultiple(source).template;
+  /** @type {string[]} */
+  let unreadable = [];
+
+  /**
+   * ember-power-select 8 renamed the helper. It checks the same, for native arrays.
+   */
+  if (/\bemberPowerSelectIsSelected\b/.test(output)) {
+    unreadable.push(
+      "emberPowerSelectIsSelected is the default export of ember-power-select/helpers/ember-power-select-is-equal now",
+    );
+  } else {
+    output = output.replace(IS_SELECTED, "ember-power-select-is-equal");
+  }
 
   if (/\.(js|ts|gjs|gts)$/.test(file)) {
     output = moveImports(
@@ -69,8 +82,10 @@ export function updatePowerSelect(source, file) {
     );
   }
 
-  return { template: output, unreadable: [] };
+  return { template: output, unreadable };
 }
+
+const IS_SELECTED = /\bember-power-select-is-selected\b(?!-)/g;
 
 const WORMHOLE_IMPORT =
   "import BasicDropdownWormhole from 'ember-basic-dropdown/components/basic-dropdown-wormhole';";

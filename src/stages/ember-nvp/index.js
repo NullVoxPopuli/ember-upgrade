@@ -1,7 +1,15 @@
 import { renameSync, rmSync } from "node:fs";
 import { join, posix } from "node:path";
 
-import { buildFile } from "#config-files.js";
+import { buildFile, removeCompatBuildOptions, viteConfig } from "#config-files.js";
+import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
+import { updateNodePins } from "#node-version.js";
+import { recordProgress } from "#progress.js";
+import { atLeast, minorOf } from "#version.js";
+import { fixStylesheetImports } from "./css-imports.js";
+import { resolveCopies } from "#stages/dependency-copies/index.js";
+import { BABEL_CONFIGS } from "#stages/vite/warp-drive-config.js";
+import { ESLINT_CONFIGS, withoutBabelConfigFile } from "./eslint-babel.js";
 import { install, packageManager, runUpstream } from "#process.js";
 import { flatRulesOf, flatSettings, readEslintrc, withFlatSettings } from "./eslintrc.js";
 
@@ -61,6 +69,64 @@ const SPECIFIER = /(?:require\(\s*|import\(\s*|from\s+|import\s+)["'](\.{1,2}\/[
  */
 function withoutExtension(file) {
   return file.replace(/\.[cm]?[jt]s$/, "");
+}
+
+/**
+ * The Vite config of the vite stage built with this plugin, and the one of ember.nvp does not.
+ * Its newest release still asks for Babel 7, which npm refuses next to the Babel 8 of ember.nvp.
+ */
+const CLASSIC_VITE_PACKAGES = ["@rollup/plugin-babel"];
+
+/**
+ * @param {import('#project.js').Project} project
+ * @returns {string[]} the packages of the classic Vite config that no config imports anymore
+ */
+export function removeClassicVitePackages(project) {
+  let configs = [viteConfig(project)]
+    .concat(BABEL_CONFIGS)
+    .filter((file) => file && project.has(file))
+    .map((file) => project.read(/** @type {string} */ (file)));
+  let unused = CLASSIC_VITE_PACKAGES.filter(
+    (name) => project.dependency(name) && !configs.some((source) => source.includes(name)),
+  );
+
+  if (unused.length > 0) {
+    editPackageJson(project, (pkg) => {
+      for (let name of unused) removeDependency(pkg, name);
+    });
+  }
+
+  return unused;
+}
+
+/**
+ * The first release, in the same major, whose Babel plugin accepts the Babel 8 of ember.nvp.
+ * ember-concurrency 5.2 and older assert Babel 7 in async-arrow-task-transform.
+ *
+ * @type {Map<string, [number, number]>}
+ */
+const BABEL_8_RELEASES = new Map([["ember-concurrency", [5, 3]]]);
+
+/**
+ * @param {import('#project.js').Project} project
+ * @returns {string[]} the packages that moved to a release that accepts Babel 8
+ */
+export function raiseForBabel8(project) {
+  /** @type {string[]} */
+  let raised = [];
+
+  editPackageJson(project, (pkg) => {
+    for (let [name, [major, minor]] of BABEL_8_RELEASES) {
+      let range = project.dependency(name);
+
+      if (minorOf(range)?.[0] !== major || atLeast(range, major, minor)) continue;
+
+      setDependency(pkg, name, `^${major}.${minor}.0`);
+      raised.push(name);
+    }
+  });
+
+  return raised;
 }
 
 /**
@@ -144,6 +210,14 @@ export default {
 
   async run(project) {
     /**
+     * ember.nvp apps read no config modules or app boot code of addons, and ember.nvp stops on these options.
+     * The compat build of the stages before this one needs it, when a v1 addon has a config module.
+     */
+    removeCompatBuildOptions(project, ["useAddonConfigModule", "useAddonAppBoot"]);
+
+    updateNodePins(project);
+
+    /**
      * Without a name, ember.nvp gives the app the name of its template, and imports of `<name>/...` stop resolving.
      */
     let args = [
@@ -173,7 +247,7 @@ export default {
     let eslintrc = readEslintrc(project);
     let configUsers = configModuleUsers(project);
 
-    if (!runUpstream(project, "ember.nvp@3.0.0", args)) {
+    if (!runUpstream(project, "ember.nvp@3.1.2", args)) {
       throw new Error("ember.nvp failed. Its output is above.");
     }
 
@@ -185,10 +259,41 @@ export default {
 
     removeOrphanConfigModules(project, configUsers);
     renameCommonJs(project);
+    removeClassicVitePackages(project);
+    raiseForBabel8(project);
+
+    /**
+     * The migration changes dependency ranges, so the imports are checked against what its install gives.
+     */
+    if (!install(project)) throw new Error("The install after ember.nvp failed.");
+
+    /**
+     * The migration moves the app to the Babel major of the base, and the lockfile keeps the old Babel for the build packages.
+     */
+    resolveCopies(project);
+
+    let stylesheets = fixStylesheetImports(project);
+
+    if (stylesheets.length > 0) {
+      recordProgress(project, {
+        id: "stylesheet imports",
+        status: "check",
+        note:
+          `These imports named stylesheets that their packages do not have, and the Vite build of ember.nvp resolves each import. ` +
+          `They name each package's one stylesheet now: ${stylesheets.join(", ")}.`,
+      });
+    }
+
+    for (let file of ESLINT_CONFIGS) {
+      if (!project.has(file)) continue;
+
+      let config = project.read(file);
+      let output = withoutBabelConfigFile(config, file);
+
+      if (output !== config) project.write(file, output);
+    }
 
     if (!eslintrc || !project.has(FLAT_CONFIG) || readEslintrc(project)) return [];
-
-    if (!install(project)) throw new Error("The install after ember.nvp failed.");
 
     let source = withFlatSettings(
       project.read(FLAT_CONFIG),

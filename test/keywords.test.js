@@ -142,3 +142,46 @@ import Tag from "ember-element-helper/helpers/element";
     "
   `);
 });
+
+test("the helpers that are no keywords move to @ember/utils, or into the app when a module uses them", async () => {
+  let app = project({
+    "package.json": {
+      name: "app",
+      devDependencies: { "ember-source": "~7.4.1", "ember-truth-helpers": "^5.0.0" },
+    },
+    "app/components/x.gjs": `import { eq, xor, isEmpty as empty } from "ember-truth-helpers";
+
+<template>{{if (eq @a @b) "same"}}{{if (xor @a @b) "one"}}{{if (empty @list) "none"}}</template>
+`,
+    "app/components/nested/y.gjs": `import isArray from "ember-truth-helpers/helpers/is-array";
+
+<template>{{if (isArray @a @b) "lists"}}</template>
+`,
+  });
+
+  await truthHelpers.run(app);
+
+  expect(app.read("app/components/x.gjs")).toMatchInlineSnapshot(`
+    "import xor from '../helpers/xor';
+    import { isEmpty as empty } from '@ember/utils';
+
+    <template>{{if (eq @a @b) "same"}}{{if (xor @a @b) "one"}}{{if (empty @list) "none"}}</template>
+    "
+  `);
+  expect(app.read("app/components/nested/y.gjs")).toMatchInlineSnapshot(`
+    "import isArray from '../../helpers/is-array';
+
+    <template>{{if (isArray @a @b) "lists"}}</template>
+    "
+  `);
+  expect(app.has("app/helpers/xor.js")).toBe(true);
+  expect(app.read("app/helpers/is-array.js")).toMatchInlineSnapshot(`
+    "export default function isArray(...values) {
+      return values.every((value) => Array.isArray(value));
+    }
+    "
+  `);
+  expect(app.has("app/helpers/is-equal.js")).toBe(false);
+  expect(app.packageJson.devDependencies).toEqual({ "ember-source": "~7.4.1" });
+  expect(truthHelpers.detect(app)).toBe(false);
+});

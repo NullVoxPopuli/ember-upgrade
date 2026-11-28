@@ -1,5 +1,11 @@
 import { parseProgram, propertyName, walk } from "#ast.js";
-import { addVitePlugin, removeCompatBuildOptions, viteConfig } from "#config-files.js";
+import {
+  addVitePlugin,
+  buildFile,
+  removeBuildOptions,
+  removeCompatBuildOptions,
+  viteConfig,
+} from "#config-files.js";
 import { Edits } from "#edits.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
@@ -31,7 +37,8 @@ export default {
       project.dependency("ember-scoped-css") &&
       config &&
       (project.dependency("ember-scoped-css-compat") ||
-        !project.read(config).includes("ember-scoped-css/vite")),
+        !project.read(config).includes("ember-scoped-css/vite") ||
+        buildOption(project) !== undefined),
     );
   },
 
@@ -40,6 +47,38 @@ export default {
   },
 
   async run(project) {
+    let option = buildOption(project);
+    /** @type {import('#types.js').Finding[]} */
+    let optionTodo = [];
+
+    /**
+     * Before 1.0, the ember-cli build read the options from ember-cli-build. The Vite plugin takes them now.
+     */
+    if (option !== undefined) {
+      let config = viteConfig(project);
+      let flat = (/** @type {string} */ text) =>
+        text.replace(/\s+/g, "").replace(/,([}\]])/g, "$1");
+
+      removeBuildOptions(project, ["ember-scoped-css"]);
+
+      if (!config || !flat(project.read(config)).includes(flat(option))) {
+        optionTodo.push({
+          title:
+            "Pass the options that ember-cli-build gave ember-scoped-css to scopedCSS() and scopedCSS.template()",
+          where: [config ?? "vite.config.mjs"],
+          action: `The options were ${option}.`,
+        });
+      }
+
+      if (
+        config &&
+        project.read(config).includes("ember-scoped-css/vite") &&
+        !project.dependency("ember-scoped-css-compat")
+      ) {
+        return optionTodo;
+      }
+    }
+
     if (project.dependency("ember-scoped-css-compat")) {
       editPackageJson(project, (pkg) => {
         removeDependency(pkg, "ember-scoped-css-compat");
@@ -69,6 +108,7 @@ export default {
     let options = roots.length
       ? `{ additionalRoots: [${roots.map((root) => `'${root}'`).join(", ")}] }`
       : "";
+    /** @type {import('#types.js').Finding[]} */
     let todo = [];
 
     let added = addVitePlugin(project, {
@@ -110,9 +150,34 @@ export default {
       });
     }
 
-    return todo;
+    return todo.concat(optionTodo);
   },
 };
+
+/**
+ * @param {import('#project.js').Project} project
+ * @returns {string | undefined} the source of the `ember-scoped-css` option of `new EmberApp()`
+ */
+function buildOption(project) {
+  let file = buildFile(project);
+  let program = file ? parseProgram(project.read(file), file) : undefined;
+  /** @type {string | undefined} */
+  let found;
+
+  walk(program, (node) => {
+    if (found !== undefined || node.type !== "NewExpression") return;
+
+    for (let property of node.arguments[1]?.properties ?? []) {
+      if (propertyName(property) === "ember-scoped-css") {
+        found = project
+          .read(/** @type {string} */ (file))
+          .slice(property.value.start, property.value.end);
+      }
+    }
+  });
+
+  return found;
+}
 
 /**
  * ember-scoped-css reads only components, templates, and routes of the app.

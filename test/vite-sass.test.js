@@ -134,3 +134,153 @@ test("Vite compiles the Sass, with the imports that ember-cli-sass resolved", as
   `);
   expect(viteSass.detect(app)).toBe(false);
 });
+
+/**
+ * From emberobserver/client, after the update to ember-power-select 8, which is a v2 addon with `exports`.
+ */
+test("an import into a package with exports gets the path that the package exports", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: {
+        "@embroider/vite": "^1.0.0",
+        "ember-cli-sass": "^11.0.1",
+        "ember-power-select": "^8.12.1",
+      },
+    }),
+    "node_modules/ember-power-select/package.json": JSON.stringify({
+      keywords: ["ember-addon"],
+      "ember-addon": { version: 2 },
+      exports: {
+        ".": { sass: "./ember-power-select.scss", default: "./dist/index.js" },
+        "./*": { default: "./dist/*.js" },
+        "./scss/base.scss": "./scss/base.scss",
+        "./scss/variables.scss": "./scss/variables.scss",
+        "./ember-power-select.scss": "./ember-power-select.scss",
+      },
+    }),
+    "node_modules/ember-power-select/ember-power-select.scss": "",
+    "node_modules/ember-power-select/scss/variables.scss": "",
+    "ember-cli-build.js": "module.exports = function (defaults) {};\n",
+    "index.html": `<link rel="stylesheet" href="/@embroider/virtual/app.css">\n`,
+    "app/styles/app.scss": `@import "ember-power-select";
+@import 'ember-power-select/scss/variables';
+@import 'ember-power-select/ember-power-select';
+@import 'ember-power-select/scss/base.scss';
+`,
+  });
+
+  await viteSass.run(app);
+
+  expect(app.read("app/styles/app.scss")).toMatchInlineSnapshot(`
+    "@import "ember-power-select";
+    @import 'ember-power-select/scss/variables.scss';
+    @import 'ember-power-select';
+    @import 'ember-power-select/scss/base.scss';
+    "
+  `);
+});
+
+/**
+ * From hashicorp-forge/hermes (MPL-2.0), shortened. The Sass of @hashicorp/design-system-components uses `@use "tokens"`.
+ */
+test("the include paths in packages stay Sass load paths, in a Vite plugin", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@embroider/vite": "^1.0.0", "ember-cli-sass": "^11.0.1" },
+    }),
+    "ember-cli-build.js": `module.exports = function (defaults) {
+  let app = new EmberApp(defaults, {
+    sassOptions: {
+      includePaths: [
+        "node_modules",
+        "./node_modules/@hashicorp/design-system-tokens/dist/products/css",
+      ],
+    },
+  });
+};
+`,
+    "vite.config.mjs": `import { defineConfig } from 'vite';
+import { ember } from '@embroider/vite';
+
+export default defineConfig({
+  plugins: [ember()],
+});
+`,
+    "app/styles/app.scss": "",
+  });
+
+  await viteSass.run(app);
+
+  expect(app.read("vite.config.mjs")).toMatchInlineSnapshot(`
+    "import { defineConfig } from 'vite';
+    import { ember } from '@embroider/vite';
+    import sassLoadPaths from './vite/sass-load-paths.mjs';
+
+    export default defineConfig({
+      plugins: [ember(), sassLoadPaths],
+    });
+    "
+  `);
+  expect(app.read("vite/sass-load-paths.mjs")).toMatchInlineSnapshot(`
+    "import { resolve } from 'node:path';
+
+    /**
+     * The stylesheets of packages import from these folders, which ember-cli-sass searched with \`includePaths\`.
+     */
+    const LOAD_PATHS = ["node_modules/@hashicorp/design-system-tokens/dist/products/css"].map((path) => resolve(import.meta.dirname, '..', path));
+
+    export default {
+      name: 'sass-load-paths',
+      config() {
+        return {
+          css: {
+            preprocessorOptions: {
+              scss: { loadPaths: LOAD_PATHS },
+              sass: { loadPaths: LOAD_PATHS },
+            },
+          },
+        };
+      },
+    };
+    "
+  `);
+});
+
+/**
+ * From hashicorp-forge/hermes (MPL-2.0), shortened, after the update to ember-power-select 8.
+ */
+test("an import of a package folder through node_modules names the index file that the package exports", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: {
+        "@embroider/vite": "^1.0.0",
+        "ember-cli-sass": "^11.0.1",
+        "ember-power-select": "^8.12.0",
+      },
+    }),
+    "node_modules/ember-power-select/package.json": JSON.stringify({
+      version: "8.12.0",
+      exports: {
+        ".": { types: "./declarations/index.d.ts", default: "./dist/index.js" },
+        "./_index.scss": "./_index.scss",
+        "./ember-power-select.scss": "./ember-power-select.scss",
+      },
+    }),
+    "node_modules/ember-power-select/_index.scss": "",
+    "node_modules/ember-power-select/ember-power-select.scss": "",
+    "app/styles/app.scss": `@use "ember-power-select-theme";\n`,
+    "app/styles/ember-power-select-theme.scss": `@import "../../node_modules/ember-power-select";\n@import "ember-power-select";\n`,
+    "ember-cli-build.js": `module.exports = function (defaults) {
+  let app = new EmberApp(defaults, { sassOptions: { includePaths: ["node_modules"] } });
+};
+`,
+  });
+
+  await viteSass.run(app);
+
+  expect(app.read("app/styles/ember-power-select-theme.scss")).toMatchInlineSnapshot(`
+    "@import "ember-power-select/_index.scss";
+    @import "ember-power-select/_index.scss";
+    "
+  `);
+});

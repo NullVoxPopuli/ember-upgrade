@@ -576,3 +576,48 @@ test("the template transform gets an empty options object when there are no addi
 
   expect(output).toContain("transforms: [scopedCSS.template({})]");
 });
+
+/**
+ * From ember-learn/ember-help-wanted, shortened: the app builds with Vite, and ember-cli-build still has the options of the plugin.
+ */
+test("the ember-scoped-css option of ember-cli-build goes when the Vite plugin has it", async () => {
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@embroider/vite": "^1.7.2", "ember-scoped-css": "^0.24.3" },
+    }),
+    "ember-cli-build.js": `module.exports = async function (defaults) {
+  const app = new EmberApp(defaults, {
+    'ember-scoped-css': {
+      layerName: false,
+      additionalRoots: ['templates/'],
+    },
+  });
+
+  return compatBuild(app, buildOnce);
+};
+`,
+    "vite.config.mjs": `import { scopedCSS } from 'ember-scoped-css/vite';
+
+export default defineConfig({
+  plugins: [
+    scopedCSS({
+      layerName: false,
+      additionalRoots: ['templates/'],
+    }),
+  ],
+});
+`,
+  });
+
+  expect(emberScopedCss.detect(app)).toBe(true);
+  expect(await emberScopedCss.run(app)).toEqual([]);
+  expect(app.read("ember-cli-build.js")).toMatchInlineSnapshot(`
+    "module.exports = async function (defaults) {
+      const app = new EmberApp(defaults, {});
+
+      return compatBuild(app, buildOnce);
+    };
+    "
+  `);
+  expect(emberScopedCss.detect(app)).toBe(false);
+});

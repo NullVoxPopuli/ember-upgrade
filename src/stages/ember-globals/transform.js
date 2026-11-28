@@ -36,6 +36,41 @@ function boundNames(program) {
 }
 
 /**
+ * @type {{ get: ModuleExport, set: ModuleExport }}
+ */
+const TESTING = {
+  get: { module: "@ember/debug", export: "isTesting", localName: "isTesting" },
+  set: { module: "@ember/debug", export: "setTesting", localName: "setTesting" },
+};
+
+/**
+ * Globals with no module that a plain value replaces.
+ * `Ember.Logger` wrapped the console (deprecation id ember-console.deprecate-logger).
+ *
+ * @type {Map<string, (imports: Imports) => string>}
+ */
+const VALUES = new Map([
+  ["Ember.Logger", () => "console"],
+  ["Ember.testing", (/** @type {Imports} */ imports) => `${imports.request(TESTING.get)}()`],
+]);
+
+/**
+ * @param {Node} node
+ * @param {string | undefined} ember the local name of the `ember` import
+ * @returns {boolean} the node is `Ember.testing`
+ */
+function isTestingMember(node, ember) {
+  return (
+    node.type === "MemberExpression" &&
+    !node.computed &&
+    node.property.type === "Identifier" &&
+    node.property.name === "testing" &&
+    Boolean(ember) &&
+    identifierName(node.object) === ember
+  );
+}
+
+/**
  * @param {Node} node a MemberExpression
  * @returns {{ root: string, names: string[], nodes: Node[] } | undefined}
  *   for `Ember.computed.alias`: root "Ember", names ["computed", "alias"],
@@ -216,6 +251,7 @@ class Imports {
  * @property {string} local the name the code uses
  * @property {Node} node the binding Identifier
  * @property {ModuleExport} [entry] the import, when RFC 176 maps the path
+ * @property {boolean} [value] true when {@link VALUES} replaces the path, such as `const { Logger } = Ember`
  * @property {boolean} [namespace] true for `const { inject } = Ember`, where the code then reads `inject.service`
  */
 
@@ -236,6 +272,7 @@ function collectLeaves(value, path, depth, leaves) {
       local: value.name,
       node: value,
       entry,
+      value: !entry && depth === 1 && VALUES.has(global),
       namespace: !entry && depth === 1 && isNamespace(global),
     });
 
@@ -354,9 +391,10 @@ export function transform(source, filePath) {
        * Imports for destructured names come first,
        * so that `Ember.get` elsewhere in the file reuses the `get` that the code already has.
        */
-      if (leaves.every((leaf) => leaf.entry)) {
-        for (let leaf of leaves)
-          imports.request(/** @type {ModuleExport} */ (leaf.entry), leaf.local);
+      if (leaves.every((leaf) => leaf.entry || leaf.value)) {
+        for (let leaf of leaves) {
+          if (leaf.entry) imports.request(leaf.entry, leaf.local);
+        }
       }
 
       for (let leaf of leaves) {
@@ -412,11 +450,40 @@ export function transform(source, filePath) {
       return SKIP;
     }
 
+    /**
+     * `Ember.testing` is a function pair in @ember/debug now: `isTesting()` reads it, and `setTesting()` sets it.
+     */
+    if (
+      node.type === "AssignmentExpression" &&
+      node.operator === "=" &&
+      isTestingMember(node.left, ember)
+    ) {
+      let setTesting = imports.request(TESTING.set);
+
+      edits.replace(node, `${setTesting}(${source.slice(node.right.start, node.right.end)})`);
+
+      return SKIP;
+    }
+
+    if (isTestingMember(node, ember)) {
+      edits.replace(node, `${imports.request(TESTING.get)}()`);
+
+      return SKIP;
+    }
+
     if (node.type === "MemberExpression") {
       let chain = memberChain(node);
       let rootPath = chain && roots.get(chain.root);
 
       if (!chain || !rootPath) return;
+
+      let value = VALUES.get(`${rootPath}.${chain.names[0]}`);
+
+      if (value && !(chain.names.length === 1 && chain.names[0] === "testing")) {
+        edits.replace(chain.nodes[0], value(imports));
+
+        return SKIP;
+      }
 
       for (let i = chain.names.length - 1; i >= 0; i--) {
         let entry = GLOBALS.get(`${rootPath}.${chain.names.slice(0, i + 1).join(".")}`);
@@ -462,17 +529,35 @@ export function transform(source, filePath) {
 
   /** @type {Set<Node>} */
   let removed = new Set();
+  /** @type {Map<Node, string[]>} the declarations for the {@link VALUES} of each destructure */
+  let values = new Map();
 
-  for (let [declarator, { properties }] of destructures) {
+  for (let [declarator, { declaration, properties }] of destructures) {
     /** @type {Node[]} */
     let kept = [];
 
     for (let { property, leaves, supported } of properties) {
       let moves =
         supported &&
-        leaves.every((leaf) => leaf.entry || (leaf.namespace && !unresolvedRoots.has(leaf.local)));
+        leaves.every(
+          (leaf) =>
+            leaf.entry || leaf.value || (leaf.namespace && !unresolvedRoots.has(leaf.local)),
+        );
 
-      if (moves) continue;
+      if (moves) {
+        for (let leaf of leaves) {
+          let value = leaf.value && VALUES.get(leaf.path);
+
+          if (!value) continue;
+
+          let lines = values.get(declaration) ?? [];
+
+          lines.push(`${declaration.kind} ${leaf.local} = ${value(imports)};`);
+          values.set(declaration, lines);
+        }
+
+        continue;
+      }
 
       kept.push(property);
 
@@ -502,10 +587,15 @@ export function transform(source, filePath) {
   for (let declaration of declarations) {
     let all = declaration.declarations;
 
+    let lines = values.get(declaration);
+
     if (all.every((/** @type {Node} */ d) => removed.has(d))) {
-      edits.removeLine(declaration);
+      if (lines) edits.replace(declaration, lines.join("\n"));
+      else edits.removeLine(declaration);
       continue;
     }
+
+    if (lines) edits.insert(declaration.end, `\n${lines.join("\n")}`);
 
     /**
      * Declarators before the first one that stays go with the comma after them.
@@ -521,9 +611,11 @@ export function transform(source, filePath) {
   }
 
   if (imports.modules.size === 0) {
-    if (edits.size === 0) return { code: source, todo };
-
+    /**
+     * An `ember` import that nothing reads goes too, as Ember 7 has no `ember` module.
+     */
     if (remaining === 0 && emberImport.specifiers.length === 1) edits.removeLine(emberImport);
+    if (edits.size === 0) return { code: source, todo };
 
     return { code: edits.apply(), todo };
   }

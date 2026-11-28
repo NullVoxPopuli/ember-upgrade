@@ -7,6 +7,7 @@ import { transform as replaceEmberGlobals } from "#stages/ember-globals/transfor
 import { parse as parseVersion } from "#stages/ember-source/index.js";
 import { stripTypes } from "#strip-types.js";
 import { contentForPages } from "./content-for.js";
+import { includedImports, vendorFiles } from "./included.js";
 import { inlineStage } from "./inline.js";
 
 /** @typedef {import('#ast.js').Node} Node */
@@ -31,12 +32,55 @@ const TEMPLATE_IMPORT = /^import (\w+) from (["'])([^"']+)\2;?\n/gm;
  * @property {Record<string, string>} imports each module of the addon, and the file that has it now
  * @property {Record<string, string>} ranges the addon's runtime dependencies, with its ranges
  * @property {boolean} contentFor the addon adds HTML to the app's pages with a `contentFor` hook
+ * @property {boolean} included the addon imports vendor files with an `included` hook
  */
 
 /**
  * The build hooks whose work the inline stage does once: `contentFor` adds HTML, which goes into the app's HTML files.
  */
 const INLINED_HOOKS = new Set(["contentFor"]);
+
+/**
+ * The index.js properties that ember-cli calls. The others are functions that the hooks call,
+ * which run with the `included` hook.
+ */
+const EMBER_CLI_HOOKS = new Set([
+  "blueprintsPath",
+  "buildError",
+  "cacheKeyForTree",
+  "config",
+  "contentFor",
+  "dependencies",
+  "import",
+  "importTransforms",
+  "included",
+  "includedCommands",
+  "init",
+  "lintTree",
+  "options",
+  "outputReady",
+  "postBuild",
+  "postprocessTree",
+  "preBuild",
+  "preprocessTree",
+  "serverMiddleware",
+  "setupPreprocessorRegistry",
+  "shouldIncludeChildAddon",
+  "testemMiddleware",
+  "treeFor",
+  "treeForAddon",
+  "treeForAddonStyles",
+  "treeForAddonTemplates",
+  "treeForAddonTestSupport",
+  "treeForApp",
+  "treeForPublic",
+  "treeForStyles",
+  "treeForTemplates",
+  "treeForTestSupport",
+  "treeForVendor",
+  "module.exports",
+  "...",
+]);
 
 /**
  * @param {string} directory the installed addon
@@ -181,6 +225,28 @@ function importsDependency(call, dependencies) {
 }
 
 /**
+ * Only a re-export makes the addon module visible at the app path. An app module that imports it, such as
+ * the instance-initializer of ember-href-to, keeps its own code.
+ *
+ * @param {string} name the addon
+ * @param {string} source a module of the addon's `app/` tree
+ * @returns {string | undefined} the addon module that the source re-exports, such as `components/x-select`
+ */
+function reexportOf(name, source) {
+  let escaped = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  let from = `["']${escaped}/([^"']+)["']`;
+  let direct = new RegExp(`export\\s*(?:\\{[^}]*\\}|\\*)\\s*from\\s*${from}`).exec(source);
+
+  if (direct) return direct[1];
+
+  let imported = new RegExp(
+    `^\\s*import\\s+([\\w$]+)\\s+from\\s*${from};?\\s*export\\s+default\\s+\\1;?\\s*$`,
+  ).exec(source);
+
+  return imported?.[2];
+}
+
+/**
  * ember-cli merged the addon's `app/` tree into the app, so only the modules that it re-exports
  * were visible to the resolver. Each of those goes to its `app/` path, a component template goes
  * next to its component, and every other module stays in the addon's own folder, app/addons/<addon>.
@@ -200,7 +266,7 @@ export function placements(name, sources, read, taken) {
   for (let file of sources) {
     if (!file.startsWith("app/")) continue;
 
-    let specifier = new RegExp(`from\\s*["']${name}/([^"']+)["']`).exec(read(file) ?? "")?.[1];
+    let specifier = reexportOf(name, read(file) ?? "");
 
     if (specifier) reexported.set(specifier, withoutExtension(file));
   }
@@ -238,12 +304,16 @@ export function placements(name, sources, read, taken) {
   }
 
   /**
-   * A template goes where its component went.
+   * A template goes where its component went: `templates/components/x.hbs`, or `components/x/template.hbs` of a pod.
    */
   for (let [file, target] of placed) {
-    if (!file.startsWith("addon/templates/components/")) continue;
+    let pod = /^addon\/components\/(.+)\/template\.hbs$/.exec(file)?.[1];
 
-    let module = withoutExtension(file.slice("addon/templates/components/".length));
+    if (!file.startsWith("addon/templates/components/") && !pod) continue;
+
+    let module = pod
+      ? `${pod}/component`
+      : withoutExtension(file.slice("addon/templates/components/".length));
     let component = Array.from(placed).find(
       ([from]) => withoutExtension(from) === `addon/components/${module}`,
     )?.[1];
@@ -278,8 +348,19 @@ function withoutExtension(path) {
  */
 export function planInline(name, directory, taken, emberVersion) {
   let hooks = buildHooks(directory);
+  let included = hooks.includes("included");
 
-  if (hooks.some((hook) => !INLINED_HOOKS.has(hook))) return;
+  /**
+   * An `included` hook runs once, with an app that records its imports, so the functions that it calls can stay.
+   */
+  if (
+    hooks.some(
+      (hook) =>
+        !INLINED_HOOKS.has(hook) && hook !== "included" && (EMBER_CLI_HOOKS.has(hook) || !included),
+    )
+  ) {
+    return;
+  }
   if (existsSync(join(directory, "addon", "styles"))) return;
 
   let contentFor = hooks.includes("contentFor");
@@ -403,7 +484,7 @@ export function planInline(name, directory, taken, emberVersion) {
     ranges[dependency] = String(range);
   }
 
-  return { files, imports, ranges, contentFor };
+  return { files, imports, ranges, contentFor, included };
 }
 
 /**
@@ -628,6 +709,22 @@ function rewriteSource(source, { origin, target, imports, modules }) {
 
   for (let local of layouts) {
     output = output.replace(new RegExp(`^\\s*layout(\\s*:\\s*${local})?\\s*,?\\s*\\n`, "m"), "");
+
+    /**
+     * `@layout(layout)` of @ember-decorators/component set the template, as the colocated one does now.
+     */
+    let decorator = new RegExp(`^[ \\t]*@(\\w+)\\(${local}\\)[ \\t]*\\n`, "m").exec(output);
+
+    if (decorator) {
+      output = output.replace(decorator[0], "");
+      output = output.replace(
+        new RegExp(
+          `^import \\{\\s*layout(?: as ${decorator[1]})?\\s*\\} from ["']@ember-decorators/component["'];?\\n`,
+          "m",
+        ),
+        "",
+      );
+    }
   }
 
   return output.replace(SPECIFIER, (match, before, quote, specifier) => {
@@ -693,7 +790,7 @@ function asJavaScript(files, imports) {
  * @param {Project} project
  * @param {string} name
  * @param {string} [from] where the addon is installed, when it is a dependency of another addon and not of the app
- * @returns {(import('#types.js').Stage & { dependencies: Record<string, string>, directory: string }) | undefined} undefined when the addon is not only code that the app can hold
+ * @returns {(import('#types.js').Stage & { dependencies: Record<string, string>, directory: string, needsVite: boolean }) | undefined} undefined when the addon is not only code that the app can hold
  */
 export function inlineV1Stage(project, name, from) {
   let installed = from ?? join(project.directory, "node_modules", name);
@@ -716,7 +813,7 @@ export function inlineV1Stage(project, name, from) {
 
   if (!plan) return;
 
-  let { files, imports, ranges, contentFor } = plan;
+  let { files, imports, ranges, contentFor, included } = plan;
 
   if (!usesTypeScript(project)) ({ files, imports } = asJavaScript(files, imports));
 
@@ -725,11 +822,28 @@ export function inlineV1Stage(project, name, from) {
    */
   if (contentFor && !contentForPages(project, directory)) return;
 
+  let vendor = included ? includedImports(project, directory) : [];
+
+  if (!vendor || (vendor.length > 0 && !vendorFiles(project, directory, vendor))) return;
+
+  let vendorImports = vendor;
+
+  /**
+   * @param {Project} target
+   * @returns {Record<string, string> | undefined}
+   */
+  let generated = (target) => {
+    let pages = contentFor ? contentForPages(target, directory) : {};
+    let copied = vendorImports.length > 0 ? vendorFiles(target, directory, vendorImports) : {};
+
+    return pages && copied ? Object.assign({}, pages, copied) : undefined;
+  };
+
   let stage = inlineStage({
     name,
     label: `Move ${name}, a v1 addon with no v2 release, into the app`,
     files: Object.fromEntries(files),
-    generated: contentFor ? (target) => contentForPages(target, directory) : undefined,
+    generated: contentFor || vendor.length > 0 ? generated : undefined,
     imports,
     ranges,
     note: contentFor
@@ -737,5 +851,17 @@ export function inlineV1Stage(project, name, from) {
       : `${name} is a v1 addon with no v2 release, so its code is in the app now, where ember-cli merged it.`,
   });
 
-  return Object.assign(stage, { dependencies: ranges, directory });
+  /**
+   * The classic build pairs a template with its component only in app/components. A component that stays in
+   * app/addons/<addon> keeps its template next to it, and only the Vite build pairs them.
+   */
+  let targets = new Set(Array.from(files.keys()));
+  let needsVite = Array.from(targets).some(
+    (file) =>
+      file.startsWith("app/addons/") &&
+      file.endsWith(".hbs") &&
+      [".js", ".ts"].some((extension) => targets.has(file.replace(/\.hbs$/, extension))),
+  );
+
+  return Object.assign(stage, { dependencies: ranges, directory, needsVite });
 }

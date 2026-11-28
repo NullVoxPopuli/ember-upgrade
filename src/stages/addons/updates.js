@@ -3,16 +3,31 @@ import { join } from "node:path";
 import { parseProgram } from "#ast.js";
 import { addVitePlugin, removeBuildOptions, viteConfig } from "#config-files.js";
 import { Edits } from "#edits.js";
-import { allowBuild, overrideRange, removeOverride } from "#manager-settings.js";
-import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
-import { packageManager, published, runUpstream } from "#process.js";
+import { installedAddonTree, resolvePackage } from "#installed.js";
+import {
+  addOverride,
+  allowBuild,
+  overrideRange,
+  pnpmMajor,
+  removeOverride,
+} from "#manager-settings.js";
+import {
+  dependencyNames,
+  editPackageJson,
+  removeDependency,
+  setDependency,
+} from "#package-json.js";
+import { install, packageManager, published, runUpstream } from "#process.js";
 import { readProgress, recordProgress } from "#progress.js";
+import { dropPatches } from "#stages/patched-packages/index.js";
 import { atLeast, minorOf } from "#version.js";
 import { rewriteClickOutside } from "./click-outside.js";
 import { addBasicDropdownWormhole, updateOptionClicks, updatePowerSelect } from "./power-select.js";
 import { dependencyDirectory, inlineV1Stage } from "./inline-v1.js";
+import { mergedStyleImports, moveMergedStyleImports } from "./merged-styles.js";
 import { isObsoleteAddon } from "./removals.js";
-import { IGNORED, NO_V2_YET, installedV1Addons } from "./known.js";
+import { truthHelperPaths } from "./truth-helpers.js";
+import { IGNORED, NO_V2_YET, installedV1Addons, isV1Addon as isV1Manifest } from "./known.js";
 import { ICONS_MODULE, iconsModule, rewriteDynamicIcons } from "./svg-jar-icons.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
@@ -21,6 +36,100 @@ import { ICONS_MODULE, iconsModule, rewriteDynamicIcons } from "./svg-jar-icons.
 const APP_FILES = ["app/app.js", "app/app.ts"];
 const WORKFLOW = "app/deprecation-workflow.js";
 const OLD_WORKFLOW = "config/deprecation-workflow.js";
+
+const STYLEGUIDE_CSS = "import 'ember-styleguide/styles.css';";
+const STYLEGUIDE_CSS_IMPORT = '@import "ember-styleguide/styles.css";';
+const APP_STYLESHEET = "app/styles/app.css";
+
+/**
+ * ember-styleguide 11 added its CSS to the ember-cli build. The v2 addon exports it, and the app imports it,
+ * before the app's own stylesheets, which can override it.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function importStyleguideCss(project) {
+  let file = APP_FILES.find((name) => project.has(name));
+
+  if (!file) return;
+
+  let source = project.read(file);
+
+  if (source.includes("ember-styleguide/styles.css")) return;
+
+  let program = parseProgram(source, file);
+  let imports = (program?.body ?? []).filter(
+    (/** @type {import('#ast.js').Node} */ node) => node.type === "ImportDeclaration",
+  );
+  let stylesheet = imports.find((/** @type {import('#ast.js').Node} */ node) =>
+    /\.(css|scss|sass|less)$/.test(String(node.source.value)),
+  );
+  let last = imports[imports.length - 1];
+
+  /**
+   * Vite puts the CSS that the modules import after the stylesheet that index.html links,
+   * so the styleguide goes at the top of that stylesheet, as vendor.css came before the app's CSS.
+   */
+  if (!stylesheet && project.has(APP_STYLESHEET)) {
+    let css = project.read(APP_STYLESHEET);
+    let firstImport = css.search(/^@import\b/m);
+    let at = firstImport === -1 ? 0 : firstImport;
+
+    project.write(APP_STYLESHEET, `${css.slice(0, at)}${STYLEGUIDE_CSS_IMPORT}\n${css.slice(at)}`);
+    return;
+  }
+
+  let edits = new Edits(source);
+
+  if (stylesheet) edits.insert(stylesheet.start, `${STYLEGUIDE_CSS}\n`);
+  else if (last) edits.insert(last.end, `\n${STYLEGUIDE_CSS}`);
+  else edits.insert(0, `${STYLEGUIDE_CSS}\n`);
+
+  project.write(file, edits.apply());
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ * @returns {boolean} the app has the v2 ember-styleguide, and app/app.js does not import its CSS
+ */
+function needsStyleguideCss(project) {
+  let range = project.dependency("ember-styleguide");
+  let file = APP_FILES.find((name) => project.has(name));
+
+  return Boolean(
+    range &&
+    (range === STYLEGUIDE_REF || atLeast(range, 12, 0)) &&
+    file &&
+    !project.read(file).includes("ember-styleguide/styles.css") &&
+    !(
+      project.has(APP_STYLESHEET) &&
+      project.read(APP_STYLESHEET).includes("ember-styleguide/styles.css")
+    ),
+  );
+}
+
+/**
+ * The classic build compiles imported CSS with webpack's css-loader, which cannot resolve the fonts and
+ * public images that the styleguide's CSS names, so the import waits for Vite, which leaves those URLs to the browser.
+ *
+ * @type {Stage}
+ */
+export const emberStyleguideCss = {
+  name: "ember-styleguide-css",
+  label: "Import the CSS of the v2 ember-styleguide before the app's own CSS",
+
+  detect(project) {
+    return Boolean(project.dependency("@embroider/vite")) && needsStyleguideCss(project);
+  },
+
+  async check() {
+    return { blockers: [], todo: [] };
+  },
+
+  async run(project) {
+    importStyleguideCss(project);
+    return [];
+  },
+};
 
 /**
  * Adds `import './deprecation-workflow';` as the first import of app/app.js,
@@ -85,8 +194,9 @@ export const deprecationWorkflow = {
 };
 
 const STYLEGUIDE_PR = "https://github.com/ember-learn/ember-styleguide/pull/551";
-const STYLEGUIDE_REF =
-  "github:NullVoxPopuli-ai-agent/ember-styleguide#a00373bc5bf1a9f125545c6ed470294cf86bc907";
+const STYLEGUIDE_SHA = "eb7f1b2dca5dca0f9351fae29243c52d7857c490";
+const STYLEGUIDE_REF = `github:NullVoxPopuli-ai-agent/ember-styleguide#${STYLEGUIDE_SHA}`;
+const STYLEGUIDE_TARBALL = `https://codeload.github.com/NullVoxPopuli-ai-agent/ember-styleguide/tar.gz/${STYLEGUIDE_SHA}`;
 
 /** @type {Stage} */
 export const emberStyleguide = {
@@ -110,12 +220,22 @@ export const emberStyleguide = {
       editPackageJson(project, (pkg) =>
         setDependency(pkg, "ember-styleguide", `^${release.version}`),
       );
+      if (project.dependency("@embroider/vite")) importStyleguideCss(project);
       return [];
     }
 
     editPackageJson(project, (pkg) => setDependency(pkg, "ember-styleguide", STYLEGUIDE_REF));
 
-    if (packageManager(project) === "pnpm") allowBuild(project, "ember-styleguide");
+    if (project.dependency("@embroider/vite")) importStyleguideCss(project);
+
+    if (packageManager(project) === "pnpm") {
+      allowBuild(project, "ember-styleguide");
+
+      /**
+       * pnpm 11 allows the build of a git-hosted package by the URL of its tarball.
+       */
+      if (pnpmMajor(project) >= 11) allowBuild(project, `ember-styleguide@${STYLEGUIDE_TARBALL}`);
+    }
 
     recordProgress(project, {
       id: "ember-styleguide",
@@ -124,6 +244,72 @@ export const emberStyleguide = {
         "ember-styleguide installs from the branch of its v2 pull request, because no v2 version is released. " +
         "Change it to the released version when the pull request is merged.",
       links: [STYLEGUIDE_PR],
+    });
+
+    return [];
+  },
+};
+
+const GUIDEMAKER_PR = "https://github.com/ember-learn/guidemaker-ember-template/pull/217";
+/**
+ * The built package of the PR branch, from its dist branch, like the dist branch of the upstream repo.
+ */
+const GUIDEMAKER_REF =
+  "github:NullVoxPopuli-ai-agent/guidemaker-ember-template#06e4c1025c06d0a5432ff57e3a4d45eb8d13d69c";
+
+/**
+ * guidemaker-ember-template 4.3.0 is a v2 addon, but it depends on ember-concurrency 4, which imports `ember`,
+ * and on the v1 addons ember-power-select 7 and ember-styleguide 11.
+ *
+ * @type {Stage}
+ */
+export const guidemakerEmberTemplate = {
+  name: "guidemaker-ember-template",
+  label:
+    "Install guidemaker-ember-template from the branch of its open dependency upgrade pull request",
+
+  detect(project) {
+    let range = project.dependency("guidemaker-ember-template");
+
+    return Boolean(range) && !range?.includes(":");
+  },
+
+  async check() {
+    return { blockers: [], todo: [] };
+  },
+
+  async run(project) {
+    let release = published("guidemaker-ember-template");
+    let concurrency = release?.dependencies?.["ember-concurrency"];
+
+    if (release && concurrency && atLeast(concurrency, 5, 0)) {
+      editPackageJson(project, (pkg) =>
+        setDependency(pkg, "guidemaker-ember-template", `^${release.version}`),
+      );
+      return [];
+    }
+
+    editPackageJson(project, (pkg) =>
+      setDependency(pkg, "guidemaker-ember-template", GUIDEMAKER_REF),
+    );
+
+    /**
+     * The branch depends on ember-styleguide from git, which pnpm builds.
+     */
+    if (packageManager(project) === "pnpm") {
+      allowBuild(project, "ember-styleguide");
+
+      if (pnpmMajor(project) >= 11) allowBuild(project, `ember-styleguide@${STYLEGUIDE_TARBALL}`);
+    }
+
+    recordProgress(project, {
+      id: "guidemaker-ember-template",
+      status: "git-ref",
+      note:
+        "guidemaker-ember-template installs from the branch of its dependency upgrade pull request, " +
+        "because no release has ember-concurrency 5 and the v2 ember-styleguide. " +
+        "Change it to the released version when the pull request is merged.",
+      links: [GUIDEMAKER_PR],
     });
 
     return [];
@@ -284,7 +470,31 @@ function hasOwnStage(name) {
       "ember-web-app",
       "ember-power-select-typeahead",
       "ember-router-scroll",
+      "ember-scoped-css-compat",
+      "ember-cli-netlify",
+      "@percy/ember",
+      "ember-leaflet",
     ].includes(name)
+  );
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ * @param {string} dependency
+ * @param {string} range
+ * @returns {boolean} the range gives a v2 addon, and an installed v1 addon depends on the package
+ * without ember-auto-import 2, which v1 addons need to load a v2 addon
+ */
+function oldAddonsNeed(project, dependency, range) {
+  let release = published(dependency, range);
+
+  if (!release?.addon || !release.v2) return false;
+
+  return installedAddonTree(project).some(
+    ({ manifest }) =>
+      isV1Manifest(manifest) &&
+      manifest.dependencies?.[dependency] &&
+      !atLeast(manifest.dependencies?.["ember-auto-import"], 2, 0),
   );
 }
 
@@ -329,6 +539,9 @@ export function updateStage(name, release) {
     async run(project) {
       /**
        * An override of the addon itself, or of what it needs, can hold back the update.
+       * The override goes to the range that the release asks for, because it kept the dependency tree on one copy,
+       * and two copies of some v1 addons, such as @ember/test-waiters 3, break the build.
+       * It goes away when it would force a v2 addon on a v1 addon that cannot load one.
        */
       let wanted = Object.assign({}, release.dependencies, release.peerDependencies, {
         [name]: `^${release.version}`,
@@ -340,10 +553,16 @@ export function updateStage(name, release) {
         let pin = overrideRange(project, dependency);
 
         if (pin && olderRelease(pin, range)) {
-          removeOverride(project, dependency);
+          if (oldAddonsNeed(project, dependency, range)) removeOverride(project, dependency);
+          else addOverride(project, dependency, range);
+
           unpinned.push(`${dependency} (${pin}, and ${name} ${release.version} asks for ${range})`);
         }
       }
+
+      let styleImports = mergedStyleImports(project, name);
+
+      dropPatches(project, [name]);
 
       editPackageJson(project, (pkg) => {
         setDependency(pkg, name, `^${release.version}`);
@@ -361,25 +580,28 @@ export function updateStage(name, release) {
       let todo = [];
       let codemod = TEMPLATE_CODEMODS.get(name);
 
+      /**
+       * The new files are in the v2 addon, so it must be installed first.
+       */
+      if (styleImports.size > 0) {
+        if (!install(project)) throw new Error(`The install of ${name} ${release.version} failed.`);
+
+        let missing = moveMergedStyleImports(project, name, styleImports);
+
+        if (missing.length > 0) {
+          todo.push({
+            title: `Sass imports of the styles that ${name} merged into the app: ${missing.join(", ")}`,
+            where: ["app/styles"],
+            action: `Import the styles from where ${name} ${release.version} has them. Check its upgrade guide.`,
+          });
+        }
+      }
+
       if (name === "ember-power-select" || name === "ember-basic-dropdown") {
         addBasicDropdownWormhole(project);
       }
 
       if (name === "ember-power-select") updateOptionClicks(project);
-
-      /**
-       * The vite-sass stage pointed Sass imports at the v1 addon's app/styles, which a v2 addon does not have.
-       * Its package entry has the styles, through the `sass` export condition.
-       */
-      let escaped = name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-      let stylePath = new RegExp(`(["'])${escaped}/app/styles/[^"']+\\1`, "g");
-
-      for (let file of project.files(["app/styles/**/*.{scss,sass}"])) {
-        let source = project.read(file);
-        let output = source.replace(stylePath, `$1${name}$1`);
-
-        if (output !== source) project.write(file, output);
-      }
 
       for (let file of codemod ? project.files([codemod.files]) : []) {
         let result = /** @type {{ codemod: TemplateCodemod }} */ (codemod).codemod(
@@ -400,10 +622,10 @@ export function updateStage(name, release) {
       if (unpinned.length > 0) {
         recordProgress(project, {
           id: `${name}: overrides`,
-          status: "removed",
+          status: "override",
           note:
-            `package.json forced versions that ${name} ${release.version} does not accept, so they are gone: ` +
-            `${unpinned.join(", ")}.`,
+            `package.json forced versions that ${name} ${release.version} does not accept, so the overrides force the ranges that it asks for: ` +
+            `${unpinned.join(", ")}. Remove each override when the dependency tree has one copy without it.`,
         });
       }
 
@@ -487,6 +709,10 @@ const TEMPLATE_CODEMODS = new Map([
     "ember-power-select",
     { codemod: updatePowerSelect, files: "{app,addon,tests}/**/*.{hbs,gjs,gts,js,ts}" },
   ],
+  [
+    "ember-truth-helpers",
+    { codemod: truthHelperPaths, files: "{app,addon,tests}/**/*.{gjs,gts,js,ts}" },
+  ],
 ]);
 
 /**
@@ -496,73 +722,243 @@ const TEMPLATE_CODEMODS = new Map([
 const MAJOR_CAPS = new Map([["ember-concurrency", "4"]]);
 
 /**
+ * @param {string} range such as `^1.0.0 || ^2.0.0`
+ * @param {number} major
+ * @returns {boolean} a part of the range starts at the major
+ */
+export function allowsMajor(range, major) {
+  return range.split("||").some((part) => minorOf(part)?.[0] === major);
+}
+
+/**
+ * @param {string} directory
+ * @returns {Record<string, any>}
+ */
+function manifestAt(directory) {
+  return JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ * @param {string} name
+ * @returns {string[]} the peer ranges of `name` that the installed addons declare, such as `^8.12.0`
+ */
+function peerRanges(project, name) {
+  return installedAddonTree(project)
+    .map(({ manifest }) => manifest.peerDependencies?.[name])
+    .filter((range) => typeof range === "string");
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ * @param {string} name
+ * @param {number} major
+ * @returns {boolean} each installed addon that has the package as a peer accepts the major
+ */
+function peersAccept(project, name, major) {
+  return peerRanges(project, name).every(
+    (range) => range === "*" || /^>=?/.test(range.trim()) || allowsMajor(range, major),
+  );
+}
+
+/**
+ * @param {import('#project.js').Project} project
+ * @param {string} name
+ * @param {string} [cap] a major that the release must not pass, such as `4`
+ * @returns {import('#process.js').Published | undefined} the latest release that the peer ranges of the installed addons accept
+ */
+function acceptedRelease(project, name, cap) {
+  let release = published(name, cap);
+  let major = minorOf(release?.version)?.[0];
+
+  if (!release || major === undefined || peersAccept(project, name, major)) return release;
+
+  /**
+   * The highest major that every peer range allows, such as 8 for `^8.12.0`.
+   */
+  /** @type {number | undefined} */
+  let highest;
+
+  for (let range of peerRanges(project, name)) {
+    for (let part of range.split("||")) {
+      let value = minorOf(part)?.[0];
+
+      if (value === undefined || value >= major || !peersAccept(project, name, value)) continue;
+      if (highest === undefined || value > highest) highest = value;
+    }
+  }
+
+  return highest === undefined ? undefined : published(name, String(highest));
+}
+
+/**
+ * A v2 addon of the app can have its own copy of another addon of the app, at an older major,
+ * such as ember-animated-tools 1 with ember-animated 1, next to the app's ember-animated 2.
+ * The old copy can call what the app's versions no longer have, and Embroider stops the build on it.
+ * The addon updates when its latest release accepts the app's copy.
+ *
+ * @param {import('#project.js').Project} project
+ * @returns {Stage[]}
+ */
+function copyUpdates(project) {
+  /** @type {Stage[]} */
+  let stages = [];
+
+  for (let name of dependencyNames(project.packageJson)) {
+    let directory = resolvePackage(project.directory, name);
+
+    if (!directory || hasOwnStage(name) || IGNORED.has(name)) continue;
+
+    let manifest = manifestAt(directory);
+
+    if (manifest["ember-addon"]?.version !== 2) continue;
+
+    let copies = Object.keys(manifest.dependencies ?? {}).filter((dependency) => {
+      let own = project.dependency(dependency) && resolvePackage(directory, dependency);
+
+      return own && own !== resolvePackage(project.directory, dependency);
+    });
+
+    if (copies.length === 0) continue;
+
+    let release = acceptedRelease(project, name);
+    let current = minorOf(manifest.version)?.[0];
+    let latest = minorOf(release?.version)?.[0];
+
+    if (!release || current === undefined || latest === undefined || latest <= current) continue;
+
+    let accepts = copies.every((dependency) => {
+      let app = resolvePackage(project.directory, dependency);
+      let major = app ? minorOf(manifestAt(app).version)?.[0] : undefined;
+      let range = release.dependencies?.[dependency] ?? release.peerDependencies?.[dependency];
+
+      return major !== undefined && typeof range === "string" && allowsMajor(range, major);
+    });
+
+    /**
+     * The release's own peers must accept the app's copies too, such as ember-basic-dropdown for ember-power-select.
+     */
+    let peersFit = Object.entries(release.peerDependencies ?? {}).every(([peer, range]) => {
+      let app = project.dependency(peer) ? resolvePackage(project.directory, peer) : undefined;
+      let major = app ? minorOf(manifestAt(app).version)?.[0] : undefined;
+
+      return major === undefined || peer === "ember-source" || allowsMajor(String(range), major);
+    });
+
+    if (accepts && peersFit) stages.push(updateStage(name, release));
+  }
+
+  return stages;
+}
+
+/**
  * One stage for each v1 addon with a v2 release, so that each update is its own commit.
  * The v1 addons with no v2 release go in the progress file.
  *
  * @type {import('#types.js').StageGroup}
  */
-export const v2Addons = {
-  name: "v2-addons",
-  label: "Update each v1 addon that has a v2 release, one commit for each",
-  needsInstall: true,
+/**
+ * @param {boolean} afterVite
+ * @returns {import('#types.js').StageGroup}
+ */
+function v2AddonsGroup(afterVite) {
+  return {
+    name: afterVite ? "v2-addons-vite" : "v2-addons",
+    label: afterVite
+      ? "Move the v1 addons whose components only the Vite build pairs with their templates into the app"
+      : "Update each v1 addon that has a v2 release, one commit for each",
+    needsInstall: true,
 
-  async expand(project) {
-    /** @type {Stage[]} */
-    let stages = [];
-    /** @type {{ name: string, note: string, links: string[] }[]} */
-    let v1Only = [];
+    async expand(project) {
+      /** @type {Stage[]} */
+      let stages = [];
 
-    /**
-     * An addon that moves into the app brings its dependencies to the app's package.json.
-     * Its v1 addons get the same treatment, after it.
-     *
-     * @type {{ name: string, from?: string }[]}
-     */
-    let queue = installedV1Addons(project).map((name) => ({ name }));
-    let seen = new Set(queue.map((entry) => entry.name));
+      /**
+       * v2 addons need ember-source 3.28 or newer, and the vite stage stops an older app.
+       */
+      if (!atLeast(project.dependency("ember-source"), 3, 28)) return stages;
+      /** @type {{ name: string, note: string, links: string[] }[]} */
+      let v1Only = [];
 
-    for (let index = 0; index < queue.length; index++) {
-      let { name, from } = queue[index];
+      /**
+       * An addon that moves into the app brings its dependencies to the app's package.json.
+       * Its v1 addons get the same treatment, after it.
+       *
+       * @type {{ name: string, from?: string }[]}
+       */
+      let queue = installedV1Addons(project).map((name) => ({ name }));
+      let seen = new Set(queue.map((entry) => entry.name));
 
-      if (IGNORED.has(name) || hasOwnStage(name)) continue;
+      for (let index = 0; index < queue.length; index++) {
+        let { name, from } = queue[index];
 
-      let known = NO_V2_YET.get(name);
+        if (IGNORED.has(name) || hasOwnStage(name)) continue;
 
-      if (known) {
-        v1Only.push({ name, note: known.note, links: known.links });
-        continue;
-      }
+        let known = NO_V2_YET.get(name);
 
-      let release = published(name, MAJOR_CAPS.get(name));
-      let inline = release?.v2 ? undefined : inlineV1Stage(project, name, from);
-
-      if (release?.v2) {
-        stages.push(updateStage(name, release));
-      } else if (inline) {
-        stages.push(inline);
-
-        for (let dependency of Object.keys(inline.dependencies)) {
-          let directory = dependencyDirectory(inline.directory, dependency);
-
-          if (seen.has(dependency) || !directory || !isV1Addon(directory)) continue;
-          if (project.dependency(dependency)) continue;
-
-          seen.add(dependency);
-          queue.push({ name: dependency, from: directory });
+        if (known) {
+          if (!afterVite) v1Only.push({ name, note: known.note, links: known.links });
+          continue;
         }
-      } else {
-        v1Only.push({
-          name,
-          note: release
-            ? `The latest release, ${release.version}, is a v1 addon. Replace it, or help to convert it to a v2 addon.`
-            : "The registry does not have this package. Check whether it is a v1 addon that needs conversion.",
-          links: release?.repository ? [release.repository] : [],
-        });
+
+        /**
+         * Another installed addon can have this one as a peer, at an older major, such as ember-power-select-with-create 3
+         * with ember-power-select 8.
+         */
+        let release = acceptedRelease(project, name, MAJOR_CAPS.get(name));
+        let inline = release?.v2 ? undefined : inlineV1Stage(project, name, from);
+
+        if (release?.v2) {
+          /**
+           * After the vite stage, only the dependencies of the addons that this group moves into the app are new.
+           */
+          if (!afterVite || from) stages.push(updateStage(name, release));
+        } else if (inline) {
+          /**
+           * Before the vite stage, the classic build checks each step, and it pairs templates only in app/components.
+           */
+          if (Boolean(inline.needsVite) !== afterVite) continue;
+
+          stages.push(inline);
+
+          for (let dependency of Object.keys(inline.dependencies)) {
+            let directory = dependencyDirectory(inline.directory, dependency);
+
+            if (seen.has(dependency) || !directory || !isV1Addon(directory)) continue;
+            if (project.dependency(dependency)) continue;
+
+            seen.add(dependency);
+            queue.push({ name: dependency, from: directory });
+          }
+        } else if (!afterVite) {
+          v1Only.push({
+            name,
+            note: release
+              ? `The latest release, ${release.version}, is a v1 addon. Replace it, or help to convert it to a v2 addon.`
+              : "The registry does not have this package. Check whether it is a v1 addon that needs conversion.",
+            links: release?.repository ? [release.repository] : [],
+          });
+        }
       }
-    }
 
-    if (v1Only.length > 0) stages.push(v1Record(v1Only));
+      if (afterVite) return stages;
 
-    return stages;
-  },
-};
+      for (let stage of copyUpdates(project)) stages.push(stage);
+
+      if (v1Only.length > 0) stages.push(v1Record(v1Only));
+
+      return stages;
+    },
+  };
+}
+
+/**
+ * One stage for each v1 addon with a v2 release, so that each update is its own commit, and the v1 addons
+ * that move into the app. The v1 addons with no v2 release go in the progress file.
+ */
+export const v2Addons = v2AddonsGroup(false);
+
+/**
+ * After the vite stage: the v1 addons whose components stay in app/addons with their templates.
+ */
+export const v2AddonsVite = v2AddonsGroup(true);

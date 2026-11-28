@@ -7,7 +7,7 @@
  * --diff writes what the upgrade changed, without lockfiles, so that CI can keep it.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -95,10 +95,21 @@ try {
   console.log(`\n== ${app.name}: ember-upgrade ${project}\n`);
 
   let args = app.verify ? [cli, project, "--verify"] : [cli, project];
-  let run = sh(project, process.execPath, args, { capture: true });
-  let output = run.stdout + run.stderr;
+  /**
+   * One file for stdout and stderr keeps their lines in order, so a build error stays next to its stage.
+   */
+  let logFile = join(root, "ember-upgrade.log");
+  let fd = openSync(logFile, "w");
 
-  console.log(output);
+  try {
+    spawnSync(process.execPath, args, { cwd: project, env, stdio: ["ignore", fd, fd] });
+  } finally {
+    closeSync(fd);
+  }
+
+  let output = readFileSync(logFile, "utf8");
+
+  process.stdout.write(output);
 
   let log = sh(checkout, "git", ["log", "--format=%s", `${app.sha}..HEAD`], { capture: true });
   let completed = log.stdout
@@ -138,9 +149,18 @@ try {
       continue;
     }
 
-    let tree = /** @type {{ errors?: { message: string }[] }} */ (
-      toTree(source, { filePath: file })
-    );
+    /** @type {{ errors?: { message: string }[] }} */
+    let tree;
+
+    /**
+     * ember-estree throws on some syntax errors, and returns others.
+     */
+    try {
+      tree = /** @type {{ errors?: { message: string }[] }} */ (toTree(source, { filePath: file }));
+    } catch (error) {
+      failures.push(`${file} does not parse: ${error instanceof Error ? error.message : error}`);
+      continue;
+    }
 
     if (tree.errors?.length) failures.push(`${file} does not parse: ${tree.errors[0].message}`);
   }
@@ -173,7 +193,10 @@ try {
 
 if (failures.length > 0) {
   console.error(`\n== ${app.name}: FAILED\n${failures.map((f) => `- ${f}`).join("\n")}`);
-  process.exit(1);
+  /**
+   * process.exit() drops the output that is not yet written to a pipe, such as the end of a long CI log.
+   */
+  process.exitCode = 1;
 }
 
 console.log(`\n== ${app.name}: as expected`);

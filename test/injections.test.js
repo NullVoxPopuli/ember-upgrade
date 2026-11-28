@@ -89,6 +89,49 @@ export default class IndexRoute extends Route {}
   `);
 });
 
+/**
+ * From documize/community (AGPL-3.0), app/initializers/event-bus.js and app/mixins/notifier.js, shortened.
+ */
+test("a mixin that reads an injected property declares the service", () => {
+  let app = project({
+    "app/initializers/event-bus.js": `export function initialize(application) {
+    application.inject('mixin', 'eventBus', 'service:eventBus');
+}
+
+export default { name: 'eventBus', initialize: initialize };
+`,
+    "app/mixins/notifier.js": `import Mixin from '@ember/object/mixin';
+import EmberObject from '@ember/object';
+
+const Message = EmberObject.create({ text: '' });
+
+export default Mixin.create({
+	notifySuccess(msg) {
+        this.eventBus.publish('notifyUser', msg, 'success');
+	},
+});
+`,
+  });
+
+  explicitInjections(app);
+
+  expect(app.read("app/mixins/notifier.js")).toMatchInlineSnapshot(`
+    "import Mixin from '@ember/object/mixin';
+    import EmberObject from '@ember/object';
+    import { service } from '@ember/service';
+
+    const Message = EmberObject.create({ text: '' });
+
+    export default Mixin.create({
+      eventBus: service(),
+    	notifySuccess(msg) {
+            this.eventBus.publish('notifyUser', msg, 'success');
+    	},
+    });
+    "
+  `);
+});
+
 test("routes and controllers that read the store declare it, as ember-data stopped injecting it", () => {
   let app = project({
     "package.json": JSON.stringify({ devDependencies: { "ember-data": "~3.28.0" } }),

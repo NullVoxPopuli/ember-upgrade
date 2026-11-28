@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import {
   inlineV1Stage,
+  placements,
   withDeprecationOwner,
   withHasBlockHelpers,
   withoutCompatibilityHelpers,
@@ -90,16 +91,52 @@ test("a v1 addon with no v2 release moves into the app", async () => {
         "lodash": "^4.0.0",
       },
       "files": {
-        "app/addons/emberx-select/components/x-legacy.hbs": "Old
+        "app/addons/emberx-select/components/x-legacy.hbs": "{{!--
+      Copied from emberx-select by ember-upgrade.
+      emberx-select is a v1 addon with no v2 release,
+      and the Vite build does not load v1 addons.
+      To use the library again, once it has a v2 release:
+      add emberx-select to package.json, import its modules
+      from emberx-select again, and delete the files
+      that have this comment.
+    --}}
+    Old
     ",
-        "app/addons/emberx-select/components/x-legacy.js": "import Component from '@ember/component';
+        "app/addons/emberx-select/components/x-legacy.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    import Component from '@ember/component';
     export default Component.extend({
       tagName: '',
     });
     ",
-        "app/addons/emberx-select/services/x-registry.js": "export default class Registry {}
+        "app/addons/emberx-select/services/x-registry.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    export default class Registry {}
     ",
-        "app/addons/emberx-select/utils/helper.js": "import { noop } from 'lodash';
+        "app/addons/emberx-select/utils/helper.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    import { noop } from 'lodash';
     export function helper() {
       noop();
     }
@@ -107,22 +144,67 @@ test("a v1 addon with no v2 release moves into the app", async () => {
         "app/components/category-position-dropdown.js": "import XSelect from './x-select.js';
     export default class extends XSelect {}
     ",
-        "app/components/x-option.js": "export { default } from "./x-select";
+        "app/components/x-option.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    export { default } from "./x-select";
     ",
-        "app/components/x-select.hbs": "<select>{{yield}}</select>
+        "app/components/x-select.hbs": "{{!--
+      Copied from emberx-select by ember-upgrade.
+      emberx-select is a v1 addon with no v2 release,
+      and the Vite build does not load v1 addons.
+      To use the library again, once it has a v2 release:
+      add emberx-select to package.json, import its modules
+      from emberx-select again, and delete the files
+      that have this comment.
+    --}}
+    <select>{{yield}}</select>
     ",
-        "app/components/x-select.js": "import Component from '@ember/component';
+        "app/components/x-select.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    import Component from '@ember/component';
     import { helper } from '../addons/emberx-select/utils/helper';
     export default Component.extend({});
     ",
         "app/services/x-registry.js": "import Registry from '../addons/emberx-select/services/x-registry.js';
     export default class extends Registry {}
     ",
-        "tests/helpers/emberx-select/index.js": "export function selectOption() {}
+        "tests/helpers/emberx-select/index.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    export function selectOption() {}
     ",
         "tests/helpers/index.js": "export function setupApplicationTest() {}
     ",
-        "tests/helpers/x-select.js": "export default function select() {}
+        "tests/helpers/x-select.js": "/**
+     * Copied from emberx-select by ember-upgrade.
+     * emberx-select is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add emberx-select to package.json, import its modules
+     * from emberx-select again, and delete the files
+     * that have this comment.
+     */
+    export default function select() {}
     ",
         "tests/integration/x-select-test.js": "import { selectOption } from '../helpers/emberx-select/index.js';
     ",
@@ -301,7 +383,16 @@ module.exports = {
       </body>
     </html>
     ",
-      "service": "export default class StripeService {}
+      "service": "/**
+     * Copied from ember-stripe-elements by ember-upgrade.
+     * ember-stripe-elements is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add ember-stripe-elements to package.json, import its modules
+     * from ember-stripe-elements again, and delete the files
+     * that have this comment.
+     */
+    export default class StripeService {}
     ",
       "tests": "<html>
       <body>
@@ -399,4 +490,289 @@ deprecate('setupRouter is deprecated', false, {
     });
     "
   `);
+});
+
+/**
+ * From ember-toggle 7.1.1 (MIT) and documize/community, shortened.
+ * The included hook picks the theme stylesheets from the app's config.
+ */
+test("the vendor files that an included hook imports go into the app, as ember-cli-build imports", async () => {
+  let addon = "node_modules/ember-toggle";
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-toggle": "7.1.1" } }),
+    "config/environment.js": `module.exports = function (environment) {
+  return { environment, 'ember-toggle': { includedThemes: ['light', 'ios'] } };
+};
+`,
+    "ember-cli-build.js": `'use strict';
+
+const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+module.exports = function (defaults) {
+  let app = new EmberApp(defaults, {});
+
+  return app.toTree();
+};
+`,
+    [`${addon}/package.json`]: JSON.stringify({
+      name: "ember-toggle",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-classic-decorator": "^2.0.0", "ember-cli-babel": "7.22.1" },
+    }),
+    [`${addon}/index.js`]: `'use strict';
+
+module.exports = {
+  name: require('./package').name,
+
+  included: function (app, parentAddon) {
+    var target = parentAddon || app;
+
+    // necessary for nested usage
+    // parent addon should call \`this._super.included.apply(this, arguments);\`
+    if (target.app) {
+      target = target.app;
+    }
+
+    this.app = target;
+
+    // Use configuration to decide which theme css files
+    // to import, thus not populating the user's app
+    this.importThemes(target);
+    this._super.included.apply(this, arguments);
+  },
+
+  importThemes: function (app) {
+    var projectConfig = this.project.config(app.env);
+    var config = projectConfig['ember-toggle'] || {};
+    var excludeBaseStyles = config.excludeBaseStyles || false;
+    var allThemes = [
+      'light',
+      'ios',
+      'default',
+      'flat',
+      'skewed',
+      'flip',
+      'material',
+    ];
+    var included = config.includedThemes;
+    var excluded = config.excludedThemes;
+    var themes = [];
+
+    if (included && Array.isArray(included)) {
+      themes = themes.concat(included);
+    } else {
+      themes = allThemes;
+    }
+
+    if (excluded && Array.isArray(excluded)) {
+      themes = themes.filter(function (theme) {
+        return excluded.indexOf(theme) === -1;
+      });
+    }
+
+    themes = themes.filter(function (theme) {
+      return theme && allThemes.indexOf(theme) !== -1;
+    });
+
+    if (!excludeBaseStyles) {
+      app.import('vendor/ember-toggle/base.css');
+    }
+
+    // Include all themes if user incorrectly specified themes in the config
+    themes = themes.length ? themes : allThemes;
+
+    themes.forEach(function (theme) {
+      app.import('vendor/ember-toggle/themes/' + theme + '.css');
+    });
+  },
+};
+`,
+    [`${addon}/vendor/ember-toggle/base.css`]: ".x-toggle { display: none; }\n",
+    [`${addon}/vendor/ember-toggle/themes/light.css`]: ".x-toggle-light {}\n",
+    [`${addon}/vendor/ember-toggle/themes/ios.css`]: ".x-toggle-ios {}\n",
+    [`${addon}/addon/components/x-toggle/component.js`]: `import classic from 'ember-classic-decorator';
+import { layout as templateLayout } from '@ember-decorators/component';
+import Component from '@ember/component';
+import layout from './template';
+
+@classic
+@templateLayout(layout)
+export default class XToggle extends Component {}
+`,
+    [`${addon}/addon/components/x-toggle/template.hbs`]: "<label>{{this.onLabel}}</label>\n",
+    [`${addon}/app/components/x-toggle.js`]:
+      "export { default } from 'ember-toggle/components/x-toggle/component';\n",
+  });
+
+  let stage = inlineV1Stage(app, "ember-toggle");
+
+  if (!stage) throw new Error("the addon stays a v1 addon");
+
+  expect(await stage.check(app)).toEqual({ blockers: [], todo: [] });
+
+  await stage.run(app);
+
+  expect({
+    build: app.read("ember-cli-build.js"),
+    theme: app.read("vendor/ember-toggle/themes/ios.css"),
+    component: app.read("app/components/x-toggle.js"),
+    template: app.read("app/components/x-toggle.hbs"),
+    dependencies: app.packageJson.devDependencies,
+  }).toMatchInlineSnapshot(`
+    {
+      "build": "'use strict';
+
+    const EmberApp = require('ember-cli/lib/broccoli/ember-app');
+
+    module.exports = function (defaults) {
+      let app = new EmberApp(defaults, {});
+      app.import("vendor/ember-toggle/base.css");
+      app.import("vendor/ember-toggle/themes/light.css");
+      app.import("vendor/ember-toggle/themes/ios.css");
+
+      return app.toTree();
+    };
+    ",
+      "component": "/**
+     * Copied from ember-toggle by ember-upgrade.
+     * ember-toggle is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add ember-toggle to package.json, import its modules
+     * from ember-toggle again, and delete the files
+     * that have this comment.
+     */
+    import Component from '@ember/component';
+
+    export default class XToggle extends Component {}
+    ",
+      "dependencies": {},
+      "template": "{{!--
+      Copied from ember-toggle by ember-upgrade.
+      ember-toggle is a v1 addon with no v2 release,
+      and the Vite build does not load v1 addons.
+      To use the library again, once it has a v2 release:
+      add ember-toggle to package.json, import its modules
+      from ember-toggle again, and delete the files
+      that have this comment.
+    --}}
+    <label>{{this.onLabel}}</label>
+    ",
+      "theme": "/*
+     * Copied from ember-toggle by ember-upgrade.
+     * ember-toggle is a v1 addon with no v2 release,
+     * and the Vite build does not load v1 addons.
+     * To use the library again, once it has a v2 release:
+     * add ember-toggle to package.json, import its modules
+     * from ember-toggle again, and delete the files
+     * that have this comment.
+     */
+    .x-toggle-ios {}
+    ",
+    }
+  `);
+});
+
+test("an addon whose included hook reads the build options stays a v1 addon", () => {
+  let addon = "node_modules/ember-bootstrap-like";
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "ember-bootstrap-like": "1.0.0" } }),
+    "config/environment.js": "module.exports = function () {\n  return {};\n};\n",
+    "ember-cli-build.js": "let app = new EmberApp(defaults, {});\n",
+    [`${addon}/package.json`]: JSON.stringify({
+      name: "ember-bootstrap-like",
+      keywords: ["ember-addon"],
+    }),
+    [`${addon}/index.js`]: `module.exports = {
+  name: 'ember-bootstrap-like',
+  included(app) {
+    let version = app.options['ember-bootstrap-like'].version;
+    app.import('vendor/v' + version + '.css');
+  }
+};
+`,
+    [`${addon}/vendor/v3.css`]: "",
+    [`${addon}/addon/components/x.js`]: "export default class {}\n",
+  });
+
+  expect(inlineV1Stage(app, "ember-bootstrap-like")).toBeUndefined();
+});
+
+test("an addon whose included hook imports a file for each environment stays a v1 addon", () => {
+  let addon = "node_modules/env-imports";
+  let app = project({
+    "package.json": JSON.stringify({ devDependencies: { "env-imports": "1.0.0" } }),
+    "config/environment.js": "module.exports = function () {\n  return {};\n};\n",
+    "ember-cli-build.js": "let app = new EmberApp(defaults, {});\n",
+    [`${addon}/package.json`]: JSON.stringify({ name: "env-imports", keywords: ["ember-addon"] }),
+    [`${addon}/index.js`]: `module.exports = {
+  name: 'env-imports',
+  included(app) {
+    app.import({ development: 'vendor/a.js', production: 'vendor/a.min.js' });
+  }
+};
+`,
+    [`${addon}/vendor/a.js`]: "",
+    [`${addon}/addon/components/x.js`]: "export default class {}\n",
+  });
+
+  expect(inlineV1Stage(app, "env-imports")).toBeUndefined();
+});
+
+/**
+ * From ember-href-to 5.1.1 (Apache-2.0), shortened: its app/ instance-initializer has its own code,
+ * and imports the class of addon/href-to.js.
+ */
+test("an addon module that an app module only imports stays in the addon's folder", () => {
+  let files = {
+    "app/helpers/href-to.js": "export { default } from 'ember-href-to/helpers/href-to';\n",
+    "app/instance-initializers/ember-href-to.js": `import HrefTo from 'ember-href-to/href-to';
+
+export default {
+  name: 'ember-href-to',
+  initialize(applicationInstance) {},
+};
+`,
+    "addon/helpers/href-to.js": "export default class HrefToHelper {}\n",
+    "addon/href-to.js": "export default class {}\n",
+  };
+
+  expect(
+    placements(
+      "ember-href-to",
+      Object.keys(files),
+      (file) => files[/** @type {keyof typeof files} */ (file)],
+      () => false,
+    ),
+  ).toMatchInlineSnapshot(`
+    Map {
+      "addon/helpers/href-to.js" => "app/helpers/href-to.js",
+      "addon/href-to.js" => "app/addons/ember-href-to/href-to.js",
+    }
+  `);
+});
+
+/**
+ * From @ember/legacy-built-in-components 0.4.2 (MIT), shortened: a colocated component and no app/ tree,
+ * so the component stays in app/addons with its template.
+ */
+test("a v1 addon whose component stays in app/addons with its template waits for the Vite build", () => {
+  let addon = "node_modules/@ember/legacy-built-in-components";
+  let app = project({
+    "package.json": JSON.stringify({
+      devDependencies: { "@ember/legacy-built-in-components": "^0.4.2" },
+    }),
+    [`${addon}/package.json`]: JSON.stringify({
+      name: "@ember/legacy-built-in-components",
+      keywords: ["ember-addon"],
+      dependencies: { "ember-cli-babel": "^7.26.11", "ember-cli-htmlbars": "^6.0.1" },
+    }),
+    [`${addon}/index.js`]:
+      "'use strict';\n\nmodule.exports = {\n  name: require('./package').name,\n};\n",
+    [`${addon}/addon/components/checkbox.js`]:
+      "import Component from '@ember/component';\nexport default class Checkbox extends Component {}\n",
+    [`${addon}/addon/components/checkbox.hbs`]: "<input type='checkbox' />\n",
+  });
+
+  expect(inlineV1Stage(app, "@ember/legacy-built-in-components")?.needsVite).toBe(true);
 });

@@ -3,6 +3,11 @@ import { addOverride } from "#manager-settings.js";
 import { published, runUpstream } from "#process.js";
 import { recordProgress } from "#progress.js";
 import { atLeast } from "#version.js";
+import { ADDON_CONTENT, contentAddons, withAddonContentOff } from "./config-module.js";
+import { removeDeadTrees } from "./dead-trees.js";
+import { removeFastBoot } from "./fastboot.js";
+import { addWarpDriveConfig } from "./warp-drive-config.js";
+import { replaceTestWaiters } from "#stages/addons/test-waiters.js";
 
 /**
  * v1 addons depend on older copies of these packages, and the Vite build needs the latest one.
@@ -84,6 +89,47 @@ export default {
       throw new Error("ember-vite-codemod failed. Its output is above.");
     }
 
+    /** @type {import('#types.js').Finding[]} */
+    let todo = [];
+    let file = buildFile(project);
+    let build = file ? project.read(file) : "";
+    let live = file ? removeDeadTrees(build, file) : build;
+
+    if (file && live !== build) {
+      project.write(file, live);
+      todo.push({
+        title: "ember-cli-build changed the output of the classic build, which Vite does not use",
+        where: [file],
+        action:
+          "The code that post-processed `app.toTree()` is gone. If it did something that the app needs, such as PostCSS plugins, do it in the Vite config or in postcss.config.js.",
+      });
+    }
+
+    for (let { content, option } of ADDON_CONTENT) {
+      let addons = contentAddons(project, content);
+      let current = file ? project.read(file) : "";
+
+      if (!file || addons.length === 0) continue;
+
+      let output = withAddonContentOff(current, file, option);
+
+      if (output === current) continue;
+
+      project.write(file, output);
+      recordProgress(project, {
+        id: option,
+        status: "check",
+        note:
+          `${addons.join(", ")} wrote the app's ${content} with contentFor, which Embroider refuses, so compatBuild has \`${option}: false\`. ` +
+          "The app's own config/environment module and index.html do this work. The ember-nvp stage removes the option.",
+      });
+    }
+
+    for (let item of removeFastBoot(project)) todo.push(item);
+
+    addWarpDriveConfig(project);
+    replaceTestWaiters(project);
+
     for (let [name, fallback] of Object.entries(PINS)) {
       addOverride(project, name, `^${published(name)?.version ?? fallback}`);
     }
@@ -98,6 +144,6 @@ export default {
       });
     }
 
-    return [];
+    return todo;
   },
 };

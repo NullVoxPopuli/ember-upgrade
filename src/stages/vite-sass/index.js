@@ -1,7 +1,7 @@
 import { existsSync, globSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 
-import { buildFile, removeBuildOptions } from "#config-files.js";
+import { addVitePlugin, buildFile, removeBuildOptions, viteConfig } from "#config-files.js";
 import { addOverride } from "#manager-settings.js";
 import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { published } from "#process.js";
@@ -22,7 +22,7 @@ const ENTRY_LINK = /(href=")([^"]*)@embroider\/virtual\/app\.css"/g;
 export function sassName(path) {
   let name = path.replace(/\.(scss|sass|css)$/, "").replace(/(^|\/)_([^/]*)$/, "$1$2");
 
-  return name.replace(/\/index$/, "");
+  return name.replace(/(^|\/)index$/, "");
 }
 
 /**
@@ -142,6 +142,114 @@ function styleNames(source) {
  */
 
 /**
+ * @param {{ folder: string }} source
+ * @returns {Record<string, any> | undefined} the `exports` of the package, when it is an object
+ */
+function exportsOf(source) {
+  let exports = JSON.parse(readFileSync(join(source.folder, "package.json"), "utf8")).exports;
+
+  return exports && typeof exports === "object" ? exports : undefined;
+}
+
+/**
+ * @param {Source} source
+ * @param {string} specifier
+ * @returns {boolean} the package's `exports` give Sass a file for the import
+ */
+function exportsResolve(source, specifier) {
+  let exports = exportsOf(source);
+
+  if (!exports) return false;
+  if (specifier === source.name) return Boolean(exports["."]?.sass);
+
+  return (
+    specifier.startsWith(`${source.name}/`) && `.${specifier.slice(source.name.length)}` in exports
+  );
+}
+
+/**
+ * A package with `exports` resolves only the paths that it lists, with their extensions,
+ * so `x/x` becomes `x/x.scss`, or `x` when the `sass` condition of the package entry is that file.
+ *
+ * @param {Source} source
+ * @param {string} specifier
+ * @returns {Resolution | undefined} undefined when the import is not into this package
+ */
+function fromExports(source, specifier) {
+  if (!specifier.startsWith(`${source.name}/`)) return;
+
+  let path = exportedSpecifier(source, specifier.slice(source.name.length + 1));
+
+  if (path) return { specifier: path, declare: source.name, range: source.range };
+}
+
+/**
+ * @param {unknown} target
+ * @returns {string | undefined} the file of an `exports` target, for the conditions that Vite gives Sass
+ */
+function targetFile(target) {
+  if (typeof target === "string") return target;
+  if (!target || typeof target !== "object") return;
+
+  let conditions = /** @type {Record<string, unknown>} */ (target);
+
+  return targetFile(conditions.sass ?? conditions.style ?? conditions.default);
+}
+
+/**
+ * @param {Record<string, any>} exports
+ * @param {string} file a file of the package, such as `dist/styles/x.scss`
+ * @returns {string | undefined} the subpath that the package exports the file at, such as `styles/x.scss`
+ */
+function exportedPath(exports, file) {
+  let local = `./${file}`;
+
+  for (let [key, target] of Object.entries(exports)) {
+    let path = targetFile(target);
+
+    if (!path || key === ".") continue;
+    if (path === local) return key.slice(2);
+
+    let star = path.indexOf("*");
+
+    if (star === -1 || key.split("*").length !== 2) continue;
+
+    let prefix = path.slice(0, star);
+    let suffix = path.slice(star + 1);
+
+    if (local.startsWith(prefix) && local.endsWith(suffix)) {
+      return key.slice(2).replace("*", local.slice(prefix.length, local.length - suffix.length));
+    }
+  }
+}
+
+/**
+ * @param {{ name: string, folder: string }} source
+ * @param {string} rest the import after the package name, such as `dist/styles/x`
+ * @returns {string | undefined} the import of the same file through the package's `exports`;
+ * undefined when the package has no `exports`, or does not export the file
+ */
+function exportedSpecifier(source, rest) {
+  let exports = exportsOf(source);
+
+  if (!exports) return;
+
+  let file = globSync("**/*.{scss,sass,css}", {
+    cwd: source.folder,
+    exclude: (name) => name === "node_modules",
+  })
+    .map((path) => path.split("\\").join("/"))
+    .find((path) => sassName(path) === rest);
+
+  if (!file) return;
+  if (exports["."]?.sass === `./${file}`) return source.name;
+
+  let exported = exportedPath(exports, file);
+
+  return exported && `${source.name}/${exported}`;
+}
+
+/**
  * @param {Source} source
  * @param {string} specifier
  * @returns {Resolution | undefined}
@@ -175,6 +283,12 @@ export function resolveImport(project, file, specifier, context) {
   if (/^(sass:|https?:|\/\/|url\()/.test(specifier) || specifier.endsWith(".css")) return;
 
   let folder = posix.dirname(file);
+  let joined = posix.join(folder, specifier);
+
+  /**
+   * Vite resolves a package folder through the package's `exports`, so a relative path into node_modules names a file of it.
+   */
+  if (specifier.startsWith(".") && joined.startsWith("node_modules/")) specifier = joined;
 
   if (specifier.startsWith("node_modules/")) {
     let path = specifier.slice("node_modules/".length);
@@ -185,8 +299,14 @@ export function resolveImport(project, file, specifier, context) {
     let installed = source ? undefined : packageFolder(project.directory, name);
     let version =
       installed && JSON.parse(readFileSync(join(installed, "package.json"), "utf8")).version;
+    let folder = source?.folder ?? installed;
+    let exported = folder && exportedSpecifier({ name, folder }, path.slice(name.length + 1));
 
-    return { specifier: path, declare: name, range: source?.range ?? (version && `^${version}`) };
+    return {
+      specifier: exported ?? path,
+      declare: name,
+      range: source?.range ?? (version && `^${version}`),
+    };
   }
 
   if (sassFileExists(join(project.directory, folder, specifier))) return;
@@ -194,9 +314,21 @@ export function resolveImport(project, file, specifier, context) {
   for (let root of context.roots) {
     if (!sassFileExists(join(project.directory, root, specifier))) continue;
 
-    let relative = posix.relative(folder, posix.join(root, specifier));
+    let found = posix.join(root, specifier);
+
+    if (found.startsWith("node_modules/")) return resolveImport(project, file, found, context);
+
+    let relative = posix.relative(folder, found);
 
     return { specifier: relative.startsWith(".") ? relative : `./${relative}` };
+  }
+
+  if (context.packages.some((source) => exportsResolve(source, specifier))) return;
+
+  for (let source of context.packages) {
+    let resolution = fromExports(source, specifier);
+
+    if (resolution) return resolution;
   }
 
   for (let source of context.packages) {
@@ -227,6 +359,36 @@ function includePaths(project) {
   return Array.from(String(options?.[1] ?? "").matchAll(STRING), (match) =>
     String(match[2]).replace(/\/$/, ""),
   );
+}
+
+const LOAD_PATHS_FILE = "vite/sass-load-paths.mjs";
+
+/**
+ * @param {string[]} paths folders in packages, relative to the app
+ * @returns {string} a Vite plugin that gives Sass the folders, as ember.nvp carries plugins and not other Vite options
+ */
+export function loadPathsPlugin(paths) {
+  return `import { resolve } from 'node:path';
+
+/**
+ * The stylesheets of packages import from these folders, which ember-cli-sass searched with \`includePaths\`.
+ */
+const LOAD_PATHS = ${JSON.stringify(paths)}.map((path) => resolve(import.meta.dirname, '..', path));
+
+export default {
+  name: 'sass-load-paths',
+  config() {
+    return {
+      css: {
+        preprocessorOptions: {
+          scss: { loadPaths: LOAD_PATHS },
+          sass: { loadPaths: LOAD_PATHS },
+        },
+      },
+    };
+  },
+};
+`;
 }
 
 /**
@@ -302,6 +464,28 @@ export default {
         where: ["index.html"],
         action: "Vite compiles a stylesheet that index.html links, such as `/app/styles/app.scss`.",
       });
+    }
+
+    let packagePaths = includePaths(project)
+      .map((path) => path.replace(/^\.\//, ""))
+      .filter((path) => path.startsWith("node_modules/"));
+
+    if (packagePaths.length > 0) {
+      project.write(LOAD_PATHS_FILE, loadPathsPlugin(packagePaths));
+
+      let added = addVitePlugin(project, {
+        importLine: `import sassLoadPaths from './${LOAD_PATHS_FILE}';`,
+        call: "sassLoadPaths",
+        specifier: `./${LOAD_PATHS_FILE}`,
+      });
+
+      if (!added) {
+        todo.push({
+          title: `Add the plugin of ${LOAD_PATHS_FILE} to the Vite config`,
+          where: [viteConfig(project) ?? "vite.config.mjs"],
+          action: "Import its default export, and add it to `plugins`.",
+        });
+      }
     }
 
     let removed = removeBuildOptions(project, ["sassOptions"]);

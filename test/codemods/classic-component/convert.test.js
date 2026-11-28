@@ -1058,6 +1058,164 @@ export default Component.extend({
 });
 
 /**
+ * From documize/community (AGPL-3.0), app/mixins/notifier.js, shortened.
+ */
+test("an action with the same code as the method of its name", () => {
+  let mixin = `import Mixin from '@ember/object/mixin';
+import { service } from '@ember/service';
+
+export default Mixin.create({
+  eventBus: service(),
+	notifySuccess(msg) {
+        this.eventBus.publish('notifyUser', msg, 'success');
+	},
+
+    actions: {
+		notifySuccess(msg) {
+			this.eventBus.publish('notifyUser', msg, 'success');
+		}
+    }
+});
+`;
+  let sources = new Map([
+    [
+      "app/components/license-key.js",
+      `import Component from '@ember/component';
+import Notifier from '../mixins/notifier';
+
+export default Component.extend(Notifier, {
+  tagName: '',
+
+  save() {
+    this.notifySuccess('Saved');
+  },
+});
+`,
+    ],
+    [
+      "app/components/license-key.hbs",
+      `<button {{action "notifySuccess" "Copied"}}>Copy</button>\n`,
+    ],
+  ]);
+
+  let result = convertComponents(sources, {
+    resolve: (specifier) =>
+      specifier === "../mixins/notifier"
+        ? { file: "app/mixins/notifier.js", source: mixin }
+        : undefined,
+  });
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/license-key.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { service } from '@ember/service';
+    import { action } from '@ember/object';
+
+    export default class LicenseKey extends Component {
+      @service()
+      eventBus;
+
+      @action
+      notifySuccess(msg) {
+      this.eventBus.publish('notifyUser', msg, 'success');
+      }
+
+      save() {
+        this.notifySuccess('Saved');
+      }
+
+      /**
+       * Runs an action as the \`{{action}}\` modifier did, without the event.
+       */
+      handleAction =
+        (run, options = {}) =>
+        (event) => {
+          if (options.preventDefault !== false) event.preventDefault();
+          if (options.bubbles === false) event.stopPropagation();
+
+          return run();
+        };
+    }
+    "
+  `);
+  expect(result.files.get("app/components/license-key.hbs")).toMatchInlineSnapshot(`
+    "<button {{on "click" (this.handleAction (fn this.notifySuccess "Copied"))}}>Copy</button>
+    "
+  `);
+});
+
+/**
+ * From documize/community (AGPL-3.0), section/code/type-editor.js and user/user-profile.js, shortened.
+ */
+test("an action with the name of a field gets its own name, and a computed with only get is a getter", () => {
+  let sources = new Map([
+    [
+      "app/components/code-editor.js",
+      `import Component from '@ember/component';
+import { computed } from '@ember/object';
+
+export default Component.extend({
+  tagName: '',
+  isDirty: false,
+  hasError: computed('error', {
+    get() {
+      return this.error ? 'is-invalid' : '';
+    },
+  }),
+
+  actions: {
+    onType() {
+      this.set('isDirty', true);
+      this.send('isDirty');
+    },
+
+    isDirty() {
+      return this.isDirty;
+    },
+  },
+});
+`,
+    ],
+    [
+      "app/components/code-editor.hbs",
+      `<BaseEditor @isDirty={{action "isDirty"}} @onType={{action "onType"}} class={{this.hasError}} />\n`,
+    ],
+  ]);
+
+  let result = convertComponents(sources);
+
+  expect(result.skipped).toEqual([]);
+  expect(result.files.get("app/components/code-editor.js")).toMatchInlineSnapshot(`
+    "import Component from '@glimmer/component';
+    import { action } from '@ember/object';
+
+    export default class CodeEditor extends Component {
+      isDirty = false;
+
+      get hasError() {
+          return this.args.error ? 'is-invalid' : '';
+        }
+
+      @action
+      onType() {
+        this.isDirty = true;
+        this.isDirtyAction();
+      }
+
+      @action
+      isDirtyAction() {
+        return this.isDirty;
+      }
+    }
+    "
+  `);
+  expect(result.files.get("app/components/code-editor.hbs")).toMatchInlineSnapshot(`
+    "<BaseEditor @isDirty={{this.isDirtyAction}} @onType={{this.onType}} class={{this.hasError}} />
+    "
+  `);
+});
+
+/**
  * From code-corps-ember (MIT), shortened.
  */
 test("the hooks of a task become calls of perform", () => {

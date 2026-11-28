@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import {
+  removePatches,
   addOverride,
   addYamlListEntry,
   overrideRange,
@@ -196,4 +197,30 @@ test("an override in pnpm-workspace.yaml reads and goes like one in package.json
   expect(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8")).toBe(
     "overrides:\n  '@ember/test-waiters': '^4.1.2'\n",
   );
+});
+
+/**
+ * From ember-learn/ember-website pnpm-workspace.yaml (MIT), shortened.
+ */
+test("the patches of a removed package go, with their files", () => {
+  let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
+
+  writeFileSync(join(directory, "package.json"), "{}\n");
+  writeFileSync(join(directory, "pnpm-lock.yaml"), "");
+  writeFileSync(
+    join(directory, "pnpm-workspace.yaml"),
+    "overrides:\n  sharp: ^0.33.5\n\npatchedDependencies:\n  ember-data-fastboot: patches/ember-data-fastboot.patch\n  ember-page-title: patches/ember-page-title.patch\n",
+  );
+  mkdirSync(join(directory, "patches"));
+  writeFileSync(join(directory, "patches/ember-data-fastboot.patch"), "");
+
+  let project = new Project(directory);
+
+  expect(removePatches(project, "ember-data-fastboot")).toEqual([
+    "patches/ember-data-fastboot.patch",
+  ]);
+  expect(readFileSync(join(directory, "pnpm-workspace.yaml"), "utf8")).toBe(
+    "overrides:\n  sharp: ^0.33.5\n\npatchedDependencies:\n  ember-page-title: patches/ember-page-title.patch\n",
+  );
+  expect(existsSync(join(directory, "patches/ember-data-fastboot.patch"))).toBe(false);
 });

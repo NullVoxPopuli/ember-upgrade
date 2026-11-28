@@ -38,6 +38,93 @@ const ERROR_HELPERS = {
  */
 const GLOBALS = new Set(["default", "Headers", "Request", "Response", "AbortController"]);
 
+export const FASTBOOT_CONFIG = "config/fastboot.js";
+
+/**
+ * The globals that FastBoot's sandbox needs for the global `fetch`. ember-fetch brought its own.
+ */
+const SANDBOX_GLOBALS = ["fetch", "Request", "Response", "Headers", "AbortController"];
+
+const DEFAULT_FASTBOOT_CONFIG = `module.exports = function () {
+  return {
+    buildSandboxGlobals(defaultGlobals) {
+      return Object.assign({}, defaultGlobals, {
+        ${SANDBOX_GLOBALS.join(",\n        ")},
+      });
+    },
+  };
+};
+`;
+
+/**
+ * FastBoot runs the app in a sandbox with only the globals of config/fastboot.js.
+ *
+ * @param {string} source config/fastboot.js
+ * @param {string[]} [names] the globals that the sandbox needs
+ * @returns {string | undefined} the source with the globals in the object of `buildSandboxGlobals`;
+ * undefined when the file has no `Object.assign({}, defaultGlobals, { ... })` there
+ */
+export function withSandboxGlobals(source, names = SANDBOX_GLOBALS) {
+  let program = parseProgram(source, FASTBOOT_CONFIG);
+  /** @type {Node | undefined} */
+  let globals;
+
+  walk(program, (node) => {
+    let name =
+      node.type === "Property" || node.type === "MethodDefinition" ? node.key?.name : undefined;
+
+    if (globals || name !== "buildSandboxGlobals") return;
+
+    walk(node.value, (inner) => {
+      let last = inner.arguments?.[inner.arguments.length - 1];
+
+      if (
+        !globals &&
+        inner.type === "CallExpression" &&
+        inner.callee.type === "MemberExpression" &&
+        inner.callee.object.name === "Object" &&
+        inner.callee.property.name === "assign" &&
+        last?.type === "ObjectExpression"
+      ) {
+        globals = last;
+      }
+    });
+  });
+
+  if (!globals) return;
+
+  let object = /** @type {Node} */ (globals);
+  let present = new Set(
+    object.properties.map(
+      (/** @type {Node} */ property) => property.key?.name ?? property.key?.value,
+    ),
+  );
+  let missing = names.filter((name) => !present.has(name));
+
+  if (missing.length === 0) return source;
+
+  let edits = new Edits(source);
+  let indent =
+    /\n([ \t]*)\S[^\n]*\n[ \t]*\}$/.exec(source.slice(object.start, object.end))?.[1] ?? "  ";
+  let lastProperty = object.properties[object.properties.length - 1];
+  let added = missing.map((name) => `\n${indent}${name},`).join("");
+
+  if (!lastProperty) {
+    edits.insert(object.start + 1, `${added}\n`);
+    return edits.apply();
+  }
+
+  let after = source.slice(lastProperty.end, object.end);
+  let comma = after.trimStart().startsWith(",");
+
+  edits.insert(
+    comma ? lastProperty.end + after.indexOf(",") + 1 : lastProperty.end,
+    comma ? added : `,${added}`,
+  );
+
+  return edits.apply();
+}
+
 /**
  * Removes ember-fetch, and uses the global `fetch` (RFC 1065).
  * ember-vite-codemod refuses an app with ember-fetch.
@@ -88,6 +175,21 @@ export default {
       }
     });
     removeBuildOptions(project, ["ember-fetch"]);
+
+    if (project.dependency("ember-cli-fastboot")) {
+      let config = project.has(FASTBOOT_CONFIG) ? project.read(FASTBOOT_CONFIG) : undefined;
+      let output = config === undefined ? DEFAULT_FASTBOOT_CONFIG : withSandboxGlobals(config);
+
+      if (output === undefined) {
+        todo.push({
+          title: "Give FastBoot's sandbox the globals of fetch",
+          where: [FASTBOOT_CONFIG],
+          action: `Add ${SANDBOX_GLOBALS.join(", ")} to the globals that buildSandboxGlobals returns.`,
+        });
+      } else if (output !== config) {
+        project.write(FASTBOOT_CONFIG, output);
+      }
+    }
 
     recordProgress(project, {
       id: "ember-fetch",

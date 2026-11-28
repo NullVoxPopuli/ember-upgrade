@@ -1,14 +1,18 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { removeBuildOptions } from "#config-files.js";
+import { parseProgram, propertyName, walk } from "#ast.js";
+import { Edits } from "#edits.js";
+import { buildFile, removeBuildOptions, removeUnusedRequires } from "#config-files.js";
 import {
   dependencyNames,
   editPackageJson,
   removeDependency,
   setDependency,
 } from "#package-json.js";
+import { modulePrefix } from "#module-prefix.js";
 import { published } from "#process.js";
 import { recordProgress } from "#progress.js";
+import { atLeast } from "#version.js";
 
 /** @typedef {import('#types.js').Finding} Finding */
 /** @typedef {import('#progress.js').ProgressEntry} ProgressEntry */
@@ -64,11 +68,22 @@ function removalStage(removal) {
 
       removeBuildOptions(project, removal.buildOptions ?? []);
 
+      /**
+       * Before the requires go, because the change of the code can leave one unused.
+       */
+      removal.after?.(project);
+
+      for (let module of removeUnusedRequires(project, names)) {
+        todo.push({
+          title: `ember-cli-build still uses ${module}, which is removed`,
+          where: [buildFile(project) ?? "ember-cli-build.js"],
+          action: "Remove the code that uses it.",
+        });
+      }
+
       for (let file of removal.files ?? []) {
         rmSync(join(project.directory, file), { force: true });
       }
-
-      removal.after?.(project);
 
       if (removal.progress) {
         recordProgress(
@@ -139,6 +154,56 @@ export const emberTestSelectors = removalStage({
 });
 
 /**
+ * prember's `prerender(app, tree)` wraps the build tree, and the tree stays without it.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function unwrapPrerender(project) {
+  let file = buildFile(project);
+  let source = file ? project.read(file) : "";
+  let program = file ? parseProgram(source, file) : undefined;
+
+  if (!file || !program) return;
+
+  /** @type {Set<string>} */
+  let names = new Set();
+
+  walk(program, (node) => {
+    let init = node.type === "VariableDeclarator" ? node.init : undefined;
+
+    if (
+      init?.type !== "CallExpression" ||
+      init.callee.name !== "require" ||
+      init.arguments[0]?.value !== "prember"
+    )
+      return;
+
+    if (node.id.type === "ObjectPattern") {
+      for (let property of node.id.properties) {
+        if (propertyName(property) === "prerender" && property.value?.type === "Identifier")
+          names.add(property.value.name);
+      }
+    }
+  });
+
+  let edits = new Edits(source);
+
+  walk(program, (node) => {
+    if (
+      node.type !== "CallExpression" ||
+      node.callee.type !== "Identifier" ||
+      !names.has(node.callee.name)
+    )
+      return;
+    if (node.arguments.length !== 2) return;
+
+    edits.replace(node, source.slice(node.arguments[1].start, node.arguments[1].end));
+  });
+
+  if (edits.size > 0) project.write(file, edits.apply());
+}
+
+/**
  * prember runs in the ember-cli build, so it does nothing in a Vite build.
  * vite-ember-ssr prerenders an app that builds without @embroider/compat,
  * so the progress file holds the work until the app gets there.
@@ -147,6 +212,7 @@ export const prember = removalStage({
   name: "prember",
   label: "Remove prember. vite-ember-ssr prerenders the same URLs after the ember-nvp stage",
   matches: (name) => name === "prember",
+  after: unwrapPrerender,
   buildOptions: ["prember"],
   progress: {
     note:
@@ -217,10 +283,33 @@ export const qunitConsoleGrouper = removalStage({
 const OBSOLETE = [
   { name: "ember-cli-eslint", label: "It lints in the ember-cli build. Run eslint on its own" },
   {
+    name: "ember-cli-template-lint",
+    label: "It lints in the ember-cli build. Run ember-template-lint on its own",
+    replaceWith: { "ember-template-lint": "7.9.3" },
+  },
+  {
     name: "ember-cli-stylelint",
     label: "It lints in the ember-cli build. Run stylelint on its own",
   },
   { name: "ember-cli-release", label: "It is an ember-cli command" },
+  {
+    name: "ember-cli-cjs-transform",
+    label: "It converts the CommonJS files of `app.import()`. Vite imports CommonJS packages",
+    todo: (project) => {
+      let file = buildFile(project);
+
+      return file && /transformation:\s*['"]cjs['"]/.test(project.read(file))
+        ? [
+            {
+              title: "`app.import()` calls with the cjs transformation",
+              where: [file],
+              action:
+                "Import the package from the app's code instead. Vite converts CommonJS packages.",
+            },
+          ]
+        : [];
+    },
+  },
   {
     name: "ember-cli-uglify",
     label: "Vite minifies the build",
@@ -232,6 +321,10 @@ const OBSOLETE = [
     label: "babel-plugin-ember-template-compilation compiles `hbs` templates",
   },
   { name: "ember-watson", label: "It is an ember-cli command" },
+  {
+    name: "ember-template-imports",
+    label: "babel-plugin-ember-template-compilation compiles .gjs and .gts files in the Vite build",
+  },
   {
     name: "ember-export-application-global",
     label: "Ember Inspector finds the app without a global",
@@ -291,6 +384,11 @@ const OBSOLETE = [
     name: "ember-mockdate-shim",
     label: "The tests import mockdate from npm",
     replaceWith: { mockdate: "3.0.5" },
+  },
+  {
+    name: "ember-get-config",
+    label: "It re-exports the app's config/environment, which the app imports itself",
+    after: importConfigDirectly,
   },
   {
     name: "ember-classic-decorator",
@@ -432,6 +530,68 @@ function importNormalize(project) {
 }
 
 /**
+ * ember-get-config only re-exported `<app>/config/environment`, and it does not build with Vite.
+ *
+ * @param {import('#project.js').Project} project
+ */
+function importConfigDirectly(project) {
+  let config = `${modulePrefix(project)}/config/environment`;
+
+  for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
+    let source = project.read(file);
+    let output = source.replace(
+      /(from\s*|import\s*\(\s*)(['"])ember-get-config\2/g,
+      `$1$2${config}$2`,
+    );
+
+    if (output !== source) project.write(file, output);
+  }
+}
+
+/**
+ * Before the vite stage, which ember-get-config does not build with.
+ */
+export const emberGetConfig = removalStage({
+  name: "ember-get-config",
+  label: "Remove ember-get-config. The app imports its config/environment itself",
+  matches: (name) => name === "ember-get-config",
+  after: importConfigDirectly,
+});
+
+/**
+ * @param {import('#project.js').Project} project
+ */
+function importDecoratorsFromEmberConcurrency(project) {
+  for (let file of project.files(["{app,tests}/**/*.{js,ts,gjs,gts}"])) {
+    let source = project.read(file);
+    let output = source.replace(
+      /(from\s*|import\s*\(\s*)(['"])ember-concurrency-decorators\2/g,
+      "$1$2ember-concurrency$2",
+    );
+
+    if (output !== source) project.write(file, output);
+  }
+}
+
+let decorators = removalStage({
+  name: "ember-concurrency-decorators",
+  label: "Remove ember-concurrency-decorators. ember-concurrency has the same decorators",
+  matches: (name) => name === "ember-concurrency-decorators",
+  after: importDecoratorsFromEmberConcurrency,
+});
+
+/**
+ * Before v2-addons, which would copy the v1 addon into the app.
+ * ember-concurrency 2 and later export the decorators of ember-concurrency-decorators, with the same names.
+ *
+ * @type {import('#types.js').Stage}
+ */
+export const emberConcurrencyDecorators = Object.assign({}, decorators, {
+  detect: (/** @type {import('#project.js').Project} */ project) =>
+    decorators.detect(project) && atLeast(project.dependency("ember-concurrency"), 2, 0),
+});
+
+/**
  * One stage for each obsolete addon, so that each removal is its own commit.
  *
  * @type {import('#types.js').StageGroup}
@@ -458,4 +618,15 @@ export const obsoleteAddons = {
  */
 export function isObsoleteAddon(name) {
   return OBSOLETE.some((entry) => entry.name === name);
+}
+
+/**
+ * Changes the app's code as the removal stage of the addon does, for code that came into the app after that stage,
+ * such as the code of an inlined addon.
+ *
+ * @param {import('#project.js').Project} project
+ * @param {string} name
+ */
+export function removeFromCode(project, name) {
+  OBSOLETE.find((entry) => entry.name === name)?.after?.(project);
 }

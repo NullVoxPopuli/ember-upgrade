@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 
+import { updateNodePins } from "#node-version.js";
 import { Project } from "#project.js";
 import { readProgress } from "#progress.js";
 import ciWorkflows, { pnpmCommand } from "#stages/ci-workflows/index.js";
@@ -153,7 +154,7 @@ test("commands without a pnpm equivalent stay, and are left to the app", async (
           - uses: pnpm/action-setup@v5
           - uses: actions/setup-node@v6
             with:
-              node-version: 22
+              node-version: 24
           - run: |
               pnpm install --frozen-lockfile
               yarn deploy:production && pnpm test
@@ -170,4 +171,21 @@ test("an npm or yarn command becomes the pnpm script that the upgrade kept", () 
   expect(pnpmCommand(" yarn lint:fix", scripts)).toBe(" pnpm lint:fix");
   expect(pnpmCommand("npm publish", scripts)).toBe("npm publish");
   expect(pnpmCommand("yarn global add ember-cli", scripts)).toBe("yarn global add ember-cli");
+});
+
+/**
+ * From ember-learn/ember-help-wanted and ember-learn/rfcs-app .npmrc.
+ */
+test("a Node.js pin older than the build tooling needs moves to the LTS line", () => {
+  let app = project({
+    "package.json": "{}",
+    ".npmrc": "auto-install-peers=true\nuse-node-version=20.20.2\n",
+    ".nvmrc": "v22.17.1\n",
+    ".node-version": "24.11.0\n",
+  });
+
+  expect(updateNodePins(app)).toEqual([".npmrc", ".nvmrc"]);
+  expect(app.read(".npmrc")).toMatch(/^auto-install-peers=true\nuse-node-version=24\.\d+\.\d+\n$/);
+  expect(app.read(".nvmrc")).toMatch(/^24\.\d+\.\d+\n$/);
+  expect(app.read(".node-version")).toBe("24.11.0\n");
 });

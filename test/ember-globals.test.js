@@ -104,7 +104,7 @@ export default { a: computed(() => K), b: inject };
     let result = transform(
       `import Ember from 'ember';
 
-if (Ember.testing) Ember.run.later(() => {}, 1);
+if (Ember.RouterDSL) Ember.run.later(() => {}, 1);
 `,
       "app/x.js",
     );
@@ -112,10 +112,10 @@ if (Ember.testing) Ember.run.later(() => {}, 1);
     expect(result.code).toBe(`import Ember from 'ember';
 import { later } from '@ember/runloop';
 
-if (Ember.testing) later(() => {}, 1);
+if (Ember.RouterDSL) later(() => {}, 1);
 `);
     expect(result.todo).toMatchObject([
-      { title: "`Ember.testing` has no module", where: ["app/x.js:3"] },
+      { title: "`Ember.RouterDSL` has no module", where: ["app/x.js:3"] },
     ]);
   });
 
@@ -204,6 +204,84 @@ if (config.environment === 'production') {
         console.error(error);
       });
     }
+    "
+  `);
+});
+
+/**
+ * From hashicorp-forge/hermes web/app/components/inputs/people-select.ts (MPL-2.0), shortened.
+ */
+test("Ember.testing becomes isTesting() of @ember/debug, and an assignment setTesting()", () => {
+  expect(
+    transform(
+      `import Ember from "ember";
+
+const DEBOUNCE_MS = Ember.testing ? 0 : 300;
+Ember.testing = true;
+`,
+      "app/components/inputs/people-select.ts",
+    ).code,
+  ).toMatchInlineSnapshot(`
+    "import { isTesting, setTesting } from "@ember/debug";
+
+    const DEBOUNCE_MS = isTesting() ? 0 : 300;
+    setTesting(true);
+    "
+  `);
+});
+
+/**
+ * From hashicorp-forge/hermes web/app/components/x/dropdown-list/item.ts (MPL-2.0), shortened.
+ */
+test("an ember import that nothing reads goes", () => {
+  expect(
+    transform(
+      `import Component from "@glimmer/component";
+import Ember from "ember";
+
+/** Ember's <LinkTo> handles the click. */
+export default class Item extends Component {}
+`,
+      "app/components/x/dropdown-list/item.ts",
+    ).code,
+  ).toMatchInlineSnapshot(`
+    "import Component from "@glimmer/component";
+
+    /** Ember's <LinkTo> handles the click. */
+    export default class Item extends Component {}
+    "
+  `);
+});
+
+/**
+ * From ember-ajax 3.1.0 addon/mixins/ajax-request.js, which apps copy into app/addons.
+ */
+test("Ember.Logger becomes console, and a destructured testing reads isTesting() once", () => {
+  let result = transform(
+    `import { warn } from '@ember/debug';
+import Ember from 'ember';
+
+const { Logger, testing, run } = Ember;
+
+if (testing) Logger.warn('a');
+Ember.Logger.error('b');
+run(() => {});
+`,
+    "app/addons/ember-ajax/mixins/ajax-request.js",
+  );
+
+  expect(result.todo).toEqual([]);
+  expect(result.code).toMatchInlineSnapshot(`
+    "import { warn } from '@ember/debug';
+    import { run } from '@ember/runloop';
+    import { isTesting } from '@ember/debug';
+
+    const Logger = console;
+    const testing = isTesting();
+
+    if (testing) Logger.warn('a');
+    console.error('b');
+    run(() => {});
     "
   `);
 });

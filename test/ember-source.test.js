@@ -1,10 +1,13 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import { classicLts, viteLts } from "#stages/ember-source/index.js";
+import { classicLts, codeImportsEmber, viteLts } from "#stages/ember-source/index.js";
+import { withoutCompilerPath } from "#stages/ember-source/compiler-path.js";
+import { withoutInternetExplorer } from "#stages/ember-source/targets.js";
+import { withoutKeywordImports } from "#stages/ember-source/helper-keywords.js";
 import {
   arrayMacroGetters,
   explicitRelationships,
@@ -21,6 +24,7 @@ import {
   queryParamsList,
   rewriteWith,
   useServiceImport,
+  withoutPrototypeExtensions,
 } from "#stages/ember-source/removed-apis.js";
 import { moveImports } from "#codemods/move-imports.js";
 
@@ -88,11 +92,102 @@ test("a step updates the blueprint packages that the app has, and only up, so ex
   });
 });
 
+/**
+ * From ember-learn/ember-api-docs package.json, shortened: the app builds with Embroider and webpack.
+ */
+test("an app on @embroider/webpack keeps @embroider/compat and @embroider/core 3 until the vite stage", async () => {
+  let app = project({
+    devDependencies: {
+      "@embroider/compat": "^3.9.3",
+      "@embroider/core": "^3.5.9",
+      "@embroider/webpack": "^3.2.1",
+      "ember-source": "~6.7.0",
+    },
+  });
+  let [step] = await classicLts.expand(app);
+
+  await step.run(app);
+
+  expect(app.packageJson.devDependencies?.["@embroider/compat"]).toBe("^3.9.3");
+  expect(app.packageJson.devDependencies?.["@embroider/core"]).toBe("^3.5.9");
+  expect(app.packageJson.devDependencies?.["ember-source"]).toMatch(/^~6\.8\./);
+});
+
+/**
+ * From ember-learn/guides-source package.json, shortened, after the 6.8 step.
+ */
+test("the @ember-data packages that the app has move with ember-data", async () => {
+  let app = project({
+    devDependencies: {
+      "@ember-data/adapter": "^4.12.0",
+      "@ember-data/model": "^4.12.0",
+      "ember-data": "~5.6.0",
+      "ember-source": "~6.8.0",
+    },
+  });
+  let [step] = await classicLts.expand(app);
+
+  await step.run(app);
+
+  let { devDependencies } = app.packageJson;
+
+  expect(devDependencies?.["@ember-data/adapter"]).toBe(devDependencies?.["ember-data"]);
+  expect(devDependencies?.["@ember-data/model"]).toBe(devDependencies?.["ember-data"]);
+  expect(devDependencies?.["ember-data"]).not.toBe("~5.6.0");
+});
+
+/**
+ * From hashicorp-forge/hermes web/app/app.ts (MPL-2.0), shortened.
+ */
+test("the step to Ember 7 stops at code that imports the ember module", async () => {
+  let app = project({ devDependencies: { "ember-source": "~6.12.0" } });
+
+  mkdirSync(join(app.directory, "app"), { recursive: true });
+  writeFileSync(
+    join(app.directory, "app/app.ts"),
+    "import Ember from 'ember';\n\n(window as any).Ember = Ember;\n",
+  );
+
+  let [step] = await viteLts.expand(app);
+  let { blockers } = await step.check(app);
+
+  expect(blockers.map((finding) => finding.where)).toEqual([["app/app.ts"]]);
+});
+
 test("an app on an LTS gets no step for it", async () => {
   let app = project({ devDependencies: { "ember-source": "~6.12.0" } });
 
   expect(await classicLts.expand(app)).toEqual([]);
   expect((await viteLts.expand(app)).map((stage) => stage.name)).toEqual(["ember-source-7.4"]);
+});
+
+/**
+ * From hashicorp-forge/hermes web/package.json, shortened.
+ * ember-a11y-refocus and ember-app-scheduler depend on @glimmer/component 1.
+ */
+test("the step to @glimmer/component 2 overrides it for the addons too", async () => {
+  let app = project({
+    name: "hermes",
+    packageManager: "pnpm@10.0.0",
+    devDependencies: {
+      "@glimmer/component": "^1.1.2",
+      "ember-a11y-refocus": "^3.0.2",
+      "ember-source": "~5.12.0",
+    },
+  });
+
+  writeFileSync(join(app.directory, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+
+  let [step] = await classicLts.expand(app);
+
+  expect(step.name).toBe("ember-source-6.4");
+
+  await step.run(app);
+
+  expect(app.dependency("@glimmer/component")).toBe("^2.0.0");
+  expect(app.read("pnpm-workspace.yaml")).toMatch(
+    /^overrides:\n  '@embroider\/macros': '\^1\.\d+\.\d+'\n  '@glimmer\/component': '\^2\.0\.0'\n$/,
+  );
 });
 
 /**
@@ -471,4 +566,164 @@ let names = list.mapBy('name');
   let first = once(source);
 
   expect(once(first)).toBe(first);
+});
+
+/**
+ * From ember-learn/rfcs-app babel.config.cjs, shortened.
+ */
+test("the compilerPath of ember-source 6 goes for ember-source 7", () => {
+  expect(
+    withoutCompilerPath(
+      `module.exports = {
+  plugins: [
+    [
+      'babel-plugin-ember-template-compilation',
+      {
+        compilerPath: 'ember-source/dist/ember-template-compiler.js',
+        enableLegacyModules: ['ember-cli-htmlbars'],
+      },
+    ],
+  ],
+};
+`,
+      "babel.config.cjs",
+    ),
+  ).toMatchInlineSnapshot(`
+    "module.exports = {
+      plugins: [
+        [
+          'babel-plugin-ember-template-compilation',
+          {
+            enableLegacyModules: ['ember-cli-htmlbars'],
+          },
+        ],
+      ],
+    };
+    "
+  `);
+});
+
+/**
+ * From ember-learn/deprecation-app config/targets.js, with a push added.
+ */
+test("Internet Explorer goes from the targets of ember-source 5", () => {
+  expect(
+    withoutInternetExplorer(`'use strict';
+
+const browsers = [
+  'last 1 Chrome versions',
+  'last 1 Safari versions',
+  'ie 11',
+];
+
+if (process.env.LEGACY) {
+  browsers.push('ie 11');
+}
+
+module.exports = {
+  browsers,
+};
+`),
+  ).toMatchInlineSnapshot(`
+    "'use strict';
+
+    const browsers = [
+      'last 1 Chrome versions',
+      'last 1 Safari versions',
+    ];
+
+    if (process.env.LEGACY) {
+    }
+
+    module.exports = {
+      browsers,
+    };
+    "
+  `);
+});
+
+/**
+ * The template of ember-website's meetups page after the ember-leaflet stage, shortened.
+ */
+test("the imports of array and hash go, because templates of ember-source 7.4 have them as keywords", () => {
+  expect(
+    withoutKeywordImports(
+      `import { array, hash } from '@ember/helper';
+import { fn, hash as h } from "@ember/helper";
+import { array as list } from '@ember/helper';
+
+const options = hash;
+
+<template>
+  <MapLibreGL @initOptions={{hash center=(array 0 20)}} @x={{fn this.a}} @y={{h}} @z={{list}} />
+</template>
+`,
+      "app/templates/community/meetups/index.gjs",
+    ),
+  ).toMatchInlineSnapshot(`
+    "import { hash } from '@ember/helper';
+    import { fn, hash as h } from "@ember/helper";
+    import { array as list } from '@ember/helper';
+
+    const options = hash;
+
+    <template>
+      <MapLibreGL @initOptions={{hash center=(array 0 20)}} @x={{fn this.a}} @y={{h}} @z={{list}} />
+    </template>
+    "
+  `);
+});
+
+/**
+ * From ember-learn/deprecation-app config/environment.js, shortened.
+ */
+test("EXTEND_PROTOTYPES is false for ember-source 6", () => {
+  expect(
+    withoutPrototypeExtensions(
+      `module.exports = function (environment) {
+  const ENV = {
+    EmberENV: {
+      FEATURES: {},
+      EXTEND_PROTOTYPES: {
+        // Prevent Ember Data from overriding Date.parse.
+        Date: false,
+      },
+    },
+  };
+
+  return ENV;
+};
+`,
+      "config/environment.js",
+    ),
+  ).toMatchInlineSnapshot(`
+    "module.exports = function (environment) {
+      const ENV = {
+        EmberENV: {
+          FEATURES: {},
+          EXTEND_PROTOTYPES: false,
+        },
+      };
+
+      return ENV;
+    };
+    "
+  `);
+});
+
+/**
+ * From ember-ajax 3.1.0 addon/mixins/ajax-request.js, after ember-globals-inlined.
+ */
+test("an ember import in a doc comment is not an import of the ember module", () => {
+  let source = `import { isTesting } from '@ember/debug';
+
+/**
+ * import Ember from 'ember';
+ */
+export default isTesting;
+`;
+
+  expect(codeImportsEmber(source, "app/addons/ember-ajax/mixins/ajax-request.js")).toBe(false);
+  expect(codeImportsEmber(`import Ember from 'ember';\n${source}`, "app/x.js")).toBe(true);
+  expect(codeImportsEmber("export { run } from 'ember';\n", "app/x.js")).toBe(true);
 });

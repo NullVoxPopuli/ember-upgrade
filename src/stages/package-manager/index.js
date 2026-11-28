@@ -1,4 +1,5 @@
 import { rmSync } from "node:fs";
+import { builtinModules } from "node:module";
 import { dirname, join } from "node:path";
 
 import {
@@ -12,6 +13,11 @@ import { exec, published } from "#process.js";
 import { APP_DEPENDENCIES, PACKAGE_EXTENSIONS } from "./extensions.js";
 import { Project } from "#project.js";
 import { recordProgress } from "#progress.js";
+
+/**
+ * The settings and the install state of yarn 1 and of yarn 2 and later.
+ */
+const YARN_FILES = [".yarnrc", ".yarnrc.yml", ".yarn", ".pnp.cjs", ".pnp.loader.mjs"];
 
 /**
  * The fallback when the registry does not answer.
@@ -31,7 +37,7 @@ const YARN_USERS = [
 ];
 
 /**
- * Moves yarn 1 and npm 6 projects to pnpm.
+ * Moves yarn and npm 6 projects to pnpm.
  *
  * yarn 1 and npm 6 can install a tree with a package that another package does not see, or two copies of one package.
  * pnpm installs exactly what each package.json asks for.
@@ -40,7 +46,7 @@ const YARN_USERS = [
  */
 export default {
   name: "package-manager",
-  label: "Move from yarn 1 or npm 6 to pnpm",
+  label: "Move from yarn or npm 6 to pnpm",
 
   detect(project) {
     return Boolean(legacyLockfile(project));
@@ -105,11 +111,12 @@ export default {
 
     /**
      * yarn 1 and npm 6 put each hoisted package in the top node_modules, so an
-     * `app.import('node_modules/<name>/...')` works for a package that only a dependency lists.
-     * pnpm does not, so the app must list it.
+     * `app.import('node_modules/<name>/...')`, and a require in an in-repo addon,
+     * work for a package that only a dependency lists. pnpm does not, so the app must list it.
      */
     let hoisted = hoistedVersions(root, lockfile);
     let required = importedPackages(project).concat(
+      inRepoAddonPackages(project),
       Object.entries(APP_DEPENDENCIES).flatMap(([addon, names]) =>
         project.dependency(addon) ? names : [],
       ),
@@ -183,7 +190,9 @@ export default {
     }
 
     rmSync(join(root.directory, lockfile));
-    rmSync(join(root.directory, ".yarnrc"), { force: true });
+    for (let file of YARN_FILES) {
+      rmSync(join(root.directory, file), { force: true, recursive: true });
+    }
 
     let where = yarnUsers(root);
 
@@ -213,15 +222,37 @@ export default {
 };
 
 /**
+ * The build names these packages by path, in `app.import('node_modules/...')` or in options such as Sass `includePaths`.
+ *
  * @param {import('#project.js').Project} project
- * @returns {string[]} the packages that the build imports from node_modules
+ * @returns {string[]} the packages that the build reads from node_modules
  */
 export function importedPackages(project) {
   let names = new Set();
-  let pattern = /\b(?:app|this)\.import\(\s*['"`]node_modules\/((?:@[^/'"`]+\/)?[^/'"`]+)/g;
+  let pattern = /['"`](?:\.\/)?node_modules\/((?:@[^/'"`]+\/)?[^/'"`]+)/g;
 
   for (let file of project.files(["ember-cli-build.{js,cjs}", "lib/*/index.{js,cjs}"])) {
     for (let match of project.read(file).matchAll(pattern)) names.add(match[1]);
+  }
+
+  return Array.from(names).sort();
+}
+
+/**
+ * An in-repo addon in lib/ has no node_modules of its own. It required packages from the app's
+ * node_modules, where yarn 1 and npm 6 also put the dependencies of dependencies, such as broccoli-funnel.
+ *
+ * @param {import('#project.js').Project} project
+ * @returns {string[]} the packages that the in-repo addons require or import
+ */
+export function inRepoAddonPackages(project) {
+  let names = new Set();
+  let pattern = /\b(?:require\(\s*|from\s+)['"`]((?:@[^/'"`]+\/)?[^./'"`][^/'"`]*)/g;
+
+  for (let file of project.files(["lib/*/index.{js,cjs}", "lib/*/lib/**/*.{js,cjs}"])) {
+    for (let match of project.read(file).matchAll(pattern)) {
+      if (!match[1].startsWith("node:") && !builtinModules.includes(match[1])) names.add(match[1]);
+    }
   }
 
   return Array.from(names).sort();
@@ -249,7 +280,10 @@ export function hoistedVersions(root, lockfile) {
 
   for (let block of source.split(/\n\n+/)) {
     let [header] = block.split("\n");
-    let version = block.match(/^ {2}version "([^"]+)"$/m)?.[1];
+    /**
+     * yarn 1 writes `version "1.0.0"`, and yarn 2 and later write `version: 1.0.0`.
+     */
+    let version = block.match(/^ {2}version:? "?([^"\n]+?)"?$/m)?.[1];
 
     if (!version || !header.endsWith(":")) continue;
 
@@ -327,7 +361,7 @@ export function pinGitDependencies(pkg, commits) {
 
 /**
  * @param {import('#project.js').Project} project
- * @returns {string | undefined} the name of a yarn 1 or npm 6 lockfile
+ * @returns {string | undefined} the name of a yarn or npm 6 lockfile
  */
 function legacyLockfile(project) {
   let lockfile = project.lockfile;
@@ -336,7 +370,13 @@ function legacyLockfile(project) {
 
   let root = workspaceRoot(project);
 
-  if (lockfile.name === "yarn.lock" && root.read("yarn.lock").includes("# yarn lockfile v1")) {
+  /**
+   * yarn 2 and later write `__metadata:` at the top. `pnpm import` reads both formats.
+   */
+  if (
+    lockfile.name === "yarn.lock" &&
+    /^(# yarn lockfile v1|__metadata:)/m.test(root.read("yarn.lock"))
+  ) {
     return "yarn.lock";
   }
 
@@ -374,7 +414,10 @@ export function pnpmSelector(selector) {
    */
   if (names.includes("**")) return names[names.length - 1];
 
-  return names.join(">");
+  /**
+   * A pnpm selector has at most one parent, so a deeper path keeps its last parent.
+   */
+  return names.slice(-2).join(">");
 }
 
 /**

@@ -6,6 +6,8 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import {
   configModuleUsers,
+  raiseForBabel8,
+  removeClassicVitePackages,
   removeOrphanConfigModules,
   renameCommonJs,
 } from "#stages/ember-nvp/index.js";
@@ -85,4 +87,51 @@ test("a config module that only the replaced files required is removed", () => {
       "package.json",
     ]
   `);
+});
+
+/**
+ * From ember-learn/cli-guides, an npm app: @rollup/plugin-babel asks for Babel 7, and ember.nvp moved the app to Babel 8.
+ */
+test("the Babel plugin of the classic Vite config goes when the ember.nvp configs do not import it", () => {
+  let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
+  let files = {
+    "package.json": JSON.stringify({
+      name: "app",
+      devDependencies: { "@babel/core": "^8.1.4", "@rollup/plugin-babel": "^7.1.0" },
+    }),
+    "vite.config.mjs":
+      "import { defineConfig } from 'vite';\nimport { ember } from '@nullvoxpopuli/ember-vite';\n\nexport default defineConfig({ plugins: [ember()] });\n",
+    "babel.config.mjs": "export default { plugins: [] };\n",
+  };
+
+  for (let [file, contents] of Object.entries(files)) {
+    writeFileSync(join(directory, file), contents);
+  }
+
+  let project = new Project(directory);
+
+  expect(removeClassicVitePackages(project)).toEqual(["@rollup/plugin-babel"]);
+  expect(project.packageJson.devDependencies).toEqual({ "@babel/core": "^8.1.4" });
+
+  rmSync(directory, { recursive: true });
+});
+
+/**
+ * From rust-lang/crates.io, whose ember-concurrency 5.2.0 asserts Babel 7 in its Babel plugin.
+ */
+test("ember-concurrency 5 moves to 5.3, whose Babel plugin accepts Babel 8", () => {
+  let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
+
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({ name: "app", dependencies: { "ember-concurrency": "^5.2.0" } }),
+  );
+
+  let project = new Project(directory);
+
+  expect(raiseForBabel8(project)).toEqual(["ember-concurrency"]);
+  expect(project.packageJson.dependencies).toEqual({ "ember-concurrency": "^5.3.0" });
+  expect(raiseForBabel8(project)).toEqual([]);
+
+  rmSync(directory, { recursive: true });
 });
