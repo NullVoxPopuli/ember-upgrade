@@ -1,5 +1,7 @@
 import { join } from "node:path";
 
+import { parseProgram, walk } from "#ast.js";
+
 import { addOverride, hasOverride } from "#manager-settings.js";
 import {
   dependencyNames,
@@ -31,6 +33,38 @@ import {
 } from "./removed-apis.js";
 
 /** @typedef {import('#types.js').Stage} Stage */
+
+const EMBER_FROM = /\bfrom\s*["']ember["']/;
+
+/**
+ * A doc comment can show `import Ember from 'ember'`, as ember-ajax's request mixin does, so only the code counts.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @returns {boolean} the code imports the `ember` module
+ */
+export function codeImportsEmber(source, file) {
+  if (!EMBER_FROM.test(source)) return false;
+
+  let program = parseProgram(source, file);
+
+  if (!program) return true;
+
+  let found = false;
+
+  walk(program, (node) => {
+    if (
+      ["ImportDeclaration", "ExportNamedDeclaration", "ExportAllDeclaration"].includes(node.type) &&
+      node.source?.value === "ember" &&
+      node.importKind !== "type" &&
+      node.exportKind !== "type"
+    ) {
+      found = true;
+    }
+  });
+
+  return found;
+}
 
 const AMD_BUNDLES = "https://deprecations.emberjs.com/id/using-amd-bundles";
 
@@ -112,9 +146,7 @@ function step(lts) {
        */
       let ember =
         target[0] >= 7
-          ? project
-              .sourceFiles()
-              .filter((file) => /\bfrom\s*["']ember["']/.test(project.read(file)))
+          ? project.sourceFiles().filter((file) => codeImportsEmber(project.read(file), file))
           : [];
 
       return {

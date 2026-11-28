@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 
 import { Project } from "#project.js";
-import { classicLts, viteLts } from "#stages/ember-source/index.js";
+import { classicLts, codeImportsEmber, viteLts } from "#stages/ember-source/index.js";
 import { withoutCompilerPath } from "#stages/ember-source/compiler-path.js";
 import { withoutInternetExplorer } from "#stages/ember-source/targets.js";
 import { withoutKeywordImports } from "#stages/ember-source/helper-keywords.js";
@@ -709,4 +709,21 @@ test("EXTEND_PROTOTYPES is false for ember-source 6", () => {
     };
     "
   `);
+});
+
+/**
+ * From ember-ajax 3.1.0 addon/mixins/ajax-request.js, after ember-globals-inlined.
+ */
+test("an ember import in a doc comment is not an import of the ember module", () => {
+  let source = `import { isTesting } from '@ember/debug';
+
+/**
+ * import Ember from 'ember';
+ */
+export default isTesting;
+`;
+
+  expect(codeImportsEmber(source, "app/addons/ember-ajax/mixins/ajax-request.js")).toBe(false);
+  expect(codeImportsEmber(`import Ember from 'ember';\n${source}`, "app/x.js")).toBe(true);
+  expect(codeImportsEmber("export { run } from 'ember';\n", "app/x.js")).toBe(true);
 });
