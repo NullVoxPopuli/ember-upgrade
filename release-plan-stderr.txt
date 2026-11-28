@@ -1,0 +1,9 @@
+# Unlabeled Changes
+
+* `ember-upgrade`
+  * [#63](https://github.com/NullVoxPopuli/ember-upgrade/pull/63) Add medium and ember-learn app trials, and the stages that they need ([@NullVoxPopuli-ai-agent](https://github.com/NullVoxPopuli-ai-agent))
+  * [#61](https://github.com/NullVoxPopuli/ember-upgrade/pull/61) Add stages for WarpDrive 5.9.1 and ember serve --proxy scripts ([@NullVoxPopuli-ai-agent](https://github.com/NullVoxPopuli-ai-agent))
+  * [#62](https://github.com/NullVoxPopuli/ember-upgrade/pull/62) Pin ember-styleguide to the green head of its PR 551 ([@NullVoxPopuli-ai-agent](https://github.com/NullVoxPopuli-ai-agent))
+
+
+*Cannot plan release until the above changes are labeled*.
