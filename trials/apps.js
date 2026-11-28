@@ -34,7 +34,7 @@ export const apps = [
     name: "hospitalrun",
     repo: "HospitalRun/hospitalrun-frontend",
     sha: "872cd97f3bbd73ea4403396995b7769c4fa13957",
-    completed: ["package-manager", "ember-globals", "ember-cli"],
+    completed: ["package-manager", "ember-globals", "ember-cli", "peer-dependencies"],
     stopsAt: { stage: "vite", message: "older than 3.28" },
   },
   {
