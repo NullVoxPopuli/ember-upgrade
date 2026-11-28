@@ -2,9 +2,10 @@ import { renameSync, rmSync } from "node:fs";
 import { join, posix } from "node:path";
 
 import { buildFile, removeCompatBuildOptions, viteConfig } from "#config-files.js";
-import { editPackageJson, removeDependency } from "#package-json.js";
+import { editPackageJson, removeDependency, setDependency } from "#package-json.js";
 import { updateNodePins } from "#node-version.js";
 import { recordProgress } from "#progress.js";
+import { atLeast, minorOf } from "#version.js";
 import { fixStylesheetImports } from "./css-imports.js";
 import { resolveCopies } from "#stages/dependency-copies/index.js";
 import { BABEL_CONFIGS } from "#stages/vite/warp-drive-config.js";
@@ -96,6 +97,36 @@ export function removeClassicVitePackages(project) {
   }
 
   return unused;
+}
+
+/**
+ * The first release, in the same major, whose Babel plugin accepts the Babel 8 of ember.nvp.
+ * ember-concurrency 5.2 and older assert Babel 7 in async-arrow-task-transform.
+ *
+ * @type {Map<string, [number, number]>}
+ */
+const BABEL_8_RELEASES = new Map([["ember-concurrency", [5, 3]]]);
+
+/**
+ * @param {import('#project.js').Project} project
+ * @returns {string[]} the packages that moved to a release that accepts Babel 8
+ */
+export function raiseForBabel8(project) {
+  /** @type {string[]} */
+  let raised = [];
+
+  editPackageJson(project, (pkg) => {
+    for (let [name, [major, minor]] of BABEL_8_RELEASES) {
+      let range = project.dependency(name);
+
+      if (minorOf(range)?.[0] !== major || atLeast(range, major, minor)) continue;
+
+      setDependency(pkg, name, `^${major}.${minor}.0`);
+      raised.push(name);
+    }
+  });
+
+  return raised;
 }
 
 /**
@@ -229,6 +260,7 @@ export default {
     removeOrphanConfigModules(project, configUsers);
     renameCommonJs(project);
     removeClassicVitePackages(project);
+    raiseForBabel8(project);
 
     /**
      * The migration changes dependency ranges, so the imports are checked against what its install gives.

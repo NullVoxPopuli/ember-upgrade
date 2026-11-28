@@ -230,6 +230,7 @@ export const apps = [
     completed: [
       "ember-web-app",
       "update-@sentry/ember",
+      "peer-dependencies",
       "ember-serve-proxy",
       "vite",
       "ember-scoped-css",
@@ -251,6 +252,7 @@ export const apps = [
       "ember-source-7.4",
       "ember-truth-helpers",
       "build-settings",
+      "v1-dependencies",
       "app-tree",
       "declare-imports",
       "ember-nvp",

@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { Project } from "#project.js";
 import {
   configModuleUsers,
+  raiseForBabel8,
   removeClassicVitePackages,
   removeOrphanConfigModules,
   renameCommonJs,
@@ -111,6 +112,26 @@ test("the Babel plugin of the classic Vite config goes when the ember.nvp config
 
   expect(removeClassicVitePackages(project)).toEqual(["@rollup/plugin-babel"]);
   expect(project.packageJson.devDependencies).toEqual({ "@babel/core": "^8.1.4" });
+
+  rmSync(directory, { recursive: true });
+});
+
+/**
+ * From rust-lang/crates.io, whose ember-concurrency 5.2.0 asserts Babel 7 in its Babel plugin.
+ */
+test("ember-concurrency 5 moves to 5.3, whose Babel plugin accepts Babel 8", () => {
+  let directory = mkdtempSync(join(tmpdir(), "ember-upgrade-"));
+
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({ name: "app", dependencies: { "ember-concurrency": "^5.2.0" } }),
+  );
+
+  let project = new Project(directory);
+
+  expect(raiseForBabel8(project)).toEqual(["ember-concurrency"]);
+  expect(project.packageJson.dependencies).toEqual({ "ember-concurrency": "^5.3.0" });
+  expect(raiseForBabel8(project)).toEqual([]);
 
   rmSync(directory, { recursive: true });
 });
